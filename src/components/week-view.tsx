@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { useTodos } from "@/hooks/use-todos";
 import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { BulkActionToolbar } from "@/components/calendar";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -32,6 +34,18 @@ const WeekView = () => {
   } = useEventStore();
   const { events, updateEvent, addEvent } = useCalendarEvents();
   const { linkTodoToEvent, deleteTodo } = useTodos();
+  const {
+    isBulkMode,
+    selectedIds,
+    selectedCount,
+    toggleSelection,
+    isSelected,
+    deselectAll,
+    bulkDelete,
+    bulkUpdateColor,
+    bulkReschedule,
+    bulkDuplicate,
+  } = useBulkSelection();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -187,6 +201,9 @@ const WeekView = () => {
                   onDrop={(e, day, hour) => handleDrop(e, day, hour)}
                   openEventSummary={openEventSummary}
                   toggleEventLock={toggleEventLock}
+                  isBulkMode={isBulkMode}
+                  isSelected={isSelected}
+                  onToggleSelection={toggleSelection}
                 />
               );
             })}
@@ -194,6 +211,17 @@ const WeekView = () => {
         </ScrollArea>
       </div>
       <AddEventButton />
+
+      {isBulkMode && selectedCount > 0 && (
+        <BulkActionToolbar
+          selectedCount={selectedCount}
+          onDelete={bulkDelete}
+          onUpdateColor={bulkUpdateColor}
+          onReschedule={bulkReschedule}
+          onDuplicate={bulkDuplicate}
+          onDeselectAll={deselectAll}
+        />
+      )}
 
       <EventForm
         open={formOpen}

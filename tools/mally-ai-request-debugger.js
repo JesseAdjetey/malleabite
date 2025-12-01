@@ -1,10 +1,10 @@
 // mally-ai-request-debugger.js
 // Save this file to your desktop and load it in the browser console when using Mally AI
-// It will intercept requests to Claude and log the responses to help diagnose issues
+// It will intercept requests to Claude and Firebase Functions to help diagnose issues
 
 (function() {
     console.log('Mally AI Request Debugger loaded!');
-    console.log('This utility will monitor requests to the Anthropic API and Edge Functions');
+    console.log('This utility will monitor requests to the Anthropic API and Firebase Functions');
     console.log('Look for "MALLY-DEBUG" in the console to find relevant logs');
     
     // Store original fetch
@@ -13,14 +13,18 @@
     // Override fetch to intercept API calls
     window.fetch = async function(url, options) {
         if (url && typeof url === 'string') {
-            // Looking for Claude API calls or Supabase Edge Functions
+            // Looking for Claude API calls or Firebase Functions
             const isClaudeRequest = url.includes('anthropic.com') || 
                                    url.includes('api.anthropic.com');
             
-            const isEdgeFunctionRequest = url.includes('functions/v1/process-scheduling');
+            const isFirebaseFunctionRequest = url.includes('cloudfunctions.net') || 
+                                            url.includes('firebase.googleapis.com/v1beta/projects') ||
+                                            url.includes('processAIRequest') ||
+                                            url.includes('createCalendarEvent') ||
+                                            url.includes('transcribeAudio');
             
-            if (isClaudeRequest || isEdgeFunctionRequest) {
-                console.log(`MALLY-DEBUG: Intercepted ${isClaudeRequest ? 'Claude API' : 'Edge Function'} request`);
+            if (isClaudeRequest || isFirebaseFunctionRequest) {
+                console.log(`MALLY-DEBUG: Intercepted ${isClaudeRequest ? 'Claude API' : 'Firebase Function'} request`);
                 
                 try {
                     // Clone the options to avoid modifying the original

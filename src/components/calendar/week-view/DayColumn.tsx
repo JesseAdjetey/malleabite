@@ -4,6 +4,7 @@ import { getHours, isCurrentDay } from "@/lib/getTime";
 import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import CalendarEvent from "../CalendarEvent";
+import SelectableCalendarEvent from "../SelectableCalendarEvent";
 import CurrentTimeIndicator from "./CurrentTimeIndicator";
 import { calculateEventHeight, calculateEventPosition, getTimeInfo } from "../event-utils/touch-handlers";
 
@@ -16,6 +17,9 @@ interface DayColumnProps {
   onDrop: (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
   openEventSummary: (event: CalendarEventType) => void;
   toggleEventLock: (id: string, isLocked: boolean) => void;
+  isBulkMode?: boolean;
+  isSelected?: (eventId: string) => boolean;
+  onToggleSelection?: (eventId: string) => void;
 }
 
 const DayColumn: React.FC<DayColumnProps> = ({
@@ -27,6 +31,9 @@ const DayColumn: React.FC<DayColumnProps> = ({
   onDrop,
   openEventSummary,
   toggleEventLock,
+  isBulkMode = false,
+  isSelected = () => false,
+  onToggleSelection = () => {},
 }) => {
   const hourHeight = 80; // The height in pixels of each hour cell
 
@@ -58,20 +65,31 @@ const DayColumn: React.FC<DayColumnProps> = ({
             }}
             onClick={(e) => {
               e.stopPropagation();
-              openEventSummary(event);
+              if (!isBulkMode) {
+                openEventSummary(event);
+              }
             }}
           >
-            <CalendarEvent
-              event={event}
-              color={event.color}
-              isLocked={event.isLocked}
-              hasAlarm={event.hasAlarm}
-              hasReminder={event.hasReminder}
-              hasTodo={event.isTodo}
-              participants={event.participants}
-              onClick={() => openEventSummary(event)}
-              onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
-            />
+            {isBulkMode ? (
+              <SelectableCalendarEvent
+                event={event}
+                isBulkMode={isBulkMode}
+                isSelected={isSelected(event.id)}
+                onToggleSelection={onToggleSelection}
+              />
+            ) : (
+              <CalendarEvent
+                event={event}
+                color={event.color}
+                isLocked={event.isLocked}
+                hasAlarm={event.hasAlarm}
+                hasReminder={event.hasReminder}
+                hasTodo={event.isTodo}
+                participants={event.participants}
+                onClick={() => openEventSummary(event)}
+                onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
+              />
+            )}
           </div>
         );
       })}

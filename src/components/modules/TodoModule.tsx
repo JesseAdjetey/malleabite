@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { useEventStore } from "@/lib/store";
 import { useTodos, TodoItem } from "@/hooks/use-todos";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext.firebase";
 
 interface TodoModuleProps {
   title: string;
@@ -103,7 +103,7 @@ const TodoModule: React.FC<TodoModuleProps> = ({
   };
 
   const handleToggleCompleted = async (id: string, completed: boolean) => {
-    await toggleTodo(id, !completed);
+    await toggleTodo(id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

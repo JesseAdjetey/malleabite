@@ -44,3 +44,35 @@ body {
     @apply text-foreground;
   }
 }
+
+/* Global dark scrollbar styling - must be outside @layer to override properly */
+* {
+  scrollbar-width: thin !important;
+  scrollbar-color: #4B5563 transparent !important;
+}
+
+*::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #4B5563 !important;
+  border-radius: 4px !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #6B7280 !important;
+}
+
+html.dark *::-webkit-scrollbar-thumb {
+  background-color: #374151 !important;
+}
+
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: #4B5563 !important;
+}

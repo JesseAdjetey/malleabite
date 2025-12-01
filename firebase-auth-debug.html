@@ -1,0 +1,100 @@
+<!-- Firebase Auth Debug Test -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Auth Debug</title>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-functions.js"></script>
+</head>
+<body>
+    <h1>Firebase Auth Debug</h1>
+    <div id="status">Loading...</div>
+    <button id="signInBtn" onclick="signInTestUser()" style="display:none;">Sign In Test User</button>
+    <button id="createUserBtn" onclick="createTestUser()" style="display:none;">Create Test User</button>
+    <button id="testFunctionBtn" onclick="testFirebaseFunction()" style="display:none;">Test Firebase Function</button>
+    <div id="results"></div>
+
+    <script>
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE",
+            authDomain: "malleabite-97d35.firebaseapp.com",
+            projectId: "malleabite-97d35",
+            storageBucket: "malleabite-97d35.firebasestorage.app",
+            messagingSenderId: "879274801325",
+            appId: "1:879274801325:web:894f87dd217dee470fae24",
+            measurementId: "G-FY8VC4Y2WX"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const functions = firebase.functions();
+
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+        const signInBtn = document.getElementById('signInBtn');
+        const createUserBtn = document.getElementById('createUserBtn');
+        const testFunctionBtn = document.getElementById('testFunctionBtn');
+
+        // Monitor auth state
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                statusDiv.innerHTML = `✅ Signed in as: ${user.email} (${user.uid})`;
+                testFunctionBtn.style.display = 'block';
+                signInBtn.style.display = 'none';
+                createUserBtn.style.display = 'none';
+            } else {
+                statusDiv.innerHTML = '❌ Not signed in';
+                signInBtn.style.display = 'block';
+                createUserBtn.style.display = 'block';
+                testFunctionBtn.style.display = 'none';
+            }
+        });
+
+        async function signInTestUser() {
+            try {
+                const userCredential = await auth.signInWithEmailAndPassword('test@malleabite.com', 'testpassword123');
+                resultsDiv.innerHTML += `<p>✅ Signed in successfully: ${userCredential.user.email}</p>`;
+            } catch (error) {
+                resultsDiv.innerHTML += `<p>❌ Sign in failed: ${error.message}</p>`;
+            }
+        }
+
+        async function createTestUser() {
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword('test@malleabite.com', 'testpassword123');
+                resultsDiv.innerHTML += `<p>✅ User created successfully: ${userCredential.user.email}</p>`;
+            } catch (error) {
+                resultsDiv.innerHTML += `<p>❌ User creation failed: ${error.message}</p>`;
+            }
+        }
+
+        async function testFirebaseFunction() {
+            const user = auth.currentUser;
+            if (!user) {
+                resultsDiv.innerHTML += `<p>❌ No user signed in</p>`;
+                return;
+            }
+
+            try {
+                resultsDiv.innerHTML += `<p>🔄 Testing Firebase Function...</p>`;
+                const processAIRequest = functions.httpsCallable('processAIRequest');
+                
+                const result = await processAIRequest({
+                    message: 'Schedule a test meeting tomorrow at 2pm',
+                    userId: user.uid,
+                    context: { currentTime: new Date().toISOString() }
+                });
+
+                resultsDiv.innerHTML += `<p>✅ Firebase Function call successful!</p>`;
+                resultsDiv.innerHTML += `<pre>${JSON.stringify(result.data, null, 2)}</pre>`;
+            } catch (error) {
+                resultsDiv.innerHTML += `<p>❌ Firebase Function call failed: ${error.message}</p>`;
+                console.error('Function error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

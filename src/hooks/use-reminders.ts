@@ -1,7 +1,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
 
@@ -9,13 +22,14 @@ export interface Reminder {
   id: string;
   title: string;
   description: string | null;
-  reminder_time: string;
+  reminder_time: string | Timestamp;
   event_id: string | null;
   time_before_event_minutes: number | null;
   time_after_event_minutes: number | null;
   sound_id: string | null;
   is_active: boolean;
-  created_at: string;
+  created_at: string | Timestamp;
+  user_id?: string;
   event?: CalendarEventType;
 }
 
@@ -41,75 +55,59 @@ export function useReminders() {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  // Fetch all reminders
+  // Fetch all reminders from Firebase
   const fetchReminders = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setReminders([]);
+      setLoading(false);
+      return;
+    }
     
-    setLoading(true);
     try {
-      // Fetch reminders with optional linked events
-      const { data, error } = await supabase
-        .from('reminders')
-        .select(`
-          *,
-          event:event_id (
-            id,
-            title,
-            description,
-            starts_at,
-            ends_at,
-            color
-          )
-        `)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
+      console.log('Setting up Firebase subscription for reminders for user:', user.uid);
       
-      // Process the data with proper type checking
-      const processedReminders = data?.map(item => {
-        // Check if the event data is valid
-        const hasValidEvent = item.event !== null && 
-                           typeof item.event === 'object' && 
-                           !('error' in (item.event || {}));
-        
-        // Create a properly typed event object only if valid data exists
-        let eventData = undefined;
-        
-        if (hasValidEvent && item.event) {
-          const event = item.event as any;
-          
-          if (typeof event === 'object' && 
-              'id' in event && 
-              'title' in event) {
-            
-            eventData = {
-              id: event.id,
-              title: event.title,
-              description: event.description || '',
-              startsAt: event.starts_at,
-              endsAt: event.ends_at,
-              color: event.color || 'bg-blue-400/70',
-              date: new Date(event.starts_at).toISOString().split('T')[0]
-            } as CalendarEventType;
-          }
-        }
-        
-        return {
-          ...item,
-          event: eventData
-        } as Reminder;
-      }) || [];
-      
-      // Sort reminders by time
-      const sortedReminders = processedReminders.sort((a, b) => 
-        new Date(a.reminder_time).getTime() - new Date(b.reminder_time).getTime()
+      const remindersQuery = query(
+        collection(db, 'reminders'),
+        where('user_id', '==', user.uid),
+        orderBy('reminder_time', 'asc')
       );
-      
-      setReminders(sortedReminders);
-    } catch (error) {
-      console.error('Error fetching reminders:', error);
+
+      const unsubscribe = onSnapshot(
+        remindersQuery,
+        (snapshot) => {
+          const remindersData: Reminder[] = [];
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            remindersData.push({
+              id: doc.id,
+              title: data.title,
+              description: data.description,
+              reminder_time: data.reminder_time,
+              event_id: data.event_id,
+              time_before_event_minutes: data.time_before_event_minutes,
+              time_after_event_minutes: data.time_after_event_minutes,
+              sound_id: data.sound_id,
+              is_active: data.is_active,
+              created_at: data.created_at,
+              user_id: data.user_id
+            });
+          });
+          
+          console.log('Received reminders from Firebase:', remindersData);
+          setReminders(remindersData);
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Error fetching reminders:', err);
+          toast.error('Failed to fetch reminders');
+          setLoading(false);
+        }
+      );
+
+      return unsubscribe;
+    } catch (err: any) {
+      console.error('Error setting up reminders subscription:', err);
       toast.error('Failed to fetch reminders');
-    } finally {
       setLoading(false);
     }
   }, [user]);
@@ -124,7 +122,7 @@ export function useReminders() {
     try {
       // Format the data for insertion
       const reminderData = {
-        user_id: user.id,
+        user_id: user.uid,
         title: data.title,
         description: data.description || null,
         reminder_time: data.reminderTime || new Date().toISOString(),
@@ -132,18 +130,14 @@ export function useReminders() {
         time_before_event_minutes: data.timeBeforeMinutes || null,
         time_after_event_minutes: data.timeAfterMinutes || null,
         sound_id: data.soundId || 'default',
-        is_active: true
+        is_active: true,
+        created_at: serverTimestamp()
       };
       
-      const { data: newReminder, error } = await supabase
-        .from('reminders')
-        .insert(reminderData)
-        .select();
-        
-      if (error) throw error;
+      const docRef = await addDoc(collection(db, 'reminders'), reminderData);
       
+      console.log('Reminder created with ID:', docRef.id);
       toast.success('Reminder created');
-      await fetchReminders();
       
       return { success: true };
     } catch (error: any) {
@@ -172,16 +166,10 @@ export function useReminders() {
       if (data.timeAfterMinutes !== undefined) updateData.time_after_event_minutes = data.timeAfterMinutes;
       if (data.soundId !== undefined) updateData.sound_id = data.soundId;
       
-      const { error } = await supabase
-        .from('reminders')
-        .update(updateData)
-        .eq('id', id)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
+      await updateDoc(doc(db, 'reminders', id), updateData);
       
+      console.log('Reminder updated:', id);
       toast.success('Reminder updated');
-      await fetchReminders();
       
       return { success: true };
     } catch (error: any) {
@@ -193,7 +181,23 @@ export function useReminders() {
 
   // Toggle reminder active status
   const toggleReminderActive = async (id: string, isActive: boolean): Promise<{success: boolean, error?: any}> => {
-    return updateReminder(id, { title: undefined, is_active: isActive } as any);
+    if (!user) {
+      toast.error('You must be logged in to update reminders');
+      return { success: false };
+    }
+    
+    try {
+      await updateDoc(doc(db, 'reminders', id), { is_active: isActive });
+      
+      console.log('Reminder active status toggled:', id, isActive);
+      toast.success(`Reminder ${isActive ? 'activated' : 'deactivated'}`);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error toggling reminder:', error);
+      toast.error(`Failed to toggle reminder: ${error.message}`);
+      return { success: false, error };
+    }
   };
 
   // Delete a reminder
@@ -204,16 +208,10 @@ export function useReminders() {
     }
     
     try {
-      const { error } = await supabase
-        .from('reminders')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
+      await deleteDoc(doc(db, 'reminders', id));
       
+      console.log('Reminder deleted:', id);
       toast.success('Reminder deleted');
-      await fetchReminders();
       
       return { success: true };
     } catch (error: any) {
@@ -235,33 +233,27 @@ export function useReminders() {
 
   // Load reminders when component mounts or user changes
   useEffect(() => {
-    if (user) {
-      fetchReminders();
-      
-      // Set up real-time subscription for reminders
-      const channel = supabase
-        .channel('reminders-changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'reminders',
-            filter: `user_id=eq.${user.id}` 
-          }, 
-          (payload) => {
-            console.log('Realtime update for reminders:', payload);
-            fetchReminders();
-          }
-        )
-        .subscribe();
-        
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
-      setReminders([]);
-      setLoading(false);
-    }
+    let unsubscribe: (() => void) | undefined;
+
+    const setupSubscription = async () => {
+      if (user) {
+        console.log('User is authenticated, setting up reminders subscription');
+        unsubscribe = await fetchReminders();
+      } else {
+        console.log('No user, clearing reminders');
+        setReminders([]);
+        setLoading(false);
+      }
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        console.log('Cleaning up reminders subscription');
+        unsubscribe();
+      }
+    };
   }, [user, fetchReminders]);
 
   return {

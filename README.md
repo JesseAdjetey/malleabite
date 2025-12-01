@@ -32,8 +32,10 @@ Frontend:
 - @tanstack/react-query (data fetching/caching)
 
 Backend:
-- Supabase (Postgres database, Auth, Realtime, Edge Functions)
-- Supabase Edge Functions (serverless backend logic)
+- **Supabase** (Postgres database, Auth, Realtime, Edge Functions) - *Currently active*
+- **Firebase** (Firestore, Auth, Cloud Functions) - *Migration 75% complete*
+- Feature flags allow gradual migration between backends
+- Firebase Cloud Functions for AI scheduling and transcription
 - Anthropic Claude (AI for natural language scheduling)
 
 Other:
@@ -94,10 +96,33 @@ Contributing
 3. Open a pull request
 
 ----------------------
+Roadmap & Development
+----------------------
+**Current Status:** Production-Ready Core (v1.0) ✅
+
+**Next Phase:** Intelligence Enhancement (Phase 1) - 3-6 months
+
+📋 **Quick Links:**
+- [**START HERE**](docs/START_HERE.md) - Your immediate next steps
+- [Executive Summary](docs/ROADMAP_EXECUTIVE_SUMMARY.md) - High-level overview
+- [Full Roadmap](docs/ROADMAP_IMPLEMENTATION_PLAN.md) - Complete 18-month plan
+- [Phase 1 Guide](docs/PHASE_1_QUICK_START.md) - Current phase breakdown
+- [Vision Document](docs/MALLEABITE_VISION_COMPLETE.md) - App philosophy & goals
+
+**Phase 1 Focus:**
+- 🔍 Smart conflict detection
+- 📊 Productivity analytics dashboard
+- 🧠 Time block optimization
+- 🤖 Machine learning foundation
+
+See [docs/START_HERE.md](docs/START_HERE.md) for immediate action plan.
+
+----------------------
 Support & Documentation
 ----------------------
 - For issues, open a GitHub issue or check the /docs folder for troubleshooting and advanced usage.
 - See ENHANCED_MALLY_SYSTEM_PROMPT.md for details on AI scheduling integration.
+- For roadmap and development, see the Roadmap & Development section above.
 
 ----------------------
 License

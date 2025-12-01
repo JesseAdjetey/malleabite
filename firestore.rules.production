@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection - users can only read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == userId && 
+                   request.resource.data.uid == userId &&
+                   request.resource.data.email == request.auth.token.email;
+    }
+    
+    // Calendar events - users can only access their own events
+    match /calendar_events/{eventId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId &&
+                   validateCalendarEvent();
+    }
+    
+    // Todos - users can only access their own todos
+    match /todos/{todoId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId &&
+                   validateTodo();
+    }
+    
+    // Eisenhower items - users can only access their own items
+    match /eisenhower_items/{itemId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId &&
+                   validateEisenhowerItem();
+    }
+    
+    // Reminders - users can only access their own reminders  
+    match /reminders/{reminderId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId &&
+                   validateReminder();
+    }
+    
+    // Alarms - users can only access their own alarms
+    match /alarms/{alarmId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId &&
+                   validateAlarm();
+    }
+    
+    // AI suggestions - users can only access their own suggestions
+    match /ai_suggestions/{suggestionId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Module instances - users can only access their own modules
+    match /module_instances/{instanceId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Pomodoro sessions - users can only access their own sessions
+    match /pomodoro_sessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Invites - complex sharing rules
+    match /invites/{inviteId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.recipientId);
+      
+      allow write: if request.auth != null && 
+        (request.auth.uid == resource.data.senderId ||
+         (request.auth.uid == resource.data.recipientId && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])));
+      
+      allow create: if request.auth != null && 
+                   request.auth.uid == request.resource.data.senderId &&
+                   validateInvite();
+      
+      allow delete: if request.auth != null && request.auth.uid == resource.data.senderId;
+    }
+
+    // Validation functions
+    function validateCalendarEvent() {
+      return request.resource.data.keys().hasAll(['title', 'userId', 'createdAt', 'startsAt']) &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0;
+    }
+    
+    function validateTodo() {
+      return request.resource.data.keys().hasAll(['text', 'userId', 'createdAt', 'completed']) &&
+             request.resource.data.text is string &&
+             request.resource.data.text.size() > 0 &&
+             request.resource.data.completed is bool;
+    }
+    
+    function validateEisenhowerItem() {
+      return request.resource.data.keys().hasAll(['text', 'userId', 'quadrant', 'createdAt']) &&
+             request.resource.data.text is string &&
+             request.resource.data.text.size() > 0 &&
+             request.resource.data.quadrant in [1, 2, 3, 4];
+    }
+    
+    function validateReminder() {
+      return request.resource.data.keys().hasAll(['title', 'userId', 'reminderTime', 'createdAt']) &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0;
+    }
+    
+    function validateAlarm() {
+      return request.resource.data.keys().hasAll(['title', 'userId', 'time', 'createdAt']) &&
+             request.resource.data.title is string &&
+             request.resource.data.title.size() > 0;
+    }
+    
+    function validateInvite() {
+      return request.resource.data.keys().hasAll(['senderId', 'recipientId', 'eventId', 'status', 'createdAt']) &&
+             request.resource.data.senderId is string &&
+             request.resource.data.recipientId is string &&
+             request.resource.data.status == 'pending';
+    }
+  }
+}

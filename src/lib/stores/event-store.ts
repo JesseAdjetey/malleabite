@@ -3,7 +3,6 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import dayjs from "dayjs";
 import { CalendarEventType } from "./types";
-import { supabase } from "@/integrations/supabase/client";
 
 type EventStore = {
   events: CalendarEventType[];

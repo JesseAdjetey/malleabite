@@ -1,12 +1,11 @@
 
 import React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LogOut, User, UserCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 
 const UserProfile = () => {
   const { user, signOut } = useAuth();
@@ -33,18 +32,43 @@ const UserProfile = () => {
     return user.email.substring(0, 2).toUpperCase();
   };
 
+  // Helper functions for Firebase user object
+  const getUserName = () => {
+    return (user as any)?.displayName || user?.email;
+  };
+
+  const getUserId = () => {
+    return (user as any)?.uid?.substring(0, 8);
+  };
+
+  const getAvatarUrl = () => {
+    return (user as any)?.photoURL;
+  };
+
+  const getLastSignIn = () => {
+    return (user as any)?.metadata?.lastSignInTime 
+      ? new Date((user as any).metadata.lastSignInTime).toLocaleString() 
+      : 'N/A';
+  };
+
+  const getCreatedAt = () => {
+    return (user as any)?.metadata?.creationTime 
+      ? new Date((user as any).metadata.creationTime).toLocaleString() 
+      : 'N/A';
+  };
+
   return (
     <div className="p-6 bg-card rounded-lg shadow">
       <div className="flex items-center gap-4 mb-6">
         <Avatar className="h-16 w-16 border-2 border-primary">
-          <AvatarImage src={user?.user_metadata?.avatar_url} />
+          <AvatarImage src={getAvatarUrl()} />
           <AvatarFallback className="bg-primary text-primary-foreground text-lg font-medium">
             {getInitials()}
           </AvatarFallback>
         </Avatar>
         <div>
-          <h3 className="font-semibold text-lg">{user?.user_metadata?.full_name || user?.email}</h3>
-          <p className="text-sm text-muted-foreground">User ID: {user?.id?.substring(0, 8)}...</p>
+          <h3 className="font-semibold text-lg">{getUserName()}</h3>
+          <p className="text-sm text-muted-foreground">User ID: {getUserId()}...</p>
         </div>
       </div>
       
@@ -56,12 +80,17 @@ const UserProfile = () => {
         
         <div className="grid grid-cols-3 text-sm">
           <span className="font-medium">Last Sign In:</span>
-          <span className="col-span-2">{user?.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'N/A'}</span>
+          <span className="col-span-2">{getLastSignIn()}</span>
         </div>
         
         <div className="grid grid-cols-3 text-sm">
           <span className="font-medium">Created:</span>
-          <span className="col-span-2">{user?.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</span>
+          <span className="col-span-2">{getCreatedAt()}</span>
+        </div>
+        
+        <div className="grid grid-cols-3 text-sm">
+          <span className="font-medium">Backend:</span>
+          <span className="col-span-2">Firebase</span>
         </div>
       </div>
       

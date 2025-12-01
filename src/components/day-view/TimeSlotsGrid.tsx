@@ -12,6 +12,9 @@ interface TimeSlotsGridProps {
   onTimeSlotClick: (hour: dayjs.Dayjs) => void;
   addEvent: (event: CalendarEventType) => Promise<any>;
   openEventForm?: (todoData: any, hour: dayjs.Dayjs) => void;
+  isBulkMode?: boolean;
+  isSelected?: (eventId: string) => boolean;
+  onToggleSelection?: (eventId: string) => void;
 }
 
 const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
@@ -20,7 +23,10 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
   events,
   onTimeSlotClick,
   addEvent,
-  openEventForm
+  openEventForm,
+  isBulkMode = false,
+  isSelected = () => false,
+  onToggleSelection = () => {},
 }) => {
   return (
     <div className="grid grid-cols-[auto_1fr] px-4 py-2">
@@ -49,6 +55,9 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
             onTimeSlotClick={onTimeSlotClick}
             addEvent={addEvent}
             openEventForm={openEventForm}
+            isBulkMode={isBulkMode}
+            isSelected={isSelected}
+            onToggleSelection={onToggleSelection}
           />
         ))}
       </div>

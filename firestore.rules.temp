@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // TEMPORARY RULES FOR USERID REPAIR - REMOVE AFTER FIXING
+    // Allow authenticated users to read/write all documents temporarily
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Users can read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Calendar events - users can only access their own events
+    match /calendar_events/{eventId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/calendar_events/$(eventId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Todos - users can only access their own todos
+    match /todos/{todoId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/todos/$(todoId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Eisenhower items - users can only access their own items
+    match /eisenhower_items/{itemId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/eisenhower_items/$(itemId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Reminders - users can only access their own reminders
+    match /reminders/{reminderId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/reminders/$(reminderId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Alarms - users can only access their own alarms
+    match /alarms/{alarmId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/alarms/$(alarmId)));
+      allow create: if request.auth != null;
+    }
+    
+    // AI suggestions - users can only access their own suggestions
+    match /ai_suggestions/{suggestionId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/ai_suggestions/$(suggestionId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Module instances - users can only access their own modules
+    match /module_instances/{instanceId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/module_instances/$(instanceId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Pomodoro sessions - users can only access their own sessions
+    match /pomodoro_sessions/{sessionId} {
+      allow read, write: if request.auth != null && 
+        (request.auth.uid == resource.data.userId || 
+         request.auth.uid == resource.data.user_id || 
+         !exists(/databases/$(database)/documents/pomodoro_sessions/$(sessionId)));
+      allow create: if request.auth != null;
+    }
+    
+    // Invites - more complex rules for sharing
+    match /invites/{inviteId} {
+      // Users can read invites they sent or received
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.recipientId);
+      
+      // Users can write invites they sent, recipients can update status
+      allow write: if request.auth != null && 
+        (request.auth.uid == resource.data.senderId ||
+         (request.auth.uid == resource.data.recipientId && 
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])));
+      
+      // Users can create invites where they are the sender
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.senderId;
+      
+      // Users can delete invites they sent
+      allow delete: if request.auth != null && request.auth.uid == resource.data.senderId;
+    }
+  }
+}

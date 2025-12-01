@@ -1,8 +1,8 @@
 
 import React, { useEffect } from 'react';
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
 import { useEventStore } from '@/lib/store';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from 'sonner';
 
 interface EventDataProviderProps {
@@ -10,7 +10,10 @@ interface EventDataProviderProps {
 }
 
 const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
-  const { events, loading, error, addEvent, removeEvent, updateEvent, toggleEventLock } = useCalendarEvents();
+  const calendarHook = useCalendarEvents();
+  const { events, loading, error, addEvent, updateEvent } = calendarHook;
+  // Handle different function names between Firebase (deleteEvent) and Supabase (removeEvent)
+  const deleteEvent = 'deleteEvent' in calendarHook ? calendarHook.deleteEvent : calendarHook.removeEvent;
   const { setEvents, setIsInitialized, isInitialized } = useEventStore();
   const { user } = useAuth();
 

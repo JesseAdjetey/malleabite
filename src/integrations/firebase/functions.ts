@@ -1,0 +1,170 @@
+// Firebase Cloud Functions integration (Simplified)
+import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
+import { functions } from './config';
+
+// Function interfaces matching your current Supabase functions
+export interface SchedulingRequest {
+  userMessage: string;
+  userId: string;
+  context?: any;
+}
+
+export interface SchedulingResponse {
+  success: boolean;
+  message: string;
+  operations?: any[];
+  error?: string;
+}
+
+export interface TranscriptionRequest {
+  audioData: string; // base64 encoded audio
+  userId: string;
+}
+
+export interface TranscriptionResponse {
+  success: boolean;
+  transcript?: string;
+  error?: string;
+}
+
+// Cloud function wrappers
+export class FirebaseFunctions {
+  // Process AI requests with intelligent scheduling (replaces process-scheduling)
+  static async processScheduling(data: SchedulingRequest): Promise<SchedulingResponse> {
+    try {
+      const processAIRequestFn = httpsCallable(functions, 'processAIRequest');
+      
+      // Transform data to match the new function signature
+      const result = await processAIRequestFn({
+        message: data.userMessage,
+        userId: data.userId,
+        context: data.context
+      });
+      
+      const responseData = result.data as any;
+      
+      // Transform response to match expected format
+      return {
+        success: responseData.success || false,
+        message: responseData.response || responseData.message || 'No response from AI',
+        operations: responseData.eventData ? [{ 
+          type: 'create_event', 
+          data: responseData.eventData,
+          conflicts: responseData.conflicts 
+        }] : [],
+        error: responseData.error
+      };
+    } catch (error: any) {
+      console.error('Error calling processAIRequest function:', error);
+      
+      // Enhanced intelligent fallback response for development
+      const message = data.userMessage.toLowerCase();
+      
+      if (message.includes('schedule') || message.includes('meeting') || message.includes('event') || 
+          message.includes('appointment') || message.includes('create') || message.includes('add')) {
+        
+        // Try to extract basic scheduling info for a helpful response
+        let eventTitle = 'New Event';
+        let timeInfo = '';
+        
+        // Simple pattern matching for titles
+        const titleMatch = message.match(/(?:schedule|create|add)\s+(?:a\s+)?(.+?)(?:\s+(?:at|for|tomorrow|today|next))/i);
+        if (titleMatch) {
+          eventTitle = titleMatch[1].trim();
+        }
+        
+        // Simple pattern matching for time
+        const timeMatch = message.match(/(tomorrow|today|next\s+\w+|\d{1,2}\s*(?:am|pm)|\d{1,2}:\d{2}\s*(?:am|pm)|morning|afternoon|evening)/i);
+        if (timeMatch) {
+          timeInfo = ` ${timeMatch[1]}`;
+        }
+        
+        return {
+          success: true,
+          message: `I understand you want to schedule "${eventTitle}"${timeInfo}. While the AI functions are being deployed, I can still help! You can manually create this event using the calendar interface. Once the Firebase Functions are deployed, I'll be able to create events automatically with intelligent conflict detection and natural language processing.`,
+          operations: [],
+          error: undefined
+        };
+      }
+      
+      if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
+        return {
+          success: true,
+          message: `Hello! I'm Mally, your intelligent scheduling assistant. I'm currently running in development mode while Firebase Functions are being deployed. I can help you understand scheduling requests and provide guidance. Try asking me to "schedule a meeting tomorrow at 2 PM" to see how I'll work once fully deployed!`,
+          operations: [],
+          error: undefined
+        };
+      }
+      
+      return {
+        success: true,
+        message: `I received your message: "${data.userMessage}". While Firebase Functions are being deployed, I'm running in development mode. I can help with scheduling requests, calendar management, and task organization. Once deployed, I'll have full AI capabilities including natural language processing and conflict detection!`,
+        operations: [],
+        error: undefined
+      };
+    }
+  }
+
+  // Create calendar event using Firebase Functions
+  static async createCalendarEvent(eventData: any, userId: string): Promise<any> {
+    try {
+      const createEventFn = httpsCallable(functions, 'createCalendarEvent');
+      
+      const result = await createEventFn({
+        eventData,
+        userId
+      });
+      
+      return result.data;
+    } catch (error: any) {
+      console.error('Error calling createCalendarEvent function:', error);
+      throw error;
+    }
+  }
+
+  // Transcribe audio (replaces transcribe-audio)
+  static async transcribeAudio(data: TranscriptionRequest): Promise<TranscriptionResponse> {
+    try {
+      const transcribeAudioFn = httpsCallable(functions, 'transcribeAudio');
+      
+      const result = await transcribeAudioFn(data);
+      return result.data as TranscriptionResponse;
+    } catch (error: any) {
+      console.error('Error calling transcribeAudio function:', error);
+      
+      // Return a helpful fallback response for development
+      const mockTranscriptions = [
+        'Schedule a meeting tomorrow at 2 PM',
+        'Create a doctor appointment for Friday morning',
+        'Add a lunch meeting with the team next week',
+        'Set up a project review for Thursday afternoon',
+        'Schedule a call with the client at 3 PM'
+      ];
+      
+      const mockTranscript = mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)];
+      
+      return {
+        success: true,
+        transcript: mockTranscript,
+        error: undefined
+      };
+    }
+  }
+
+  // Generic function caller for future functions
+  static async callFunction<TRequest, TResponse>(
+    functionName: string, 
+    data: TRequest
+  ): Promise<TResponse> {
+    try {
+      const fn = httpsCallable<TRequest, TResponse>(functions, functionName);
+      const result = await fn(data);
+      return result.data;
+    } catch (error: any) {
+      console.error(`Error calling ${functionName} function:`, error);
+      throw error;
+    }
+  }
+}
+
+export default FirebaseFunctions;

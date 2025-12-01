@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import MallyAI from './MallyAI';
+import { MallyAIFirebase as MallyAI } from './MallyAI.firebase';
 import { CalendarEventType } from '@/lib/stores/types';
 import { motion } from 'framer-motion';
 import { useLocalStorage } from '@/hooks/use-local-storage';

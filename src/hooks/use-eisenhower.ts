@@ -1,7 +1,20 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 
 export interface EisenhowerItem {
@@ -9,8 +22,8 @@ export interface EisenhowerItem {
   text: string;
   quadrant: 'urgent_important' | 'not_urgent_important' | 'urgent_not_important' | 'not_urgent_not_important';
   user_id?: string;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | Timestamp;
+  updated_at?: string | Timestamp;
   event_id?: string;
 }
 
@@ -28,7 +41,7 @@ export function useEisenhower() {
   const [lastResponse, setLastResponse] = useState<EisenhowerResponse | null>(null);
   const { user } = useAuth();
 
-  // Fetch Eisenhower items from Supabase
+  // Fetch Eisenhower items from Firebase
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
@@ -36,34 +49,55 @@ export function useEisenhower() {
       
       if (!user) {
         setItems([]);
+        setLoading(false);
         return;
       }
+
+      console.log('Setting up Firebase subscription for Eisenhower items for user:', user.uid);
       
-      console.log('Fetching Eisenhower items for user:', user.id);
-      
-      const { data, error } = await supabase
-        .from('eisenhower_items')
-        .select('id, text, quadrant, created_at, event_id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error details:', error);
-        throw error;
-      }
-      
-      console.log('Fetched Eisenhower items:', data);
-      setItems(data || []);
+      const itemsQuery = query(
+        collection(db, 'eisenhower_items'),
+        where('user_id', '==', user.uid),
+        orderBy('created_at', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(
+        itemsQuery,
+        (snapshot) => {
+          const itemsData: EisenhowerItem[] = [];
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            itemsData.push({
+              id: doc.id,
+              text: data.text,
+              quadrant: data.quadrant,
+              user_id: data.user_id,
+              created_at: data.created_at,
+              updated_at: data.updated_at,
+              event_id: data.event_id
+            });
+          });
+          
+          console.log('Received Eisenhower items from Firebase:', itemsData);
+          setItems(itemsData);
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Error fetching Eisenhower items:', err);
+          setError(err.message);
+          setLoading(false);
+        }
+      );
+
+      return unsubscribe;
     } catch (err: any) {
-      console.error('Error fetching Eisenhower items:', err);
-      setError(err.message || err.error_description || String(err));
-      setItems([]);
-    } finally {
+      console.error('Error setting up Eisenhower items subscription:', err);
+      setError(err.message);
       setLoading(false);
     }
   }, [user]);
 
-  // Add a new Eisenhower item to Supabase
+  // Add a new Eisenhower item to Firebase
   const addItem = async (text: string, quadrant: EisenhowerItem['quadrant']) => {
     try {
       if (!user || !text.trim()) {
@@ -74,48 +108,25 @@ export function useEisenhower() {
         setLastResponse(response);
         return response;
       }
-      
+
       console.log('Adding new Eisenhower item:', text, 'to quadrant:', quadrant);
       
       const newItem = {
         text: text.trim(),
         quadrant,
-        user_id: user.id
+        user_id: user.uid,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp()
       };
       
-      const { data, error } = await supabase
-        .from('eisenhower_items')
-        .insert(newItem)
-        .select();
+      const docRef = await addDoc(collection(db, 'eisenhower_items'), newItem);
       
-      if (error) {
-        console.error('Error details:', error);
-        const response = {
-          success: false,
-          message: `Failed to add item: ${error.message}`,
-          error
-        };
-        setLastResponse(response);
-        return response;
-      }
-      
-      console.log('Item successfully added with response:', data);
-      
-      if (data && data.length > 0) {
-        setItems(prevItems => [data[0] as EisenhowerItem, ...prevItems]);
-        
-        const response = {
-          success: true,
-          message: 'Item added successfully',
-          itemId: data[0].id,
-        };
-        setLastResponse(response);
-        return response;
-      }
+      console.log('Item successfully added with ID:', docRef.id);
       
       const response = {
         success: true,
-        message: 'Item added but ID not returned',
+        message: 'Item added successfully',
+        itemId: docRef.id,
       };
       setLastResponse(response);
       return response;
@@ -136,25 +147,12 @@ export function useEisenhower() {
     try {
       if (!user) return;
       
-      // Optimistically update the UI
-      setItems(prevItems => prevItems.filter(item => item.id !== id));
+      console.log('Removing Eisenhower item:', id);
+      await deleteDoc(doc(db, 'eisenhower_items', id));
       
-      const { error } = await supabase
-        .from('eisenhower_items')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-      
-      if (error) {
-        console.error('Error details:', error);
-        throw error;
-      }
     } catch (err: any) {
       console.error('Error removing Eisenhower item:', err);
       toast.error('Failed to remove item');
-      
-      // Refetch items to restore the correct state
-      fetchItems();
     }
   };
 
@@ -163,59 +161,41 @@ export function useEisenhower() {
     try {
       if (!user) return;
       
-      // Optimistically update the UI
-      setItems(prevItems => prevItems.map(item => 
-        item.id === id ? { ...item, quadrant } : item
-      ));
+      console.log('Updating Eisenhower item quadrant:', id, 'to', quadrant);
       
-      const { error } = await supabase
-        .from('eisenhower_items')
-        .update({ quadrant })
-        .eq('id', id)
-        .eq('user_id', user.id);
+      await updateDoc(doc(db, 'eisenhower_items', id), {
+        quadrant,
+        updated_at: serverTimestamp()
+      });
       
-      if (error) {
-        console.error('Error details:', error);
-        throw error;
-      }
     } catch (err: any) {
       console.error('Error updating Eisenhower item quadrant:', err);
       toast.error('Failed to update item');
-      
-      // Refetch items to restore the correct state
-      fetchItems();
     }
   };
 
   // Load items when component mounts or user changes
   useEffect(() => {
-    if (user) {
-      console.log('User is authenticated, fetching Eisenhower items');
-      fetchItems();
-    } else {
-      console.log('No user, clearing Eisenhower items');
-      setItems([]);
-      setLoading(false);
-    }
-    
-    // Set up real-time subscription for Eisenhower items
-    const eisenhowerSubscription = supabase
-      .channel('eisenhower-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'eisenhower_items', filter: `user_id=eq.${user?.id}` }, 
-        (payload) => {
-          console.log('Realtime update received:', payload);
-          // Only refetch when the user is authenticated
-          if (user) {
-            fetchItems();
-          }
-        }
-      )
-      .subscribe();
-      
+    let unsubscribe: (() => void) | undefined;
+
+    const setupSubscription = async () => {
+      if (user) {
+        console.log('User is authenticated, setting up Eisenhower items subscription');
+        unsubscribe = await fetchItems();
+      } else {
+        console.log('No user, clearing Eisenhower items');
+        setItems([]);
+        setLoading(false);
+      }
+    };
+
+    setupSubscription();
+
     return () => {
-      console.log('Cleaning up subscription');
-      supabase.removeChannel(eisenhowerSubscription);
+      if (unsubscribe) {
+        console.log('Cleaning up Eisenhower items subscription');
+        unsubscribe();
+      }
     };
   }, [user, fetchItems]);
 

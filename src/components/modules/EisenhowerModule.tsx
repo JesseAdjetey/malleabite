@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Plus, ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEisenhower, EisenhowerItem } from '@/hooks/use-eisenhower';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 
 interface QuadrantConfig {
   title: string;

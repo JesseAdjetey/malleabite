@@ -11,12 +11,26 @@ import dayjs from "dayjs";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { BulkActionToolbar } from "@/components/calendar";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
   const { openEventSummary, isEventSummaryOpen, closeEventSummary } =
     useEventStore();
   const { events, updateEvent, addEvent } = useCalendarEvents();
+  const {
+    isBulkMode,
+    selectedIds,
+    selectedCount,
+    toggleSelection,
+    isSelected,
+    deselectAll,
+    bulkDelete,
+    bulkUpdateColor,
+    bulkReschedule,
+    bulkDuplicate,
+  } = useBulkSelection();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -133,6 +147,9 @@ const MonthView = () => {
                   onEventDrop={handleEventDrop}
                   addEvent={addEvent}
                   openEventForm={openEventForm}
+                  isBulkMode={isBulkMode}
+                  isSelected={isSelected}
+                  onToggleSelection={toggleSelection}
                 />
               ))}
             </Fragment>
@@ -140,6 +157,17 @@ const MonthView = () => {
         </section>
       </div>
       <AddEventButton />
+
+      {isBulkMode && selectedCount > 0 && (
+        <BulkActionToolbar
+          selectedCount={selectedCount}
+          onDelete={bulkDelete}
+          onUpdateColor={bulkUpdateColor}
+          onReschedule={bulkReschedule}
+          onDuplicate={bulkDuplicate}
+          onDeselectAll={deselectAll}
+        />
+      )}
 
       <EventForm
         open={formOpen}

@@ -4,10 +4,14 @@ import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-route
 import { ToastProvider } from "@/hooks/toast-context";
 import Index from '@/pages/Index';
 import Settings from '@/pages/Settings';
+import Analytics from '@/pages/Analytics';
+import Templates from '@/pages/Templates';
+import QuickSchedulePage from '@/pages/QuickSchedule';
+import PatternsPage from '@/pages/Patterns';
 import Auth from '@/pages/Auth';
 import { Toaster } from "@/components/ui/toaster";
 import ThemeProvider from '@/components/ThemeProvider';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider } from '@/contexts/AuthContext.unified';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import EventDataProvider from '@/contexts/EventDataProvider';
 
@@ -22,6 +26,10 @@ const AppRoutes = () => {
         <Route path="/auth" element={<Auth />} />
         <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+        <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+        <Route path="/quick-schedule" element={<ProtectedRoute><QuickSchedulePage /></ProtectedRoute>} />
+        <Route path="/patterns" element={<ProtectedRoute><PatternsPage /></ProtectedRoute>} />
       </Routes>
       <Toaster />
     </ThemeProvider>

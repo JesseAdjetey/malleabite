@@ -2,7 +2,7 @@
 import React, { useEffect } from 'react';
 import Mainview from '@/components/Mainview';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
 import '../styles/ai-animations.css';

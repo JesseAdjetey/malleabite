@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CalendarEventType } from '@/lib/stores/types';
 import { Input } from "@/components/ui/input";
@@ -22,6 +21,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from '@/lib/utils';
 import { Switch } from "@/components/ui/switch";
 import dayjs from 'dayjs';
+import { useConflictDetection } from '@/hooks/use-conflict-detection';
+import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import ConflictWarning from './ConflictWarning';
+import { useFocusTimeCheck } from './FocusTimeBlocks';
+import { Shield } from 'lucide-react';
+import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
+import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 
 interface EnhancedEventFormProps {
   event?: CalendarEventType | null;
@@ -69,11 +75,53 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [hasAlarm, setHasAlarm] = useState(false);
   const [hasReminder, setHasReminder] = useState(false);
   const [participants, setParticipants] = useState('');
+  const [category, setCategory] = useState<import('@/lib/algorithms/event-classifier').EventCategory | undefined>();
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
+  const { events } = useCalendarEvents();
+  const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
+  const eventClassifier = React.useMemo(() => new EventClassifier(), []);
   
   // Use either the event or initialEvent prop, whichever is provided
   const eventData = event || initialEvent;
+  
+  // Create a preview event for conflict detection
+  const previewEvent: CalendarEventType | undefined = React.useMemo(() => {
+    if (!selectedDate || !startTime || !endTime) return undefined;
+    
+    const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+    
+    const startsAtDate = new Date(selectedDate);
+    startsAtDate.setHours(startHour, startMinute, 0);
+    
+    const endsAtDate = new Date(selectedDate);
+    endsAtDate.setHours(endHour, endMinute, 0);
+    
+    return {
+      id: eventData?.id || 'preview-event',
+      title: title || 'New Event',
+      description: description,
+      date: formattedDate,
+      startsAt: startsAtDate.toISOString(),
+      endsAt: endsAtDate.toISOString(),
+      color: selectedColor,
+    };
+  }, [selectedDate, startTime, endTime, title, description, selectedColor, eventData]);
+  
+  // Detect conflicts with the preview event
+  const conflictDetection = useConflictDetection(events, previewEvent);
+  
+  // Check if event is during focus time
+  const focusTimeCheck = React.useMemo(() => {
+    if (!previewEvent) return null;
+    const inFocusTime = isInFocusTime(previewEvent.startsAt);
+    if (inFocusTime) {
+      return getFocusBlockAtTime(previewEvent.startsAt);
+    }
+    return null;
+  }, [previewEvent, isInFocusTime, getFocusBlockAtTime]);
 
   useEffect(() => {
     if (eventData) {
@@ -350,7 +398,63 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             className="min-h-[80px] transition-all duration-200 focus:ring-2 focus:ring-primary/50"
           />
         </div>
+
+        {/* Category Suggestions - Auto-categorization */}
+        <CategorySuggestions
+          title={title}
+          description={description}
+          location={participants}
+          currentCategory={category}
+          onSelectCategory={(selectedCategory) => {
+            setCategory(selectedCategory);
+            const color = getCategoryColor(selectedCategory);
+            setSelectedColor(color);
+            
+            // Learn from user's selection if they manually change it later
+            if (eventData && eventData.color !== color) {
+              eventClassifier.learn(
+                title,
+                selectedCategory,
+                description
+              );
+            }
+          }}
+        />
         
+        {/* Conflict Warning - Show if there are any conflicts */}
+        {conflictDetection.hasConflicts && previewEvent && (
+          <div className="mb-4">
+            <ConflictWarning
+              conflicts={conflictDetection.conflicts}
+              events={events}
+              variant="inline"
+            />
+          </div>
+        )}
+
+        {/* Focus Time Warning */}
+        {focusTimeCheck && previewEvent && (
+          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-amber-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                  During Protected Focus Time
+                </h4>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mb-2">
+                  This event is scheduled during "{focusTimeCheck.label}" (
+                  {focusTimeCheck.startHour.toString().padStart(2, '0')}:00 -{' '}
+                  {focusTimeCheck.endHour.toString().padStart(2, '0')}:00).
+                  Consider rescheduling to maintain your productivity.
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  💡 Tip: Focus time is reserved for deep work and concentration
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-4">
           <Label htmlFor="participants" className="mb-1 block">Participants (comma separated)</Label>
           <Input

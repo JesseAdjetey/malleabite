@@ -1,301 +1,213 @@
-
+// Firebase-based invites hook (replaces Supabase version)
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
+import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
 
 export interface Invite {
   id: string;
-  event_id: string | null;
-  invitee_email: string | null;
-  created_at: string;
-  responded_at: string | null;
-  invitee_id: string | null;
-  invitation_message: string | null;
-  inviter_id: string | null;
+  senderId: string;
+  senderEmail: string;
+  recipientId: string;
+  recipientEmail: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  eventStartTime: string;
+  eventEndTime: string;
   status: 'pending' | 'accepted' | 'declined';
-  event?: CalendarEventType;
+  message?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export function useInvites() {
+export interface InviteResponse {
+  success: boolean;
+  error?: string;
+  data?: Invite;
+}
+
+export const useInvites = () => {
   const [sentInvites, setSentInvites] = useState<Invite[]>([]);
   const [receivedInvites, setReceivedInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Fetch all invites (both sent and received)
-  const fetchInvites = useCallback(async () => {
-    if (!user) return;
-    
-    setLoading(true);
+  // Fetch sent invites
+  useEffect(() => {
+    if (!user) {
+      setSentInvites([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'invites'),
+      where('senderId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const invites = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate()?.toISOString() || new Date().toISOString(),
+          updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || new Date().toISOString(),
+        })) as Invite[];
+        
+        setSentInvites(invites);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching sent invites:', error);
+        setError(error.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Fetch received invites
+  useEffect(() => {
+    if (!user) {
+      setReceivedInvites([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'invites'),
+      where('recipientId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const invites = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate()?.toISOString() || new Date().toISOString(),
+          updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || new Date().toISOString(),
+        })) as Invite[];
+        
+        setReceivedInvites(invites);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error fetching received invites:', error);
+        setError(error.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const sendInvite = useCallback(async (
+    recipientEmail: string,
+    event: CalendarEventType,
+    message?: string
+  ): Promise<InviteResponse> => {
+    if (!user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
     try {
-      // Fetch invites sent by the current user
-      const { data: sent, error: sentError } = await supabase
-        .from('invites')
-        .select(`
-          *,
-          event:event_id (
-            id,
-            title,
-            description,
-            startsAt,
-            endsAt,
-            color
-          )
-        `)
-        .eq('inviter_id', user.id);
-        
-      if (sentError) throw sentError;
-      
-      // Fetch invites received by the current user
-      const { data: received, error: receivedError } = await supabase
-        .from('invites')
-        .select(`
-          *,
-          event:event_id (
-            id,
-            title,
-            description,
-            startsAt,
-            endsAt,
-            color
-          )
-        `)
-        .eq('invitee_id', user.id);
-        
-      if (receivedError) throw receivedError;
+      const inviteData = {
+        senderId: user.uid,
+        senderEmail: user.email || '',
+        recipientId: '', // Will be filled when recipient accepts
+        recipientEmail,
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDate: event.date,
+        eventStartTime: event.startsAt,
+        eventEndTime: event.endsAt,
+        status: 'pending' as const,
+        message: message || '',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
 
-      // Process sent invites with proper type checking
-      const processedSent = sent?.map(item => {
-        // Fix: Add proper null checking for item.event
-        const hasValidEvent = item.event !== null && 
-                            typeof item.event === 'object' && 
-                            !('error' in (item.event || {}));
-        
-        // Create a fallback event object if the event has an error or is null
-        let eventData = undefined;
-        
-        if (hasValidEvent && item.event) {
-          // Only try to access properties if we have a valid event object
-          const event = item.event as any; // Use any temporarily to avoid type errors
-          
-          if (typeof event === 'object' && 
-              'id' in event && 
-              'title' in event && 
-              'description' in event && 
-              'startsAt' in event && 
-              'endsAt' in event) {
-            
-            eventData = {
-              id: event.id,
-              title: event.title,
-              description: event.description,
-              startsAt: event.startsAt,
-              endsAt: event.endsAt,
-              color: event.color || undefined,
-            } as CalendarEventType;
-          }
-        }
-        
-        return {
-          ...item,
-          status: (item.status as 'pending' | 'accepted' | 'declined') || 'pending',
-          event: eventData
-        };
-      }) || [];
-
-      // Process received invites with proper type checking
-      const processedReceived = received?.map(item => {
-        // Fix: Add proper null checking for item.event
-        const hasValidEvent = item.event !== null && 
-                            typeof item.event === 'object' && 
-                            !('error' in (item.event || {}));
-        
-        // Create a fallback event object if the event has an error or is null
-        let eventData = undefined;
-        
-        if (hasValidEvent && item.event) {
-          // Only try to access properties if we have a valid event object
-          const event = item.event as any; // Use any temporarily to avoid type errors
-          
-          if (typeof event === 'object' && 
-              'id' in event && 
-              'title' in event && 
-              'description' in event && 
-              'startsAt' in event && 
-              'endsAt' in event) {
-            
-            eventData = {
-              id: event.id,
-              title: event.title,
-              description: event.description,
-              startsAt: event.startsAt,
-              endsAt: event.endsAt,
-              color: event.color || undefined,
-            } as CalendarEventType;
-          }
-        }
-        
-        return {
-          ...item,
-          status: (item.status as 'pending' | 'accepted' | 'declined') || 'pending',
-          event: eventData
-        };
-      }) || [];
+      const docRef = await addDoc(collection(db, 'invites'), inviteData);
       
-      // Now safely assign the processed data to state
-      setSentInvites(processedSent as Invite[]);
-      setReceivedInvites(processedReceived as Invite[]);
+      toast.success(`Invite sent to ${recipientEmail}`);
+      
+      return { 
+        success: true, 
+        data: { 
+          id: docRef.id, 
+          ...inviteData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as Invite 
+      };
     } catch (error) {
-      console.error('Error fetching invites:', error);
-      toast.error('Failed to fetch invites');
-    } finally {
-      setLoading(false);
+      console.error('Error sending invite:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send invite';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     }
   }, [user]);
 
-  // Create a new invite
-  const sendInvite = async (eventId: string, inviteeEmail: string, message?: string) => {
+  const respondToInvite = useCallback(async (
+    inviteId: string,
+    status: 'accepted' | 'declined'
+  ): Promise<InviteResponse> => {
     if (!user) {
-      toast.error('You must be logged in to send invites');
-      return { success: false };
+      return { success: false, error: 'User not authenticated' };
     }
-    
-    try {
-      // Create the invite with just the email
-      const { data, error } = await supabase
-        .from('invites')
-        .insert({
-          event_id: eventId,
-          inviter_id: user.id,
-          invitee_email: inviteeEmail,
-          invitation_message: message || null,
-          status: 'pending'
-        })
-        .select();
-        
-      if (error) throw error;
-      
-      toast.success('Invite sent successfully');
-      await fetchInvites();
-      
-      return { success: true, data };
-    } catch (error: any) {
-      console.error('Error sending invite:', error);
-      toast.error(`Failed to send invite: ${error.message}`);
-      return { success: false, error };
-    }
-  };
 
-  // Accept an invite
-  const respondToInvite = async (inviteId: string, accept: boolean) => {
-    if (!user) {
-      toast.error('You must be logged in to respond to invites');
-      return { success: false };
-    }
-    
     try {
-      const { error } = await supabase
-        .from('invites')
-        .update({ 
-          status: accept ? 'accepted' : 'declined',
-          responded_at: new Date().toISOString()
-        })
-        .eq('id', inviteId)
-        .eq('invitee_id', user.id);
-        
-      if (error) throw error;
-      
-      toast.success(`Invite ${accept ? 'accepted' : 'declined'} successfully`);
-      await fetchInvites();
-      
+      const inviteRef = doc(db, 'invites', inviteId);
+      await updateDoc(inviteRef, {
+        status,
+        recipientId: user.uid,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success(`Invite ${status}`);
       return { success: true };
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error responding to invite:', error);
-      toast.error(`Failed to respond to invite: ${error.message}`);
-      return { success: false, error };
+      const errorMessage = error instanceof Error ? error.message : 'Failed to respond to invite';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     }
-  };
+  }, [user]);
 
-  // Delete an invite (as sender)
-  const deleteInvite = async (inviteId: string) => {
+  const deleteInvite = useCallback(async (inviteId: string): Promise<InviteResponse> => {
     if (!user) {
-      toast.error('You must be logged in to delete invites');
-      return { success: false };
+      return { success: false, error: 'User not authenticated' };
     }
-    
-    try {
-      const { error } = await supabase
-        .from('invites')
-        .delete()
-        .eq('id', inviteId)
-        .eq('inviter_id', user.id);
-        
-      if (error) throw error;
-      
-      toast.success('Invite deleted successfully');
-      await fetchInvites();
-      
-      return { success: true };
-    } catch (error: any) {
-      console.error('Error deleting invite:', error);
-      toast.error(`Failed to delete invite: ${error.message}`);
-      return { success: false, error };
-    }
-  };
 
-  // Load invites when component mounts or user changes
-  useEffect(() => {
-    if (user) {
-      fetchInvites();
-      
-      // Set up real-time subscription for invites
-      const channel = supabase
-        .channel('invites-changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'invites',
-            filter: `inviter_id=eq.${user.id}` 
-          }, 
-          (payload) => {
-            console.log('Realtime update for sent invites:', payload);
-            fetchInvites();
-          }
-        )
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'invites',
-            filter: `invitee_id=eq.${user.id}` 
-          }, 
-          (payload) => {
-            console.log('Realtime update for received invites:', payload);
-            fetchInvites();
-          }
-        )
-        .subscribe();
-        
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
-      setSentInvites([]);
-      setReceivedInvites([]);
-      setLoading(false);
+    try {
+      await deleteDoc(doc(db, 'invites', inviteId));
+      toast.success('Invite deleted');
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting invite:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete invite';
+      toast.error(errorMessage);
+      return { success: false, error: errorMessage };
     }
-  }, [user, fetchInvites]);
+  }, [user]);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   return {
     sentInvites,
     receivedInvites,
     loading,
+    error,
     sendInvite,
     respondToInvite,
     deleteInvite,
-    fetchInvites
+    clearError,
   };
-}
+};

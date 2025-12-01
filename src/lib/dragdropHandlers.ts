@@ -49,15 +49,53 @@ export const createCalendarEventFromTodo = async (
     const endTime = `${endHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
     
     // Format ISO strings for startsAt and endsAt
-    const startDateTime = day.hour(startHour).minute(startMinute);
-    const endDateTime = day.hour(endHour).minute(startMinute);
+    let startDateTime = day.hour(startHour).minute(startMinute).second(0);
+    let endDateTime = day.hour(endHour).minute(startMinute).second(0);
+    
+    // Validate if the time is in the past
+    const now = dayjs();
+    if (startDateTime.isBefore(now)) {
+      const isToday = startDateTime.isSame(now, 'day');
+      
+      if (isToday) {
+        // If trying to schedule for today but in the past, suggest current time or next hour
+        const currentHour = now.hour();
+        const currentMinute = now.minute();
+        const nextSlot = currentMinute < 30 ? 30 : 0;
+        const nextHour = currentMinute < 30 ? currentHour : currentHour + 1;
+        
+        // Round up to next 30-minute slot
+        const suggestedStart = now.minute(nextSlot).hour(nextHour).second(0);
+        const suggestedEnd = suggestedStart.add(1, 'hour');
+        
+        toast.error(`Cannot schedule in the past!`, {
+          description: `The time ${startTime} has already passed today. Scheduling for ${suggestedStart.format('h:mm A')} instead.`,
+          duration: 5000,
+        });
+        
+        startDateTime = suggestedStart;
+        endDateTime = suggestedEnd;
+      } else {
+        // If trying to schedule for a past date
+        toast.error(`Cannot schedule in the past!`, {
+          description: `${day.format('MMM D, YYYY')} has already passed. Please drag to a future date.`,
+          duration: 5000,
+        });
+        return null;
+      }
+    }
+    
+    // Update eventDate and times to match the validated startDateTime
+    const finalEventDate = startDateTime.format('YYYY-MM-DD');
+    const finalStartTime = startDateTime.format('HH:mm');
+    const finalEndTime = endDateTime.format('HH:mm');
     
     // Create a new calendar event from the todo item
     const newEvent: CalendarEventType = {
       id: nanoid(), // This will be replaced by the database
       title: todoData.text,
-      date: eventDate,
-      description: `${startTime} - ${endTime} | ${todoData.text}`,
+      date: finalEventDate,
+      description: `${finalStartTime} - ${finalEndTime} | ${todoData.text}`,
       color: 'bg-purple-500/70', // Special color for todo events
       isTodo: true, // Mark as a todo event
       todoId: keepTodo ? todoData.id : undefined, // Reference to original todo if keeping both
@@ -74,13 +112,17 @@ export const createCalendarEventFromTodo = async (
       // Link todo to the new event if we're keeping both
       if (keepTodo && response.data?.[0]?.id) {
         await options.linkTodoToEventFn(todoData.id, response.data[0].id);
-        toast.success(`"${todoData.text}" added to calendar at ${startTime}`);
+        toast.success(`"${todoData.text}" added to calendar`, {
+          description: `${startDateTime.format('MMM D, YYYY')} at ${startDateTime.format('h:mm A')}`
+        });
         return response.data[0].id;
       } 
       // If not keeping the todo, delete it
       else if (!keepTodo && options.deleteTodoFn) {
         await options.deleteTodoFn(todoData.id);
-        toast.success(`"${todoData.text}" moved to calendar at ${startTime}`);
+        toast.success(`"${todoData.text}" moved to calendar`, {
+          description: `${startDateTime.format('MMM D, YYYY')} at ${startDateTime.format('h:mm A')}`
+        });
         return response.data?.[0]?.id || null;
       }
       

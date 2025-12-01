@@ -11,12 +11,26 @@ import TimeSlotsGrid from "./day-view/TimeSlotsGrid";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { BulkActionToolbar } from "@/components/calendar";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
   const { isEventSummaryOpen, closeEventSummary } = useEventStore();
   const { events, addEvent } = useCalendarEvents();
+  const {
+    isBulkMode,
+    selectedIds,
+    selectedCount,
+    toggleSelection,
+    isSelected,
+    deselectAll,
+    bulkDelete,
+    bulkUpdateColor,
+    bulkReschedule,
+    bulkDuplicate,
+  } = useBulkSelection();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -129,9 +143,23 @@ const DayView = () => {
           onTimeSlotClick={handleTimeSlotClick}
           addEvent={handleAddEvent}
           openEventForm={openEventForm}
+          isBulkMode={isBulkMode}
+          isSelected={isSelected}
+          onToggleSelection={toggleSelection}
         />
       </div>
       <AddEventButton />
+
+      {isBulkMode && selectedCount > 0 && (
+        <BulkActionToolbar
+          selectedCount={selectedCount}
+          onDelete={bulkDelete}
+          onUpdateColor={bulkUpdateColor}
+          onReschedule={bulkReschedule}
+          onDuplicate={bulkDuplicate}
+          onDeselectAll={deselectAll}
+        />
+      )}
 
       {/* Event Form Dialog */}
       <EventForm

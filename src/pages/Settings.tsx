@@ -1,11 +1,14 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useSettingsStore } from '@/lib/stores/settings-store';
 import UserProfile from '@/components/UserProfile';
-import { ChevronLeft } from 'lucide-react';
+import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
+import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
+import { ChevronLeft, Upload, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Circle, Check } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Color presets for the color picker
 const colorPresets = [
@@ -25,9 +28,10 @@ const colorPresets = [
 
 const Settings = () => {
   const { backgroundColor, setBackgroundColor } = useSettingsStore();
+  const [activeTab, setActiveTab] = useState('appearance');
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl text-white">
+    <div className="container mx-auto p-4 max-w-6xl text-white">
       <div className="flex items-center mb-6">
         <Link to="/">
           <Button variant="ghost" size="icon" className="mr-2 text-white hover:bg-white/10">
@@ -38,9 +42,18 @@ const Settings = () => {
         <h1 className="text-2xl font-bold">Settings</h1>
       </div>
       
-      <div className="grid gap-8 md:grid-cols-2">
-        <div>
-          <h2 className="text-xl font-bold mb-4">Appearance</h2>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="mb-6 bg-black/30">
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="focus">Focus Time</TabsTrigger>
+          <TabsTrigger value="import-export">
+            <Upload className="h-4 w-4 mr-2" />
+            Import/Export
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="appearance">
           <div className="p-6 bg-black/30 rounded-lg shadow backdrop-blur-sm border border-white/10">
             <div className="mb-6">
               <h3 className="text-lg font-medium mb-3">Background Color</h3>
@@ -73,15 +86,24 @@ const Settings = () => {
               />
             </div>
           </div>
-        </div>
-        
-        <div>
-          <h2 className="text-xl font-bold mb-4">User Profile</h2>
+        </TabsContent>
+
+        <TabsContent value="profile">
           <div className="p-6 bg-black/30 rounded-lg shadow backdrop-blur-sm border border-white/10">
             <UserProfile />
           </div>
-        </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="focus">
+          <FocusTimeBlocks />
+        </TabsContent>
+
+        <TabsContent value="import-export">
+          <div className="p-6 bg-black/30 rounded-lg shadow backdrop-blur-sm border border-white/10">
+            <CalendarImportExport />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

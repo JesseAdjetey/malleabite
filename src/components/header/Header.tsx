@@ -5,12 +5,32 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import dayjs from 'dayjs';
 import SettingsNav from './SettingsNav';
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import AnalyticsNav from './AnalyticsNav';
+import TemplatesNav from './TemplatesNav';
+import QuickScheduleNav from './QuickScheduleNav';
+import PatternsNav from './PatternsNav';
+import BulkModeToggle from '../calendar/BulkModeToggle';
+import { useBulkSelection } from '@/hooks/use-bulk-selection';
 
 const Header = () => {
   const todaysDate = dayjs();
   const { userSelectedDate, setDate, setMonth, selectedMonthIndex } = useDateStore();
   const { selectedView, setView } = useViewStore();
+  const { 
+    isBulkMode, 
+    selectedCount, 
+    enableBulkMode, 
+    disableBulkMode 
+  } = useBulkSelection();
+
+  const handleToggleBulkMode = () => {
+    if (isBulkMode) {
+      disableBulkMode();
+    } else {
+      enableBulkMode();
+    }
+  };
 
   const handleTodayClick = () => {
     switch (selectedView) {
@@ -125,7 +145,7 @@ const Header = () => {
               onClick={() => setView(view)}
               className={selectedView === view 
                 ? "bg-primary text-white" 
-                : "light-mode:bg-white light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
+                : "light-mode:bg-white light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-purple/20"
               }
             >
               {view}
@@ -133,7 +153,18 @@ const Header = () => {
           ))}
         </div>
         
-        <SettingsNav />
+        <TooltipProvider>
+          <BulkModeToggle 
+            isBulkMode={isBulkMode} 
+            onToggle={handleToggleBulkMode}
+            selectedCount={selectedCount}
+          />
+          <AnalyticsNav />
+          <TemplatesNav />
+          <QuickScheduleNav />
+          <PatternsNav />
+          <SettingsNav />
+        </TooltipProvider>
       </div>
     </div>
   );

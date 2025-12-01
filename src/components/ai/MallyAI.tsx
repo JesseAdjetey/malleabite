@@ -1,858 +1,393 @@
-// src/components/ai/MallyAI.tsx
-import React, { useState, useRef, useEffect } from "react";
+// Enhanced MallyAI component with Schedule Optimization (Phase 1.4)
+import React, { useState } from "react";
 import {
   Bot,
   Send,
-  Plus,
   X,
-  ArrowRight,
-  ArrowLeft,
-  ArrowUpRight,
-  Loader2,
   Sparkles,
   Brain,
-  Mic,
+  Calendar,
+  Zap,
+  TrendingUp,
+  CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext.firebase";
 import { CalendarEventType } from "@/lib/stores/types";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
-import "../../styles/ai-animations.css";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { findFreeTimeBlocks } from "@/lib/algorithms/time-blocks";
+import { useAnalyticsData } from "@/hooks/use-analytics-data";
+import dayjs from 'dayjs';
 
-interface Message {
-  id: string;
-  text: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-  isLoading?: boolean;
-  isError?: boolean;
-}
-
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    text: "Hi, I'm Mally AI! I can help you schedule and manage events. How can I assist you today?",
-    sender: "ai",
-    timestamp: new Date(),
-  },
-];
-
-interface MallyAIProps {
-  onScheduleEvent?: (event: any) => Promise<any>;
-  initialPrompt?: string;
-  preventOpenOnClick?: boolean;
-}
-
-const MallyAI = ({
-  onScheduleEvent,
-  initialPrompt,
-  preventOpenOnClick = false,
-}: MallyAIProps) => {
+export default function MallyAI() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [input, setInput] = useState(initialPrompt || "");
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isSidebarView, setIsSidebarView] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [particles, setParticles] = useState<
-    { x: number; y: number; size: number; life: number }[]
-  >([]);
-  const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isButtonRecording, setIsButtonRecording] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const { addEvent, updateEvent, removeEvent } = useCalendarEvents();
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  const [optimizationResult, setOptimizationResult] = useState<any>(null);
+  const [messages, setMessages] = useState<Array<{
+    id: string;
+    text: string;
+    isUser: boolean;
+    timestamp: Date;
+  }>>([]);
+
   const { user } = useAuth();
-  const recordingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const buttonPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const retryCountRef = useRef<number>(0);
-  const maxRetries = 2;
+  const { events, fetchEvents } = useCalendarEvents();
+  const { metrics, timeDistribution } = useAnalyticsData();
 
-  // Create particles at random intervals
-  useEffect(() => {
-    if (!isOpen) return;
+  const handleOptimizeSchedule = () => {
+    setShowOptimizer(true);
+    setIsLoading(true);
 
-    const interval = setInterval(() => {
-      if (chatContainerRef.current) {
-        const containerRect = chatContainerRef.current.getBoundingClientRect();
-        const x = Math.random() * containerRect.width;
-        const y = Math.random() * containerRect.height;
-        const size = Math.random() * 8 + 2;
-        const life = Math.random() * 2000 + 1000;
-
-        setParticles((prev) => [...prev, { x, y, size, life }]);
-
-        // Clean up old particles
-        setTimeout(() => {
-          setParticles((prev) => prev.filter((p) => p.x !== x || p.y !== y));
-        }, life);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (initialPrompt) {
-      setIsOpen(true);
-    }
-  }, [initialPrompt]);
-
-  useEffect(() => {
-    if (initialPrompt && isOpen) {
-      handleSendMessage(initialPrompt);
-    }
-  }, [isOpen, initialPrompt]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const toggleAI = () => {
-    // Don't toggle if we're coming from a drag operation
-    if (preventOpenOnClick) return;
-
-    setShowEntranceAnimation(true);
-    setIsOpen(!isOpen);
-
-    // Reset entrance animation flag after animation completes
-    if (!isOpen) {
-      setTimeout(() => {
-        setShowEntranceAnimation(false);
-      }, 500);
-    }
-  };
-
-  // Define transcribeAudio function before it's used
-  const transcribeAudio = async (audioBlob: Blob) => {
     try {
-      setIsProcessing(true);
+      // Analyze current week's schedule
+      const today = new Date();
+      const analysis = findFreeTimeBlocks(today.toISOString(), events);
+      
+      // Calculate productivity score from thisWeek data
+      const thisWeek = metrics?.thisWeek;
+      const totalEvents = thisWeek?.totalEvents || 0;
+      const completionRate = thisWeek ? (totalEvents / (totalEvents + events.length) || 0.7) : 0.7;
+      const productivityScore = Math.round(completionRate * 100);
 
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
+      // Calculate focus and meeting time from daily breakdown
+      const focusMinutes = thisWeek?.dailyBreakdown.reduce((sum, day) => sum + day.focusTimeMinutes, 0) || 0;
+      const meetingMinutes = thisWeek?.dailyBreakdown.reduce((sum, day) => sum + day.meetingTimeMinutes, 0) || 0;
+      const breakMinutes = thisWeek?.dailyBreakdown.reduce((sum, day) => sum + day.breakTimeMinutes, 0) || 0;
+      
+      const focusHours = Math.round((focusMinutes / 60) * 10) / 10;
+      const meetingHours = Math.round((meetingMinutes / 60) * 10) / 10;
+      const breakHours = Math.round((breakMinutes / 60) * 10) / 10;
 
-      reader.onloadend = async () => {
-        const base64Audio = reader.result?.toString().split(",")[1];
-
-        if (!base64Audio) {
-          throw new Error("Failed to convert audio to base64");
-        }
-
-        const response = await supabase.functions.invoke("transcribe-audio", {
-          body: { audio: base64Audio },
+      // Generate insights based on analytics
+      const insights = [];
+      
+      if (focusHours < 15) {
+        insights.push({
+          type: 'warning',
+          message: `Low focus time detected (${focusHours}h this week). Consider blocking 2-3 hour focus sessions.`
         });
-
-        if (response.error) {
-          throw new Error(response.error.message);
-        }
-
-        const { text } = response.data;
-
-        if (text && text.trim()) {
-          setInput(text);
-          // Don't automatically send - let the user review first
-          toast.success("Speech transcribed!");
-        } else {
-          toast.error("No speech detected");
-        }
-      };
-    } catch (error) {
-      console.error("Error transcribing audio:", error);
-      toast.error(
-        `Transcription error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Speech to text functionality
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.addEventListener("dataavailable", (event) => {
-        audioChunksRef.current.push(event.data);
-      });
-
-      mediaRecorder.addEventListener("stop", async () => {
-        if (audioChunksRef.current.length > 0) {
-          const audioBlob = new Blob(audioChunksRef.current, {
-            type: "audio/webm",
-          });
-          await transcribeAudio(audioBlob);
-        }
-      });
-
-      mediaRecorder.start();
-      setIsRecording(true);
-
-      // Auto-stop after 10 seconds
-      recordingTimeoutRef.current = setTimeout(() => {
-        if (isRecording) {
-          stopRecording();
-        }
-      }, 10000);
-    } catch (error) {
-      console.error("Error accessing microphone:", error);
-      toast.error("Could not access microphone");
-    }
-  };
-
-  const stopRecording = () => {
-    if (recordingTimeoutRef.current) {
-      clearTimeout(recordingTimeoutRef.current);
-      recordingTimeoutRef.current = null;
-    }
-
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-      setIsRecording(false);
-    }
-  };
-
-  // Start recording when holding the button
-  const startButtonRecording = () => {
-    buttonPressTimerRef.current = setTimeout(() => {
-      setIsButtonRecording(true);
-      startRecording();
-    }, 500); // Start recording after 500ms hold
-  };
-
-  // Stop recording when releasing the button
-  const stopButtonRecording = () => {
-    if (buttonPressTimerRef.current) {
-      clearTimeout(buttonPressTimerRef.current);
-      buttonPressTimerRef.current = null;
-    }
-
-    if (isButtonRecording) {
-      stopRecording();
-      setIsButtonRecording(false);
-
-      // Open the chat if it's not already open
-      if (!isOpen) {
-        setShowEntranceAnimation(true);
-        setIsOpen(true);
-        setTimeout(() => {
-          setShowEntranceAnimation(false);
-        }, 500);
       }
+      
+      if (meetingHours > 20) {
+        insights.push({
+          type: 'warning',
+          message: `High meeting load (${meetingHours}h). Try consolidating meetings to preserve focus blocks.`
+        });
+      }
+      
+      if (analysis.recommendedBlocks.length > 5) {
+        insights.push({
+          type: 'success',
+          message: `${analysis.recommendedBlocks.length} high-quality time slots available for deep work!`
+        });
+      }
+
+      setOptimizationResult({
+        productivityScore,
+        freeBlocks: analysis.freeBlocks.length,
+        recommendedBlocks: analysis.recommendedBlocks,
+        insights,
+        metrics: {
+          focusTime: focusHours,
+          meetingTime: meetingHours,
+          breakTime: breakHours,
+          eventsCompleted: totalEvents,
+        }
+      });
+    } catch (error) {
+      console.error('Optimization error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || isLoading) return;
+
+    const userMessage = {
+      id: Date.now().toString(),
+      text: message.trim(),
+      isUser: true,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    const userInput = message.trim().toLowerCase();
+    setMessage("");
+    setIsLoading(true);
+
+    // Simple AI responses based on keywords
+    let aiResponseText = "";
+    
+    const thisWeek = metrics?.thisWeek;
+    const focusMinutes = thisWeek?.dailyBreakdown.reduce((sum, day) => sum + day.focusTimeMinutes, 0) || 0;
+    const meetingMinutes = thisWeek?.dailyBreakdown.reduce((sum, day) => sum + day.meetingTimeMinutes, 0) || 0;
+    const focusHours = Math.round((focusMinutes / 60) * 10) / 10;
+    const meetingHours = Math.round((meetingMinutes / 60) * 10) / 10;
+    const totalEvents = thisWeek?.totalEvents || 0;
+    const totalHours = thisWeek ? Math.round((thisWeek.totalEventTime / 60) * 10) / 10 : 0;
+    const mostProductiveHour = thisWeek?.mostProductiveHour || 9;
+    
+    if (userInput.includes('optimize') || userInput.includes('schedule')) {
+      aiResponseText = "I can help optimize your schedule! Click the 'Optimize My Schedule' button above to analyze your calendar and get personalized recommendations.";
+    } else if (userInput.includes('focus') || userInput.includes('deep work')) {
+      aiResponseText = `You've had ${focusHours} hours of focus time this week. I recommend protecting 2-3 hour blocks in the morning for your best deep work.`;
+    } else if (userInput.includes('meeting')) {
+      aiResponseText = `You have ${meetingHours} hours of meetings this week. Consider batching meetings on specific days to preserve focus blocks.`;
+    } else if (userInput.includes('productivity') || userInput.includes('stats')) {
+      aiResponseText = `This week: ${totalEvents} events completed, ${totalHours}h productive time. Your most productive time is ${mostProductiveHour}:00.`;
     } else {
-      // If it was a quick click, just toggle the AI
-      toggleAI();
+      aiResponseText = "I'm here to help optimize your schedule! Try asking about focus time, meetings, or click 'Optimize My Schedule' for a comprehensive analysis.";
     }
-  };
 
-  const addUserMessage = (text: string) => {
-    const userMessage: Message = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      text,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    return userMessage.id;
-  };
-
-  const addAIMessage = (text: string, isLoading = false, isError = false) => {
-    const aiMessage: Message = {
-      id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      text,
-      sender: "ai",
-      timestamp: new Date(),
-      isLoading,
-      isError,
-    };
-
-    setMessages((prev) => [...prev, aiMessage]);
-    return aiMessage.id;
-  };
-
-  const updateAIMessage = (
-    id: string,
-    text: string,
-    isLoading = false,
-    isError = false
-  ) => {
-    setMessages((prev) =>
-      prev.map((message) =>
-        message.id === id ? { ...message, text, isLoading, isError } : message
-      )
-    );
-  };
-
-  const createSendRipple = (x: number, y: number) => {
-    const ripple = document.createElement("div");
-    ripple.className = "send-ripple";
-    ripple.style.left = `${x}px`;
-    ripple.style.top = `${y}px`;
-    document.body.appendChild(ripple);
-
-    // Remove the ripple after animation completes
     setTimeout(() => {
-      ripple.remove();
-    }, 1000);
+      const aiResponse = {
+        id: (Date.now() + 1).toString(),
+        text: aiResponseText,
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, aiResponse]);
+      setIsLoading(false);
+    }, 800);
   };
 
-  const handleSendMessage = async (messageText: string) => {
-    if (!messageText.trim()) return;
-
-    const userMessageId = addUserMessage(messageText);
-    setInput("");
-    const aiMessageId = addAIMessage("Thinking...", true);
-    setIsProcessing(true);
-    retryCountRef.current = 0;
-
-    const tryProcessMessage = async () => {
-      try {
-        console.log("Calling Supabase edge function: process-scheduling");
-
-        const currentEvents = await fetchEvents();
-
-        const response = await supabase.functions.invoke("process-scheduling", {
-          body: {
-            text: messageText,
-            prompt: messageText,
-            messages: messages
-              .filter((m) => !m.isLoading)
-              .map((m) => ({
-                role: m.sender === "user" ? "user" : "assistant",
-                content: m.text,
-              })),
-            events: currentEvents,
-            userId: user?.id,
-          },
-        });
-
-        console.log("Edge function response:", response);
-        console.log("Full data object received from edge function (MallyAI.tsx):", JSON.stringify(response.data, null, 2)); // Added log
-
-        if (response.error) {
-          console.error("Edge function error:", response.error);
-          throw new Error(
-            response.error.message || "Failed to get AI response"
-          );
-        }
-
-        const data = response.data;
-
-        if (!data || (!data.response && !data.action && !data.error)) {
-          console.error("Invalid response from edge function:", data);
-          throw new Error("Received an invalid response from the AI service");
-        }
-
-        if (data.error) {
-          console.error("AI processing error:", data.error);
-          throw new Error(data.error);
-        }
-
-        updateAIMessage(
-          aiMessageId,
-          data.response || "I processed your request.",
-          false
-        );
-
-        // Check if we have an event creation intent in the response or action
-        if (
-          data.action === "create" ||
-          data.operationResult?.action === "create" ||
-          (data.response?.toLowerCase().includes("schedule") &&
-            data.response?.toLowerCase().includes("event"))
-        ) {
-          console.log("Event creation/scheduling intent detected in MallyAI.tsx."); // Enhanced log
-
-          // Check if we have event data from the backend
-          const eventData = data.event || data.operationResult?.event;
-          console.log("Resolved eventData for creation in MallyAI.tsx:", JSON.stringify(eventData, null, 2)); // Added log
-
-          if (eventData && Object.keys(eventData).length > 0 && eventData.title) { // Added check for non-empty object and title
-            console.log("Valid eventData found, proceeding to format and add/schedule event:", JSON.stringify(eventData, null, 2)); // Enhanced log
-            try {
-              const startsAt =
-                eventData.starts_at ||
-                eventData.startsAt ||
-                new Date().toISOString();
-              const endsAt =
-                eventData.ends_at ||
-                eventData.endsAt ||
-                new Date(
-                  new Date(startsAt).getTime() + 60 * 60 * 1000
-                ).toISOString();
-              const eventDate = new Date(startsAt).toISOString().split("T")[0];
-
-              const startTime = new Date(startsAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              });
-              const endTime = new Date(endsAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              });
-              const description = `${startTime} - ${endTime} | ${
-                eventData.description || ""
-              }`;
-
-              const formattedEvent: CalendarEventType = {
-                id: eventData.id || crypto.randomUUID(),
-                title: eventData.title,
-                description: description,
-                startsAt: startsAt,
-                endsAt: endsAt,
-                date: eventDate,
-                color: eventData.color || "bg-purple-500/70",
-                isLocked: eventData.is_locked || eventData.isLocked || false,
-                isTodo: eventData.is_todo || eventData.isTodo || false,
-                hasAlarm: eventData.has_alarm || eventData.hasAlarm || false,
-                hasReminder:
-                  eventData.has_reminder || eventData.hasReminder || false,
-                todoId: eventData.todo_id || eventData.todoId,
-              };
-
-              if (onScheduleEvent) {
-                console.log(
-                  "Using onScheduleEvent callback for event:",
-                  formattedEvent
-                );
-                const result = await onScheduleEvent(formattedEvent);
-                console.log("Result from onScheduleEvent:", result);
-
-                if (result && result.success) {
-                  toast.success(
-                    `Event "${formattedEvent.title}" scheduled successfully`
-                  );
-                } else {
-                  console.error(
-                    "Failed to schedule event:",
-                    result?.error || "unknown error"
-                  );
-                  toast.error(
-                    `Failed to schedule event: ${
-                      result?.error || "Unknown error"
-                    }`
-                  );
-                }
-              } else {
-                console.log("Using addEvent hook directly");
-                const result = await addEvent(formattedEvent);
-                console.log("Result from addEvent hook:", result);
-
-                if (result.success) {
-                  toast.success(
-                    `Event "${formattedEvent.title}" added to your calendar`
-                  );
-                } else {
-                  console.error("Failed to add event:", result.error);
-                  toast.error(
-                    `Failed to add event: ${result.error || "Unknown error"}`
-                  );
-                }
-              }
-            } catch (err) {
-              console.error("Error processing AI-created event in MallyAI.tsx:", err, "Original eventData:", JSON.stringify(eventData, null, 2)); // Enhanced log
-              toast.error(
-                `Error adding event: ${
-                  err instanceof Error ? err.message : "Unknown error"
-                }`
-              );
-            }
-          } else {
-            // Added else block for clarity when eventData is missing or invalid
-            console.warn(
-              "Event creation/scheduling intent detected, but no valid eventData (or title missing) found in response from edge function. Full data:",
-              JSON.stringify(data, null, 2) // Enhanced log
-            );
-          }
-        }
-
-        if (data.processedEvent) {
-          const processedEvent = data.processedEvent;
-
-          if (processedEvent._action === "delete") {
-            const response = await removeEvent(processedEvent.id);
-            if (response.success) {
-              toast.success(`Event "${processedEvent.title}" has been deleted`);
-            } else {
-              toast.error(
-                `Failed to delete event: ${response.error || "Unknown error"}`
-              );
-            }
-          } else if (processedEvent.id) {
-            const startTime = new Date(
-              processedEvent.starts_at
-            ).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            });
-
-            const endTime = new Date(processedEvent.ends_at).toLocaleTimeString(
-              [],
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              }
-            );
-
-            const eventDescription = `${startTime} - ${endTime} | ${
-              processedEvent.description || ""
-            }`;
-
-            const eventToUpdate: CalendarEventType = {
-              id: processedEvent.id,
-              title: processedEvent.title,
-              description: eventDescription,
-              startsAt: processedEvent.starts_at,
-              endsAt: processedEvent.ends_at,
-              date: new Date(processedEvent.starts_at)
-                .toISOString()
-                .split("T")[0],
-              color: processedEvent.color || "bg-purple-500/70",
-              isLocked: processedEvent.is_locked || false,
-              isTodo: processedEvent.is_todo || false,
-              hasAlarm: processedEvent.has_alarm || false,
-              hasReminder: processedEvent.has_reminder || false,
-            };
-
-            const response = await updateEvent(eventToUpdate);
-            if (response.success) {
-              toast.success(`Event "${processedEvent.title}" has been updated`);
-            } else {
-              toast.error(
-                `Failed to update event: ${response.error || "Unknown error"}`
-              );
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error processing AI request:", error);
-
-        // Retry logic
-        if (retryCountRef.current < maxRetries) {
-          retryCountRef.current++;
-          console.log(
-            `Retrying request (${retryCountRef.current}/${maxRetries})...`
-          );
-          updateAIMessage(
-            aiMessageId,
-            `Thinking... (retrying ${retryCountRef.current}/${maxRetries})`,
-            true
-          );
-
-          // Exponential backoff
-          const backoffTime = 1000 * Math.pow(2, retryCountRef.current - 1);
-          await new Promise((resolve) => setTimeout(resolve, backoffTime));
-
-          return tryProcessMessage();
-        }
-
-        updateAIMessage(
-          aiMessageId,
-          `Sorry, I encountered an error: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }. Please try again.`,
-          false,
-          true
-        );
-      }
-    };
-
-    try {
-      await tryProcessMessage();
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const formatEventDescription = (
-    startsAt: string,
-    endsAt: string,
-    description: string
-  ): string => {
-    const startTime = new Date(startsAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    const endTime = new Date(endsAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return `${startTime} - ${endTime} | ${description}`;
-  };
-
-  const fetchEvents = async () => {
-    try {
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from("calendar_events")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      return data || [];
-    } catch (error) {
-      console.error("Error fetching events for AI context:", error);
-      return [];
-    }
-  };
-
-  const sendMessage = () => {
-    if (isProcessing) return;
-
-    const messageToSend = input.trim();
-
-    if (messageToSend) {
-      // Create send ripple effect
-      if (chatContainerRef.current) {
-        const rect = chatContainerRef.current.getBoundingClientRect();
-        createSendRipple(rect.right - 30, rect.bottom - 30);
-      }
-
-      handleSendMessage(messageToSend);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      handleSendMessage();
     }
   };
-
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
-  };
-
-  const toggleSidebarView = () => {
-    setIsSidebarView(!isSidebarView);
-  };
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  };
-
-  // Typing indicator component
-  const TypingIndicator = () => (
-    <div className="typing-indicator">
-      <div className="typing-dot"></div>
-      <div className="typing-dot"></div>
-      <div className="typing-dot"></div>
-    </div>
-  );
-
-  if (!isOpen) {
-    return (
-      <div
-        className="fixed z-50 flex items-center justify-center shadow-lg hover:shadow-xl transition-all ai-button"
-        style={{
-          bottom: "6rem",
-          right: "2rem",
-          width: "3.5rem",
-          height: "3.5rem",
-          borderRadius: "50%",
-          backgroundColor: "rgba(139, 92, 246, 0.8)",
-          animation: "floatButton 2s ease-in-out infinite",
-        }}
-        onClick={toggleAI}
-        onMouseDown={startButtonRecording}
-        onMouseUp={stopButtonRecording}
-        onTouchStart={startButtonRecording}
-        onTouchEnd={stopButtonRecording}
-      >
-        <Sparkles
-          size={16}
-          className="absolute text-white/50 animate-sparkle"
-          style={{ top: "8px", right: "8px" }}
-        />
-        {isButtonRecording ? (
-          <div className="relative">
-            <Mic size={24} className="text-white animate-pulse" />
-            <div className="mic-wave absolute -inset-4"></div>
-          </div>
-        ) : (
-          <Bot size={24} className="text-white" />
-        )}
-      </div>
-    );
-  }
 
   return (
     <>
-      <div
-        ref={chatContainerRef}
-        className={`ai-chat-container ${
-          isExpanded ? "w-96 h-[500px]" : "w-80 h-[400px]"
-        } 
-                  ${
-                    isSidebarView
-                      ? "fixed left-[400px] bottom-0 rounded-none h-[calc(100vh-64px)] w-96"
-                      : "fixed bottom-20 right-8 z-50 rounded-lg shadow-xl"
-                  } 
-                  flex flex-col transition-all duration-300 bg-gradient-to-br from-purple-900/90 to-indigo-900/90 text-white border border-purple-500/20
-                  ${showEntranceAnimation ? "ai-chat-enter" : ""} glow-border`}
-      >
-        {/* Floating particles */}
-        {particles.map((particle, idx) => (
-          <div
-            key={`particle-${idx}-${particle.x}-${particle.y}`}
-            className="particle"
-            style={{
-              left: `${particle.x}px`,
-              top: `${particle.y}px`,
-              width: `${particle.size}px`,
-              height: `${particle.size}px`,
-              opacity: 0.6,
-            }}
-          />
-        ))}
+      {/* Floating AI Button */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-full p-4 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center gap-2"
+        >
+          <Bot className="w-6 h-6" />
+          <Sparkles className="w-4 h-4" />
+        </button>
+      </div>
 
-        <div className="flex justify-between items-center p-3 border-b border-white/10 backdrop-blur-sm">
-          <div className="flex items-center">
-            <Bot size={20} className="text-primary animate-pulse mr-2" />
-            <h3 className="font-semibold">Mally AI</h3>
-          </div>
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={toggleSidebarView}
-              className="p-1 rounded-full hover:bg-white/10 transition-colors"
-            >
-              {isSidebarView ? (
-                <ArrowRight size={14} />
-              ) : (
-                <ArrowLeft size={14} />
-              )}
-            </button>
-            <button
-              onClick={toggleExpand}
-              className="p-1 rounded-full hover:bg-white/10 transition-colors"
-            >
-              {isExpanded ? <ArrowUpRight size={14} /> : <Plus size={14} />}
-            </button>
-            <button
-              onClick={toggleAI}
-              className="p-1 rounded-full hover:bg-white/10 transition-colors"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto mb-3 p-3">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`mb-3 ${
-                message.sender === "user" ? "ml-auto" : "mr-auto"
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg max-w-[85%] message-in ${
-                  message.sender === "user"
-                    ? "bg-primary/30 ml-auto"
-                    : message.isError
-                    ? "bg-red-500/30 mr-auto"
-                    : "bg-secondary mr-auto"
-                } ${message.isLoading ? "animate-pulse" : ""}`}
+      {/* AI Chat Modal */}
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[600px] flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-white bg-opacity-20 rounded-full p-2">
+                  <Brain className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-lg">Mally AI Assistant</h2>
+                  <p className="text-sm text-blue-100">Smart Schedule Optimization</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  setShowOptimizer(false);
+                }}
+                className="hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-colors"
               >
-                <p className="text-sm">{message.text}</p>
-                {message.isLoading && (
-                  <div className="flex justify-center mt-1">
-                    {isProcessing ? (
-                      <TypingIndicator />
-                    ) : (
-                      <Loader2
-                        size={16}
-                        className="animate-spin text-white/70"
-                      />
-                    )}
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="p-4 border-b bg-gray-50">
+              <Button
+                onClick={handleOptimizeSchedule}
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Optimize My Schedule
+              </Button>
+            </div>
+
+            {/* Optimizer Results */}
+            {showOptimizer && optimizationResult && (
+              <div className="p-4 border-b bg-gradient-to-br from-purple-50 to-blue-50 space-y-3 overflow-y-auto max-h-[300px]">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-lg">Schedule Analysis</h3>
+                  <Badge variant="outline" className="bg-white">
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    {optimizationResult.productivityScore}% Score
+                  </Badge>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Card>
+                    <CardHeader className="p-3">
+                      <CardTitle className="text-sm">Focus Time</CardTitle>
+                      <CardDescription className="text-2xl font-bold text-blue-600">
+                        {optimizationResult.metrics.focusTime}h
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="p-3">
+                      <CardTitle className="text-sm">Meetings</CardTitle>
+                      <CardDescription className="text-2xl font-bold text-purple-600">
+                        {optimizationResult.metrics.meetingTime}h
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="p-3">
+                      <CardTitle className="text-sm">Free Blocks</CardTitle>
+                      <CardDescription className="text-2xl font-bold text-green-600">
+                        {optimizationResult.freeBlocks}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader className="p-3">
+                      <CardTitle className="text-sm">Events Done</CardTitle>
+                      <CardDescription className="text-2xl font-bold text-orange-600">
+                        {optimizationResult.metrics.eventsCompleted}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </div>
+
+                {/* Insights */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm">AI Recommendations</h4>
+                  {optimizationResult.insights.map((insight: any, index: number) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg border flex items-start gap-2 ${
+                        insight.type === 'warning'
+                          ? 'bg-orange-50 border-orange-200'
+                          : 'bg-green-50 border-green-200'
+                      }`}
+                    >
+                      {insight.type === 'warning' ? (
+                        <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                      )}
+                      <p className="text-sm">{insight.message}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Best Time Slots */}
+                {optimizationResult.recommendedBlocks.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Best Available Time Slots</h4>
+                    <div className="space-y-1 max-h-[100px] overflow-y-auto">
+                      {optimizationResult.recommendedBlocks.slice(0, 3).map((block: any, index: number) => (
+                        <div
+                          key={index}
+                          className="p-2 bg-white rounded border text-sm flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {dayjs(block.start).format('ddd, MMM D')}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {dayjs(block.start).format('h:mm A')} - {dayjs(block.end).format('h:mm A')} ({block.duration}min)
+                            </p>
+                          </div>
+                          <Badge variant={block.quality === 'high' ? 'default' : 'secondary'}>
+                            {block.quality} quality
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-              <div
-                className={`text-xs opacity-70 mt-1 ${
-                  message.sender === "user" ? "text-right" : ""
-                }`}
-              >
-                {message.timestamp.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+            )}
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 && !showOptimizer && (
+                <div className="text-center py-8">
+                  <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-2 text-purple-800 mb-2 justify-center">
+                      <Sparkles className="w-5 h-5" />
+                      <span className="font-semibold">Phase 1 Intelligence Complete</span>
+                    </div>
+                    <p className="text-purple-700">
+                      I can now analyze your calendar, detect conflicts, track analytics, and optimize your schedule using smart algorithms!
+                    </p>
+                  </div>
+                  <p className="text-gray-500">
+                    Try: "Optimize my schedule" or "How's my focus time?"
+                  </p>
+                </div>
+              )}
+              
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.isUser ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-2xl ${
+                      msg.isUser
+                        ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white"
+                        : "bg-gray-100 text-gray-800"
+                    }`}
+                  >
+                    <p className="text-sm">{msg.text}</p>
+                    <p className="text-xs opacity-70 mt-1">
+                      {msg.timestamp.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              
+              {isLoading && !showOptimizer && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 text-gray-800 max-w-[80%] p-3 rounded-2xl">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                      <p className="text-sm">Thinking...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-4 border-t">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Type your message..."
+                  className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  disabled={isLoading}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!message.trim() || isLoading}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-full p-2 transition-all duration-300"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
               </div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {isProcessing && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <Brain size={80} className="text-purple-400/10 brain-pulse" />
           </div>
-        )}
-
-        <div className="flex items-center p-3 border-t border-white/10 backdrop-blur-sm relative z-10">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Message Mally AI..."
-            className="glass-input w-full resize-none bg-white/10 transition-all focus:bg-white/20 rounded-md p-2"
-            rows={1}
-            disabled={isProcessing}
-          />
-          <button
-            onClick={toggleRecording}
-            disabled={isProcessing}
-            className={`ml-2 p-2 rounded-full ${
-              isRecording
-                ? "bg-red-500 hover:bg-red-600"
-                : "bg-white/10 hover:bg-white/20"
-            } transition-all`}
-            title={isRecording ? "Stop recording" : "Start voice input"}
-          >
-            <Mic
-              size={16}
-              className={`${isRecording ? "animate-pulse" : ""}`}
-            />
-          </button>
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || isProcessing}
-            className="ml-2 p-2 rounded-full bg-primary hover:bg-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95"
-          >
-            {isProcessing ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Send size={16} />
-            )}
-          </button>
         </div>
-      </div>
+      )}
     </>
   );
-};
-
-export default MallyAI;
+}

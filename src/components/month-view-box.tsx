@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import CalendarEvent from "./calendar/CalendarEvent";
+import SelectableCalendarEvent from "./calendar/SelectableCalendarEvent";
 import { CalendarEventType } from "@/lib/store";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
@@ -15,6 +16,9 @@ interface MonthViewBoxProps {
   onEventDrop?: (event: any, date: string) => void;
   addEvent?: (event: CalendarEventType) => void;
   openEventForm?: (todoData: any, day: dayjs.Dayjs) => void;
+  isBulkMode?: boolean;
+  isSelected?: (eventId: string) => boolean;
+  onToggleSelection?: (eventId: string) => void;
 }
 
 const MonthViewBox: React.FC<MonthViewBoxProps> = ({
@@ -25,7 +29,10 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   onDayClick,
   onEventDrop,
   addEvent,
-  openEventForm
+  openEventForm,
+  isBulkMode = false,
+  isSelected = () => false,
+  onToggleSelection = () => {},
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
   
@@ -202,18 +209,29 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
             className="mb-1 gradient-border calendar-event-wrapper" 
             onClick={(e) => {
               e.stopPropagation();
-              onEventClick && onEventClick(event);
+              if (!isBulkMode) {
+                onEventClick && onEventClick(event);
+              }
             }}
           >
-            <CalendarEvent
-              event={event}
-              color={event.color}
-              isLocked={event.isLocked}
-              hasAlarm={event.hasAlarm}
-              hasReminder={event.hasReminder}
-              hasTodo={event.isTodo}
-              participants={event.participants}
-            />
+            {isBulkMode ? (
+              <SelectableCalendarEvent
+                event={event}
+                isBulkMode={isBulkMode}
+                isSelected={isSelected(event.id)}
+                onToggleSelection={onToggleSelection}
+              />
+            ) : (
+              <CalendarEvent
+                event={event}
+                color={event.color}
+                isLocked={event.isLocked}
+                hasAlarm={event.hasAlarm}
+                hasReminder={event.hasReminder}
+                hasTodo={event.isTodo}
+                participants={event.participants}
+              />
+            )}
           </div>
         ))}
         

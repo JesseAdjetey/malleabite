@@ -20,6 +20,8 @@ import { useAuth } from "@/contexts/AuthContext.firebase";
 import { FirebaseFunctions } from "@/integrations/firebase/functions";
 import { CalendarEventType } from "@/lib/stores/types";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useTodos } from "@/hooks/use-todos";
+import { useEisenhower } from "@/hooks/use-eisenhower";
 import { shouldUseFirebase, logMigrationStatus } from "@/lib/migration-flags";
 import { logger } from "@/lib/logger";
 import { errorHandler } from "@/lib/error-handler";
@@ -64,68 +66,167 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<any>(null); // SpeechRecognition instance
-  const [pendingEvent, setPendingEvent] = useState<any>(null); // Track event awaiting confirmation
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { user } = useAuth();
-  const { fetchEvents, addEvent, events } = useCalendarEvents();
+  const { fetchEvents, addEvent, removeEvent, updateEvent, events } = useCalendarEvents();
+  const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
+  const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
+
+  // Track pending action for confirmation
+  const [pendingAction, setPendingAction] = useState<any>(null);
 
   useEffect(() => {
     logMigrationStatus('MallyAI', 'firebase');
   }, []);
 
-  // Helper function to create calendar event from AI response
-  const createEventFromAIData = async (eventData: any): Promise<boolean> => {
-    if (!user || !eventData) return false;
-    
+  // Execute an action based on type
+  const executeAction = async (action: any): Promise<boolean> => {
+    if (!user || !action) return false;
+
+    const { type, data } = action;
+    logger.info('MallyAI', 'Executing action', { type, data });
+
     try {
-      // Log raw event data from AI
-      console.log('=== RAW EVENT DATA FROM AI ===', JSON.stringify(eventData, null, 2));
-      
-      const startsAt = new Date(eventData.startsAt || eventData.start);
-      const endsAt = new Date(eventData.endsAt || eventData.end);
-      
-      console.log('=== PARSED DATES ===', {
-        rawStartsAt: eventData.startsAt || eventData.start,
-        rawEndsAt: eventData.endsAt || eventData.end,
-        parsedStartsAt: startsAt.toISOString(),
-        parsedEndsAt: endsAt.toISOString(),
-        startHour: startsAt.getHours(),
-        endHour: endsAt.getHours()
-      });
-      
-      logger.info('MallyAI', 'Creating event with times', { 
-        title: eventData.title,
-        startsAt: startsAt.toISOString(),
-        endsAt: endsAt.toISOString()
-      });
-      
-      const newEvent: CalendarEventType = {
-        id: crypto.randomUUID(),
-        title: eventData.title,
-        description: eventData.description || 'Created by Mally AI',
-        date: startsAt.toISOString().split('T')[0],
-        startsAt: startsAt.toISOString(),
-        endsAt: endsAt.toISOString(),
-        color: eventData.color || '#3b82f6',
-      };
-      
-      logger.info('MallyAI', 'Creating event', { title: newEvent.title, startsAt: newEvent.startsAt, endsAt: newEvent.endsAt });
-      const result = await addEvent(newEvent);
-      
-      if (result.success) {
-        toast.success(`Event "${eventData.title}" created!`);
-        await fetchEvents();
-        return true;
-      } else {
-        toast.error('Failed to create event');
-        return false;
+      switch (type) {
+        case 'create_event': {
+          const startsAt = new Date(data.startsAt || data.start);
+          const endsAt = new Date(data.endsAt || data.end);
+          
+          const newEvent: CalendarEventType = {
+            id: crypto.randomUUID(),
+            title: data.title,
+            description: data.description || 'Created by Mally AI',
+            date: startsAt.toISOString().split('T')[0],
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
+            color: data.color || '#8b5cf6',
+          };
+          
+          const result = await addEvent(newEvent);
+          if (result.success) {
+            toast.success(`Event "${data.title}" created!`);
+            await fetchEvents();
+            return true;
+          }
+          return false;
+        }
+
+        case 'delete_event': {
+          if (!data.eventId) {
+            toast.error('No event ID provided');
+            return false;
+          }
+          const result = await removeEvent(data.eventId);
+          if (result.success) {
+            toast.success('Event deleted!');
+            await fetchEvents();
+            return true;
+          }
+          return false;
+        }
+
+        case 'update_event': {
+          if (!data.eventId) {
+            toast.error('No event ID provided');
+            return false;
+          }
+          // Find existing event and merge updates
+          const existingEvent = events.find(e => e.id === data.eventId);
+          if (!existingEvent) {
+            toast.error('Event not found');
+            return false;
+          }
+          const updatedEvent = {
+            ...existingEvent,
+            title: data.title || existingEvent.title,
+            startsAt: data.start ? new Date(data.start).toISOString() : existingEvent.startsAt,
+            endsAt: data.end ? new Date(data.end).toISOString() : existingEvent.endsAt,
+          };
+          const result = await updateEvent(updatedEvent);
+          if (result.success) {
+            toast.success('Event updated!');
+            await fetchEvents();
+            return true;
+          }
+          return false;
+        }
+
+        case 'create_todo': {
+          if (!data.text) {
+            toast.error('No todo text provided');
+            return false;
+          }
+          const result = await addTodo(data.text);
+          if (result.success) {
+            toast.success(`Todo "${data.text}" added!`);
+            return true;
+          }
+          return false;
+        }
+
+        case 'complete_todo': {
+          if (!data.todoId) {
+            toast.error('No todo ID provided');
+            return false;
+          }
+          await toggleTodo(data.todoId);
+          toast.success('Todo marked as complete!');
+          return true;
+        }
+
+        case 'delete_todo': {
+          if (!data.todoId) {
+            toast.error('No todo ID provided');
+            return false;
+          }
+          await deleteTodo(data.todoId);
+          toast.success('Todo deleted!');
+          return true;
+        }
+
+        case 'create_eisenhower': {
+          if (!data.text || !data.quadrant) {
+            toast.error('Missing text or quadrant');
+            return false;
+          }
+          const result = await addEisenhowerItem(data.text, data.quadrant);
+          if (result.success) {
+            toast.success(`Priority item added to ${data.quadrant.replace(/_/g, ' ')}!`);
+            return true;
+          }
+          return false;
+        }
+
+        case 'update_eisenhower': {
+          if (!data.itemId || !data.quadrant) {
+            toast.error('Missing item ID or quadrant');
+            return false;
+          }
+          await updateQuadrant(data.itemId, data.quadrant);
+          toast.success('Priority item moved!');
+          return true;
+        }
+
+        case 'delete_eisenhower': {
+          if (!data.itemId) {
+            toast.error('No item ID provided');
+            return false;
+          }
+          await removeEisenhowerItem(data.itemId);
+          toast.success('Priority item deleted!');
+          return true;
+        }
+
+        default:
+          logger.warn('MallyAI', 'Unknown action type', { type });
+          return false;
       }
     } catch (error) {
-      logger.error('MallyAI', 'Failed to create event', error as Error);
-      toast.error('Failed to create event');
+      logger.error('MallyAI', 'Failed to execute action', error as Error);
+      toast.error('Failed to execute action');
       return false;
     }
   };
@@ -389,32 +490,51 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       logger.info('MallyAI', 'Firebase AI Response received', {
         success: response.success,
         hasOperations: response.operations && response.operations.length > 0,
-        intent: (response as any).intent
+        intent: (response as any).intent,
+        hasAction: !!(response as any).action
       });
 
       let responseText = response.message || "I've processed your request!";
-      let eventCreated = false;
+      let actionExecuted = false;
 
-      // Check if AI returned event data that should be created
-      if (response.success && response.operations && response.operations.length > 0) {
+      // Check if AI returned an action to execute
+      const aiResponse = response as any;
+      const action = aiResponse.action;
+      const intent = aiResponse.intent;
+
+      if (response.success && action) {
+        // Check if this is a confirmation or direct action
+        const isConfirmation = intent === 'confirmation' || 
+          ['create_event', 'delete_event', 'create_todo', 'complete_todo', 'delete_todo', 
+           'create_eisenhower', 'update_eisenhower', 'delete_eisenhower'].includes(intent);
+
+        if (isConfirmation) {
+          // Execute the action immediately
+          logger.info('MallyAI', 'Executing AI action', { action });
+          actionExecuted = await executeAction(action);
+          if (actionExecuted) {
+            setPendingAction(null);
+          }
+        } else {
+          // Store as pending for confirmation
+          logger.info('MallyAI', 'Storing pending action for confirmation', { action });
+          setPendingAction(action);
+        }
+      } else if (response.success && response.operations && response.operations.length > 0) {
+        // Legacy: Handle old eventData format for backward compatibility
         const operation = response.operations[0];
         const eventData = operation.data;
         
-        // Check the intent - if it's a confirmation, create the event immediately
-        const intent = (response as any).intent;
-        
         if (intent === 'confirmation' && eventData) {
-          // User confirmed - create the event now
-          logger.info('MallyAI', 'User confirmed event creation', { eventData });
-          eventCreated = await createEventFromAIData(eventData);
-          if (eventCreated) {
-            responseText = responseText || `Done! I've added "${eventData.title}" to your calendar.`;
-            setPendingEvent(null);
+          logger.info('MallyAI', 'Legacy: User confirmed event creation', { eventData });
+          const legacyAction = { type: 'create_event', data: eventData };
+          actionExecuted = await executeAction(legacyAction);
+          if (actionExecuted) {
+            setPendingAction(null);
           }
         } else if (eventData) {
-          // AI is suggesting an event, store it as pending
-          logger.info('MallyAI', 'Storing pending event for confirmation', { eventData });
-          setPendingEvent(eventData);
+          logger.info('MallyAI', 'Legacy: Storing pending event', { eventData });
+          setPendingAction({ type: 'create_event', data: eventData });
         }
       }
 
@@ -428,10 +548,6 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       // Speak the response
       if (response.success) {
         speak(responseText);
-      }
-
-      if (eventCreated) {
-        await fetchEvents();
       }
 
       if (!response.success) {

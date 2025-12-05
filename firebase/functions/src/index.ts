@@ -22,15 +22,42 @@ interface ProcessAIRequestData {
     currentTime?: string;
     timeZone?: string;
     conversationHistory?: ConversationMessage[];
+    todos?: any[];
+    eisenhowerItems?: any[];
   };
 }
 
 // Helper to format events for the AI context
 const formatEventsForAI = (events: any[]): string => {
+  if (!events || events.length === 0) return 'No upcoming events scheduled.';
   return events.map(e => {
     const start = e.start_date?.toDate?.() || e.startsAt?.toDate?.() || (e.startsAt ? new Date(e.startsAt) : null);
     const end = e.end_date?.toDate?.() || e.endsAt?.toDate?.() || (e.endsAt ? new Date(e.endsAt) : null);
-    return `${e.title}: ${start?.toLocaleString() || 'Unknown'} - ${end?.toLocaleString() || 'Unknown'}`;
+    return `- [ID: ${e.id || 'unknown'}] "${e.title}": ${start?.toLocaleString() || 'Unknown'} - ${end?.toLocaleTimeString() || 'Unknown'}`;
+  }).join('\n');
+};
+
+// Helper to format todos for AI context
+const formatTodosForAI = (todos: any[]): string => {
+  if (!todos || todos.length === 0) return 'No todos.';
+  return todos.map(t => {
+    const status = t.completed ? '✓' : '○';
+    return `- [ID: ${t.id}] ${status} "${t.text}"`;
+  }).join('\n');
+};
+
+// Helper to format Eisenhower items for AI context
+const formatEisenhowerForAI = (items: any[]): string => {
+  if (!items || items.length === 0) return 'No priority items.';
+  const quadrantNames: Record<string, string> = {
+    'urgent_important': 'Urgent & Important (Do First)',
+    'not_urgent_important': 'Not Urgent but Important (Schedule)',
+    'urgent_not_important': 'Urgent but Not Important (Delegate)',
+    'not_urgent_not_important': 'Not Urgent & Not Important (Eliminate)'
+  };
+  return items.map(item => {
+    const quadrant = quadrantNames[item.quadrant] || item.quadrant;
+    return `- [ID: ${item.id}] "${item.text}" - ${quadrant}`;
   }).join('\n');
 };
 
@@ -194,7 +221,10 @@ export const processAIRequest = onRequest(
       // Fetch user's events for context
       const db = admin.firestore();
       let eventsContext = 'No upcoming events scheduled.';
+      let todosContext = 'No todos.';
+      let eisenhowerContext = 'No priority items.';
       
+      // Fetch events
       try {
         const eventsSnapshot = await db.collection('calendar_events')
           .where('userId', '==', userId)
@@ -202,12 +232,44 @@ export const processAIRequest = onRequest(
           .get();
 
         const events: any[] = [];
-        eventsSnapshot.forEach(doc => events.push(doc.data()));
+        eventsSnapshot.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
         if (events.length > 0) {
           eventsContext = formatEventsForAI(events);
         }
       } catch (dbError) {
         console.warn('Could not fetch events:', dbError);
+      }
+
+      // Fetch todos
+      try {
+        const todosSnapshot = await db.collection('todos')
+          .where('userId', '==', userId)
+          .limit(30)
+          .get();
+
+        const todos: any[] = [];
+        todosSnapshot.forEach(doc => todos.push({ id: doc.id, ...doc.data() }));
+        if (todos.length > 0) {
+          todosContext = formatTodosForAI(todos);
+        }
+      } catch (dbError) {
+        console.warn('Could not fetch todos:', dbError);
+      }
+
+      // Fetch Eisenhower items
+      try {
+        const eisenhowerSnapshot = await db.collection('eisenhower_items')
+          .where('userId', '==', userId)
+          .limit(30)
+          .get();
+
+        const eisenhowerItems: any[] = [];
+        eisenhowerSnapshot.forEach(doc => eisenhowerItems.push({ id: doc.id, ...doc.data() }));
+        if (eisenhowerItems.length > 0) {
+          eisenhowerContext = formatEisenhowerForAI(eisenhowerItems);
+        }
+      } catch (dbError) {
+        console.warn('Could not fetch Eisenhower items:', dbError);
       }
 
       // Build conversation history string
@@ -220,52 +282,76 @@ export const processAIRequest = onRequest(
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
       const systemPrompt = `
-You are Mally, an intelligent and friendly scheduling assistant for a calendar app called Malleabite.
+You are Mally, an intelligent and friendly productivity assistant for a calendar app called Malleabite.
 Current Date/Time: ${clientContext?.currentTime || new Date().toISOString()}
 User Timezone: ${clientContext?.timeZone || 'UTC'}
 
-Your capabilities:
-- Create, modify, and manage calendar events
-- Understand natural language scheduling requests
-- Detect conflicts with existing events
-- Answer questions about the user's schedule
-- Handle follow-up requests like "call it X instead" or "make it 2 hours"
-- Remember context from the conversation history below
+YOUR CAPABILITIES:
+1. CALENDAR EVENTS: Create, update, delete calendar events
+2. TODO LIST: Add, complete, delete todos
+3. EISENHOWER MATRIX: Add, update, delete priority items (4 quadrants: urgent_important, not_urgent_important, urgent_not_important, not_urgent_not_important)
+4. QUERY: Answer questions about the user's schedule, todos, or priorities
 
-User's Existing Events:
+USER'S CURRENT DATA:
+
+=== CALENDAR EVENTS ===
 ${eventsContext}
 
-Previous Conversation:
+=== TODO LIST ===
+${todosContext}
+
+=== EISENHOWER MATRIX (Priority Items) ===
+${eisenhowerContext}
+
+=== PREVIOUS CONVERSATION ===
 ${historyString}
 
 INSTRUCTIONS:
-1. Analyze the user's message AND the conversation history to understand their intent
-2. If they want to create/modify an event, extract all relevant details (title, date, time, duration)
-3. For follow-up messages like "yeah", "ok", "call it X instead", "make it longer", refer to the previous conversation to understand what they're confirming or modifying
-4. For ambiguous requests, make reasonable assumptions but mention them
-5. Be conversational and helpful
-6. If there's a scheduling conflict, mention it but still offer to create the event if they want
-7. When user confirms (says "yes", "yeah", "ok", "sure", "confirm"), include the event from the previous suggestion
+1. Analyze the user's message AND conversation history to understand intent
+2. Determine which action type is needed
+3. For follow-up messages like "yes", "ok", "delete it", "mark it done", refer to previous conversation
+4. Be conversational and helpful
+5. When user confirms an action, execute it immediately
 
 Return a JSON object with this EXACT structure (no markdown, just raw JSON):
 {
   "response": "Your friendly response to the user",
   "actionRequired": true or false,
-  "intent": "scheduling" | "query" | "modification" | "confirmation" | "general",
-  "suggestedEvent": {
-    "title": "Event title",
-    "start": "ISO 8601 datetime string",
-    "end": "ISO 8601 datetime string", 
-    "description": "Optional description"
+  "intent": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower" | "query" | "confirmation" | "general",
+  "action": {
+    "type": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower",
+    "data": {
+      // For events: { title, start, end, description }
+      // For update/delete events: { eventId, title?, start?, end? }
+      // For todos: { text } or { todoId }
+      // For eisenhower: { text, quadrant } or { itemId, quadrant? }
+    }
   }
 }
 
+ACTION DATA FORMATS:
+- create_event: { title: string, start: ISO datetime, end: ISO datetime, description?: string }
+- update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime }
+- delete_event: { eventId: string }
+- create_todo: { text: string }
+- complete_todo: { todoId: string }
+- delete_todo: { todoId: string }
+- create_eisenhower: { text: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
+- update_eisenhower: { itemId: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
+- delete_eisenhower: { itemId: string }
+
+QUADRANT MEANINGS:
+- urgent_important = Do First (crisis, deadlines)
+- not_urgent_important = Schedule (goals, planning)
+- urgent_not_important = Delegate (interruptions)
+- not_urgent_not_important = Eliminate (time wasters)
+
 Notes:
-- Only include "suggestedEvent" if actionRequired is true
-- For "confirmation" intent (user saying yes/ok to a previous suggestion), set actionRequired to true and include the event details from the previous conversation
-- For "modification" intent, include the modified event details
+- Only include "action" if actionRequired is true
+- For confirmation intents, set actionRequired to true and include the action from previous suggestion
 - Default event duration is 1 hour if not specified
-- Use the current date/time provided above for relative time calculations (tomorrow, next week, etc.)
+- When deleting, ask for confirmation first unless user explicitly says "delete"
+- Match item IDs carefully from the user's existing data
 `;
 
       const result = await model.generateContent([systemPrompt, `User message: ${message}`]);
@@ -296,27 +382,52 @@ Notes:
         response: aiResult.response,
         actionRequired: aiResult.actionRequired || false,
         intent: aiResult.intent || 'general',
-        eventData: null,
+        action: null,
+        eventData: null, // Keep for backward compatibility
         conflicts: []
       };
 
-      // If action required, prepare event data
-      if (aiResult.actionRequired && aiResult.suggestedEvent) {
+      // If action required, prepare action data
+      if (aiResult.actionRequired && aiResult.action) {
+        response.action = aiResult.action;
+
+        // Also populate eventData for backward compatibility with create_event
+        if (aiResult.action.type === 'create_event' && aiResult.action.data) {
+          const actionData = aiResult.action.data;
+          const startDate = new Date(actionData.start);
+          const endDate = new Date(actionData.end);
+
+          response.eventData = {
+            title: actionData.title,
+            startsAt: startDate.toISOString(),
+            endsAt: endDate.toISOString(),
+            description: actionData.description || 'Created by Mally AI',
+            color: '#3b82f6'
+          };
+        }
+      }
+
+      // Legacy support: if suggestedEvent exists, convert to new format
+      if (aiResult.actionRequired && aiResult.suggestedEvent && !aiResult.action) {
         const startDate = new Date(aiResult.suggestedEvent.start);
         const endDate = new Date(aiResult.suggestedEvent.end);
+
+        response.action = {
+          type: 'create_event',
+          data: {
+            title: aiResult.suggestedEvent.title,
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
+            description: aiResult.suggestedEvent.description || 'Created by Mally AI'
+          }
+        };
 
         response.eventData = {
           title: aiResult.suggestedEvent.title,
           startsAt: startDate.toISOString(),
           endsAt: endDate.toISOString(),
-          description: aiResult.suggestedEvent.description || `Created by Mally AI`,
+          description: aiResult.suggestedEvent.description || 'Created by Mally AI',
           color: '#3b82f6'
-        };
-
-        response.suggestedEvent = {
-          ...aiResult.suggestedEvent,
-          startFormatted: startDate.toLocaleString(),
-          endFormatted: endDate.toLocaleTimeString()
         };
       }
 

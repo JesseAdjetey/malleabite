@@ -24,6 +24,7 @@ export interface TodoType {
   created_at: string;
   event_id?: string;
   isCalendarEvent?: boolean;
+  listId?: string; // Optional list ID for polymorphic todo lists
 }
 
 // Legacy interface for compatibility
@@ -35,9 +36,16 @@ export interface TodoItem {
   completed_at?: string;
   isCalendarEvent?: boolean;
   eventId?: string;
+  listId?: string;
 }
 
-export function useTodos() {
+// Hook options interface
+interface UseTodosOptions {
+  listId?: string; // Filter todos by list ID
+}
+
+export function useTodos(options: UseTodosOptions = {}) {
+  const { listId } = options;
   const [todos, setTodos] = useState<TodoType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +60,24 @@ export function useTodos() {
       return;
     }
 
-    const todosQuery = query(
-      collection(db, 'todos'),
-      where('userId', '==', user.uid),
-      orderBy('created_at', 'desc')
-    );
+    // Build query with optional listId filter
+    let todosQuery;
+    if (listId) {
+      // Filter by specific list
+      todosQuery = query(
+        collection(db, 'todos'),
+        where('userId', '==', user.uid),
+        where('listId', '==', listId),
+        orderBy('created_at', 'desc')
+      );
+    } else {
+      // Get todos without a listId (legacy/default behavior)
+      todosQuery = query(
+        collection(db, 'todos'),
+        where('userId', '==', user.uid),
+        orderBy('created_at', 'desc')
+      );
+    }
 
     const unsubscribe = onSnapshot(todosQuery, (snapshot) => {
       const todosList = snapshot.docs.map(doc => ({
@@ -76,7 +97,7 @@ export function useTodos() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, listId]);
 
   // Refetch todos function for manual refresh
   const refetchTodos = async () => {
@@ -87,18 +108,26 @@ export function useTodos() {
   };
 
   // Add a new todo
-  const addTodo = async (text: string): Promise<{ success: boolean; message: string }> => {
+  const addTodo = async (text: string, todoListId?: string): Promise<{ success: boolean; message: string }> => {
     if (!user?.uid || !text.trim()) {
       return { success: false, message: !user ? 'User not authenticated' : 'Text cannot be empty' };
     }
 
     try {
-      await addDoc(collection(db, 'todos'), {
+      const todoData: Record<string, unknown> = {
         text: text.trim(),
         completed: false,
         userId: user.uid,
         created_at: serverTimestamp()
-      });
+      };
+      
+      // Add listId if provided (either from parameter or from hook options)
+      const effectiveListId = todoListId || listId;
+      if (effectiveListId) {
+        todoData.listId = effectiveListId;
+      }
+      
+      await addDoc(collection(db, 'todos'), todoData);
       toast.success('Todo added');
       const response = { success: true, message: 'Todo added successfully' };
       setLastResponse(response);

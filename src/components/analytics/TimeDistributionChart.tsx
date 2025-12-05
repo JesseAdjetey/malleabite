@@ -20,7 +20,7 @@ const COLORS = {
 
 export function TimeDistributionChart({ metrics }: TimeDistributionChartProps) {
   const chartData = useMemo(() => {
-    if (!metrics.eventsByCategory) return [];
+    if (!metrics || !metrics.eventsByCategory) return [];
     
     return Object.entries(metrics.eventsByCategory)
       .map(([category, count]) => ({

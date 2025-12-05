@@ -73,6 +73,30 @@ service cloud.firestore {
         && isNotRateLimited();
     }
 
+    // Todo Lists (polymorphic todo containers)
+    match /todo_lists/{listId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('name', 1, 100)
+        && request.resource.data.keys().hasAll(['userId', 'name']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isValidString('name', 1, 100)
+        && isNotRateLimited();
+    }
+
+    // Todo Items (for polymorphic todo lists)
+    match /todo_items/{itemId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('text', 1, 500)
+        && request.resource.data.keys().hasAll(['userId', 'text', 'listId']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isValidString('text', 1, 500)
+        && isNotRateLimited();
+    }
+
     // Eisenhower Items
     match /eisenhower_items/{itemId} {
       allow read, delete: if isOwner(resource.data.userId);

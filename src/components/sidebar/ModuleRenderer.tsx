@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ModuleInstance } from '@/lib/stores/types';
-import TodoModule from '../modules/TodoModule';
+import TodoModuleEnhanced from '../modules/TodoModuleEnhanced';
 import InvitesModule from '../modules/InvitesModule';
 import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
@@ -48,7 +48,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     case 'todo':
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
-          <TodoModule {...moduleProps} />
+          <TodoModuleEnhanced {...moduleProps} />
         </div>
       );
     case 'pomodoro':

@@ -172,8 +172,8 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
     <div 
       ref={boxRef}
       className={cn(
-        "group relative flex flex-col border-r border-t border-white/10 gradient-border cursor-glow month-view-box",
-        "transition-all hover:bg-white/5",
+        "group relative flex flex-col border-r border-t border-white/10 gradient-border cursor-glow month-view-box min-h-[80px] md:min-h-[100px]",
+        "transition-all hover:bg-white/5 touch-manipulation",
         isToday && "bg-primary/10"
       )}
       onClick={(e) => {
@@ -189,12 +189,12 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       {/* Day Header */}
       <div className="flex flex-col items-center py-1 border-b border-white/10">
         {rowIndex === 0 && (
-          <h4 className="text-xs text-muted-foreground">{day.format("ddd").toUpperCase()}</h4>
+          <h4 className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">{day.format("ddd").toUpperCase()}</h4>
         )}
         <h4 
           className={cn(
-            "text-center", 
-            isToday ? "h-7 w-7 flex items-center justify-center rounded-full bg-primary text-white font-medium" : "text-sm"
+            "text-center text-xs md:text-sm", 
+            isToday ? "h-6 w-6 md:h-7 md:w-7 flex items-center justify-center rounded-full bg-primary text-white font-medium" : ""
           )}
         >
           {isFirstDayOfMonth ? day.format("MMM D") : day.format("D")}
@@ -202,11 +202,11 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       </div>
       
       {/* Events */}
-      <div className="flex-1 p-1 overflow-hidden">
+      <div className="flex-1 p-0.5 md:p-1 overflow-hidden">
         {visibleEvents.map(event => (
           <div 
             key={event.id} 
-            className="mb-1 gradient-border calendar-event-wrapper" 
+            className="mb-1 gradient-border calendar-event-wrapper min-h-[44px] flex items-center" 
             onClick={(e) => {
               e.stopPropagation();
               if (!isBulkMode) {
@@ -236,7 +236,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         ))}
         
         {hasMoreEvents && (
-          <div className="text-xs text-center bg-white/10 rounded p-1">
+          <div className="text-[10px] md:text-xs text-center bg-white/10 rounded p-1 min-h-[44px] flex items-center justify-center touch-manipulation">
             +{events.length - 3} more
           </div>
         )}

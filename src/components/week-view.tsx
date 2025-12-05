@@ -121,24 +121,24 @@ const WeekView = () => {
         console.error("No data found in drag event");
         return;
       }
-      
+
       const data = JSON.parse(dataString);
-      
-      if (data.source === 'todo-module') {
+
+      if (data.source === 'todo-module' || data.source === 'eisenhower') {
         const rect = e.currentTarget.getBoundingClientRect();
         const relativeY = e.clientY - rect.top;
         const hourHeight = rect.height;
         const minutesWithinHour = Math.floor((relativeY / hourHeight) * 60);
-        
+
         const snappedMinutes = minutesWithinHour < 30 ? 0 : 30;
-        
+
         const baseHour = hour.hour();
         const startTime = `${baseHour.toString().padStart(2, '0')}:${snappedMinutes.toString().padStart(2, '0')}`;
-        
+
         showTodoCalendarDialog(data, day.toDate(), startTime);
         return;
       }
-      
+
       libHandleDrop(e, day, hour, updateEvent);
     } catch (error) {
       console.error("Error handling drop:", error);
@@ -162,7 +162,7 @@ const WeekView = () => {
           event.todoId = newTodoId;
         }
       }
-      
+
       const response = await addEvent(event);
 
       if (response.success) {
@@ -181,10 +181,10 @@ const WeekView = () => {
 
   return (
     <>
-      <div className="glass m-4 rounded-xl overflow-hidden">
+      <div className="glass mx-2 my-2 rounded-xl overflow-hidden">
         <WeekHeader userSelectedDate={userSelectedDate} />
 
-        <ScrollArea className="h-[80vh]">
+        <ScrollArea className="h-[calc(100vh-160px)]">
           <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr] px-4 py-2">
             <TimeColumn />
             {getWeekDays(userSelectedDate).map(({ currentDate }, index) => {

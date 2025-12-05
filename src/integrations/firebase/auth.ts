@@ -7,7 +7,9 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendEmailVerification,
-  UserCredential
+  UserCredential,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { auth } from './config';
 
@@ -52,6 +54,11 @@ export const signUp = async (credentials: SignUpCredentials): Promise<UserCreden
   }
   
   return userCredential;
+};
+
+export const signInWithGoogle = async (): Promise<UserCredential> => {
+  const provider = new GoogleAuthProvider();
+  return await signInWithPopup(auth, provider);
 };
 
 export const signOutUser = async (): Promise<void> => {

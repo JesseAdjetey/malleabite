@@ -4,11 +4,14 @@ import { useSettingsStore } from '@/lib/stores/settings-store';
 import UserProfile from '@/components/UserProfile';
 import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
 import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
-import { ChevronLeft, Upload, Download } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ChevronLeft, Upload, Download, Home, LogOut } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Circle, Check } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import MobileNavigation from '@/components/MobileNavigation';
+import { useAuth } from '@/contexts/AuthContext.unified';
+import { toast } from '@/components/ui/use-toast';
 
 // Color presets for the color picker
 const colorPresets = [
@@ -29,17 +32,48 @@ const colorPresets = [
 const Settings = () => {
   const { backgroundColor, setBackgroundColor } = useSettingsStore();
   const [activeTab, setActiveTab] = useState('appearance');
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/auth', { replace: true });
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast({
+        title: "Error",
+        description: "There was an issue signing out.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl text-white">
-      <div className="flex items-center mb-6">
-        <Link to="/">
-          <Button variant="ghost" size="icon" className="mr-2 text-white hover:bg-white/10">
-            <ChevronLeft className="h-5 w-5" />
-            <span className="sr-only">Back</span>
+    <div className="min-h-screen bg-background pb-20 md:pb-4">
+      <div className="container mx-auto p-4 max-w-6xl text-white">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => navigate('/')} 
+            variant="ghost" 
+            size="icon" 
+            className="text-white hover:bg-white/10"
+          >
+            <Home className="h-5 w-5" />
+            <span className="sr-only">Back to Dashboard</span>
           </Button>
-        </Link>
-        <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="text-2xl font-bold">Settings</h1>
+        </div>
+        <Button
+          onClick={handleSignOut}
+          variant="outline"
+          size="sm"
+          className="gap-2 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </Button>
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -104,6 +138,8 @@ const Settings = () => {
           </div>
         </TabsContent>
       </Tabs>
+      <MobileNavigation />
+      </div>
     </div>
   );
 };

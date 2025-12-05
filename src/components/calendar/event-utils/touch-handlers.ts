@@ -3,8 +3,35 @@
  * Utility functions for handling touch events in calendar events
  */
 
-// Extract time info from event description
-export const getTimeInfo = (description?: string) => {
+import dayjs from 'dayjs';
+
+// Extract time info from event - checks startsAt/endsAt first, then falls back to description
+export const getTimeInfo = (description?: string, startsAt?: string | Date, endsAt?: string | Date) => {
+  // First, try to use startsAt and endsAt if available
+  if (startsAt && endsAt) {
+    const start = dayjs(startsAt);
+    const end = dayjs(endsAt);
+    
+    console.log('=== getTimeInfo DEBUG ===', {
+      rawStartsAt: startsAt,
+      rawEndsAt: endsAt,
+      startValid: start.isValid(),
+      endValid: end.isValid(),
+      startFormatted: start.format('HH:mm'),
+      endFormatted: end.format('HH:mm'),
+      startHour: start.hour(),
+      endHour: end.hour()
+    });
+    
+    if (start.isValid() && end.isValid()) {
+      return {
+        start: start.format('HH:mm'),
+        end: end.format('HH:mm')
+      };
+    }
+  }
+  
+  // Fall back to parsing from description
   if (!description) return { start: '09:00', end: '10:00' };
   
   const parts = description.split('|');
@@ -56,7 +83,7 @@ export const calculateEventHeight = (startTimeStr: string, endTimeStr: string, h
 
 // Get drag data for an event
 export const getDragData = (event: any, isLocked: boolean = false, color: string = '') => {
-  const timeInfo = getTimeInfo(event.description);
+  const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
   return {
     id: event.id,
     title: event.title,

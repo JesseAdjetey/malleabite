@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,43 +5,112 @@
 :root {
   --primary: 261 54% 61%;
   --primary-foreground: 210 40% 98%;
-  
+
   --secondary: 262 83% 58%;
   --secondary-foreground: 210 40% 98%;
-  
+
   --background: 240 21% 14%;
   --foreground: 213 31% 91%;
-  
+
+  --card: 240 21% 14%;
+  --card-foreground: 213 31% 91%;
+
+  --popover: 240 21% 14%;
+  --popover-foreground: 213 31% 91%;
+
   --muted: 215 27% 16%;
   --muted-foreground: 215 20% 65%;
-  
+
   --accent: 261 54% 61%;
   --accent-foreground: 210 40% 98%;
-  
+
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
-  
+
   --border: 240 3% 25%;
   --input: 215 27% 18%;
   --ring: 261 54% 61%;
-  
+
   --radius: 0.75rem;
-  
+
   /* Background start color for gradient */
   --background-start: #1a1625;
 }
 
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   background-attachment: fixed;
+  /* Improve text rendering on mobile */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent double-tap zoom on mobile */
+  touch-action: pan-y;
+}
+
+/* Safe area insets for mobile devices (iOS notch, etc.) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply text-foreground;
   }
+  
+  /* Mobile-specific touch improvements */
+  @media (max-width: 768px) {
+    * {
+      /* Prevent text size adjustment on mobile */
+      -webkit-text-size-adjust: 100%;
+      /* Improve tap highlight */
+      -webkit-tap-highlight-color: rgba(139, 92, 246, 0.3);
+    }
+    
+    /* Minimum touch target size */
+    button, a, input, select, textarea {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    /* Better spacing for mobile */
+    h1 { @apply text-2xl; }
+    h2 { @apply text-xl; }
+    h3 { @apply text-lg; }
+    
+    /* Improve form inputs on mobile */
+    input, textarea, select {
+      font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+  }
+}
+
+/* Safe area bottom padding utility */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Global dark scrollbar styling - must be outside @layer to override properly */

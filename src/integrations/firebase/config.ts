@@ -5,15 +5,36 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
-// Firebase config object
+// Validate required environment variables
+const requiredEnvVars = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'VITE_FIREBASE_APP_ID'
+];
+
+const missingEnvVars = requiredEnvVars.filter(
+  varName => !import.meta.env[varName]
+);
+
+if (missingEnvVars.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingEnvVars.join(', ')}\n` +
+    'Please copy .env.example to .env and fill in your Firebase credentials.'
+  );
+}
+
+// Firebase config object - now using environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE",
-  authDomain: "malleabite-97d35.firebaseapp.com",
-  projectId: "malleabite-97d35",
-  storageBucket: "malleabite-97d35.firebasestorage.app",
-  messagingSenderId: "879274801325",
-  appId: "1:879274801325:web:894f87dd217dee470fae24",
-  measurementId: "G-FY8VC4Y2WX"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase
@@ -22,7 +43,7 @@ export const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const functions = getFunctions(app);
+export const functions = getFunctions(app, 'us-central1'); // Specify region explicitly
 export const storage = getStorage(app);
 
 // Connect to emulators in development mode - DISABLED for production testing

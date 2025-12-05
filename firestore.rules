@@ -1,10 +1,168 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // TEMPORARY: Allow all authenticated users to read/write all documents
-    // This is needed for migration - will be replaced with production rules
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function to check if the new document has the correct userId
+    function isValidOwner() {
+      return isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Helper function to validate string field
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string 
+        && request.resource.data[field].size() >= minLen 
+        && request.resource.data[field].size() <= maxLen;
+    }
+
+    // Helper function to check rate limiting (basic implementation)
+    function isNotRateLimited() {
+      // Check if last update was at least 1 second ago
+      return !('lastUpdate' in resource.data) || 
+        request.time > resource.data.lastUpdate + duration.value(1, 's');
+    }
+
+    // Helper function to validate email
+    function isValidEmail(email) {
+      return email.matches('.*@.*\\..*');
+    }
+
+    // Users collection - keyed by User ID
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && request.resource.data.keys().hasAll(['userId', 'email', 'createdAt']);
+      allow update: if isOwner(userId) 
+        && request.resource.data.userId == resource.data.userId // Can't change userId
+        && isNotRateLimited();
+      allow delete: if isOwner(userId);
+    }
+
+    // Calendar Events
+    match /calendar_events/{eventId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('title', 1, 200)
+        && request.resource.data.startsAt is timestamp
+        && request.resource.data.endsAt is timestamp
+        && request.resource.data.keys().hasAll(['userId', 'title', 'startsAt', 'endsAt']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId // Can't change owner
+        && isValidString('title', 1, 200)
+        && isNotRateLimited();
+    }
+
+    // Todos
+    match /todos/{todoId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('text', 1, 500)
+        && request.resource.data.keys().hasAll(['userId', 'text']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isValidString('text', 1, 500)
+        && isNotRateLimited();
+    }
+
+    // Eisenhower Items
+    match /eisenhower_items/{itemId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('text', 1, 200);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Reminders
+    match /reminders/{reminderId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('title', 1, 200)
+        && request.resource.data.reminderTime is timestamp;
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Alarms
+    match /alarms/{alarmId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && request.resource.data.alarmTime is timestamp;
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Invites
+    match /invites/{inviteId} {
+      // Allow read if user is sender or recipient
+      allow read: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+      allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow create: if isAuthenticated()
+        && request.resource.data.senderId == request.auth.uid
+        && isValidString('eventTitle', 1, 200);
+      allow update: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid)
+        && isNotRateLimited();
+    }
+
+    // AI Suggestions
+    match /ai_suggestions/{suggestionId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner();
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Pomodoro Sessions
+    match /pomodoro_sessions/{sessionId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && request.resource.data.duration is number
+        && request.resource.data.duration > 0
+        && request.resource.data.duration <= 3600; // Max 1 hour
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Module Instances
+    match /module_instances/{instanceId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner();
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Templates (read-only for all authenticated users, write only for owners)
+    match /templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow create: if isValidOwner()
+        && isValidString('name', 1, 100);
+      allow update, delete: if isOwner(resource.data.userId)
+        && isNotRateLimited();
+    }
+
+    // Patterns (similar to templates)
+    match /patterns/{patternId} {
+      allow read: if isAuthenticated();
+      allow create: if isValidOwner();
+      allow update, delete: if isOwner(resource.data.userId)
+        && isNotRateLimited();
     }
   }
 }

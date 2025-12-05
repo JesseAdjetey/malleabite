@@ -7,18 +7,18 @@ import ModuleGrid from './ModuleGrid';
 import NewPageCreator from './NewPageCreator';
 
 const SideBar = () => {
-  const { 
-    pages, 
-    currentPageIndex, 
-    setCurrentPage, 
-    addModule, 
-    removeModule, 
-    updatePageTitle, 
+  const {
+    pages,
+    currentPageIndex,
+    setCurrentPage,
+    addModule,
+    removeModule,
+    updatePageTitle,
     addPage,
     updateModuleTitle,
     reorderModules
   } = useSidebarStore();
-  
+
   const sidebarContentRef = useRef<HTMLDivElement>(null);
 
   const handlePrevPage = () => {
@@ -57,7 +57,7 @@ const SideBar = () => {
   return (
     <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20">
       {/* Header with page title and navigation */}
-      <PageHeader 
+      <PageHeader
         title={pages[currentPageIndex]?.title || 'Untitled'}
         onUpdateTitle={(newTitle) => updatePageTitle(currentPageIndex, newTitle)}
         onPrevPage={handlePrevPage}
@@ -65,23 +65,23 @@ const SideBar = () => {
         canGoToPrevPage={currentPageIndex > 0}
         canGoToNextPage={currentPageIndex < pages.length - 1}
       />
-      
+
       {/* Page modules with responsive grid */}
-      <div 
-        ref={sidebarContentRef} 
-        className="flex-1 overflow-y-auto p-4"
+      <div
+        ref={sidebarContentRef}
+        className="flex-1 overflow-y-auto p-3"
       >
         <ModuleSelector onSelect={handleAddModule} />
-        
+
         {/* Module container - uses grid for two columns or flex for one column */}
-        <ModuleGrid 
+        <ModuleGrid
           modules={pages[currentPageIndex]?.modules || []}
           onRemoveModule={handleRemoveModule}
           onUpdateModuleTitle={handleUpdateModuleTitle}
           onReorderModules={handleReorderModules}
           pageIndex={currentPageIndex}
         />
-        
+
         {/* New Page Creator */}
         <NewPageCreator onCreatePage={handleCreateNewPage} />
       </div>

@@ -4,6 +4,8 @@ import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
 import { useEventStore } from '@/lib/store';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
+import { errorHandler } from '@/lib/error-handler';
 
 interface EventDataProviderProps {
   children: React.ReactNode;
@@ -37,8 +39,12 @@ const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
   // Handle any errors from the calendar events hook
   useEffect(() => {
     if (error) {
-      console.error('Calendar events error:', error);
-      toast.error(`Error loading calendar events: ${error}`);
+      logger.error('EventDataProvider', 'Calendar events error', new Error(error));
+      errorHandler.handleError(
+        new Error(error),
+        'Error loading calendar events',
+        'EventDataProvider'
+      );
     }
   }, [error]);
 

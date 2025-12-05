@@ -22,14 +22,14 @@ export interface Reminder {
   id: string;
   title: string;
   description: string | null;
-  reminder_time: string | Timestamp;
-  event_id: string | null;
-  time_before_event_minutes: number | null;
-  time_after_event_minutes: number | null;
-  sound_id: string | null;
-  is_active: boolean;
-  created_at: string | Timestamp;
-  user_id?: string;
+  reminderTime: string | Timestamp;
+  eventId: string | null;
+  timeBeforeMinutes: number | null;
+  timeAfterMinutes: number | null;
+  soundId: string | null;
+  isActive: boolean;
+  createdAt: string | Timestamp;
+  userId?: string;
   event?: CalendarEventType;
 }
 
@@ -68,8 +68,8 @@ export function useReminders() {
       
       const remindersQuery = query(
         collection(db, 'reminders'),
-        where('user_id', '==', user.uid),
-        orderBy('reminder_time', 'asc')
+        where('userId', '==', user.uid),
+        orderBy('reminderTime', 'asc')
       );
 
       const unsubscribe = onSnapshot(
@@ -82,14 +82,14 @@ export function useReminders() {
               id: doc.id,
               title: data.title,
               description: data.description,
-              reminder_time: data.reminder_time,
-              event_id: data.event_id,
-              time_before_event_minutes: data.time_before_event_minutes,
-              time_after_event_minutes: data.time_after_event_minutes,
-              sound_id: data.sound_id,
-              is_active: data.is_active,
-              created_at: data.created_at,
-              user_id: data.user_id
+              reminderTime: data.reminderTime,
+              eventId: data.eventId,
+              timeBeforeMinutes: data.timeBeforeMinutes,
+              timeAfterMinutes: data.timeAfterMinutes,
+              soundId: data.soundId,
+              isActive: data.isActive,
+              createdAt: data.createdAt,
+              userId: data.userId
             });
           });
           
@@ -122,16 +122,16 @@ export function useReminders() {
     try {
       // Format the data for insertion
       const reminderData = {
-        user_id: user.uid,
+        userId: user.uid,
         title: data.title,
         description: data.description || null,
-        reminder_time: data.reminderTime || new Date().toISOString(),
-        event_id: data.eventId || null,
-        time_before_event_minutes: data.timeBeforeMinutes || null,
-        time_after_event_minutes: data.timeAfterMinutes || null,
-        sound_id: data.soundId || 'default',
-        is_active: true,
-        created_at: serverTimestamp()
+        reminderTime: data.reminderTime || new Date().toISOString(),
+        eventId: data.eventId || null,
+        timeBeforeMinutes: data.timeBeforeMinutes || null,
+        timeAfterMinutes: data.timeAfterMinutes || null,
+        soundId: data.soundId || 'default',
+        isActive: true,
+        createdAt: serverTimestamp()
       };
       
       const docRef = await addDoc(collection(db, 'reminders'), reminderData);
@@ -160,11 +160,11 @@ export function useReminders() {
       
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined) updateData.description = data.description;
-      if (data.reminderTime !== undefined) updateData.reminder_time = data.reminderTime;
-      if (data.eventId !== undefined) updateData.event_id = data.eventId;
-      if (data.timeBeforeMinutes !== undefined) updateData.time_before_event_minutes = data.timeBeforeMinutes;
-      if (data.timeAfterMinutes !== undefined) updateData.time_after_event_minutes = data.timeAfterMinutes;
-      if (data.soundId !== undefined) updateData.sound_id = data.soundId;
+      if (data.reminderTime !== undefined) updateData.reminderTime = data.reminderTime;
+      if (data.eventId !== undefined) updateData.eventId = data.eventId;
+      if (data.timeBeforeMinutes !== undefined) updateData.timeBeforeMinutes = data.timeBeforeMinutes;
+      if (data.timeAfterMinutes !== undefined) updateData.timeAfterMinutes = data.timeAfterMinutes;
+      if (data.soundId !== undefined) updateData.soundId = data.soundId;
       
       await updateDoc(doc(db, 'reminders', id), updateData);
       
@@ -187,7 +187,7 @@ export function useReminders() {
     }
     
     try {
-      await updateDoc(doc(db, 'reminders', id), { is_active: isActive });
+      await updateDoc(doc(db, 'reminders', id), { isActive: isActive });
       
       console.log('Reminder active status toggled:', id, isActive);
       toast.success(`Reminder ${isActive ? 'activated' : 'deactivated'}`);

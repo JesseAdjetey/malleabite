@@ -21,7 +21,7 @@ export interface EisenhowerItem {
   id: string;
   text: string;
   quadrant: 'urgent_important' | 'not_urgent_important' | 'urgent_not_important' | 'not_urgent_not_important';
-  user_id?: string;
+  userId?: string;
   created_at?: string | Timestamp;
   updated_at?: string | Timestamp;
   event_id?: string;
@@ -57,7 +57,7 @@ export function useEisenhower() {
       
       const itemsQuery = query(
         collection(db, 'eisenhower_items'),
-        where('user_id', '==', user.uid),
+        where('userId', '==', user.uid),
         orderBy('created_at', 'desc')
       );
 
@@ -71,7 +71,7 @@ export function useEisenhower() {
               id: doc.id,
               text: data.text,
               quadrant: data.quadrant,
-              user_id: data.user_id,
+              userId: data.userId,
               created_at: data.created_at,
               updated_at: data.updated_at,
               event_id: data.event_id
@@ -114,7 +114,7 @@ export function useEisenhower() {
       const newItem = {
         text: text.trim(),
         quadrant,
-        user_id: user.uid,
+        userId: user.uid,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp()
       };

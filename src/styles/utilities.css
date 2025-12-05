@@ -1,10 +1,34 @@
 
 @layer components {
+  /* Safe area utilities for mobile notches and home indicators */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  .safe-area-left {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  
+  .safe-area-right {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Touch manipulation for better mobile tap behavior */
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* Enhanced Gradient Border Animation - Now with reduced brightness */
   .gradient-border {
     position: relative;
     border-radius: var(--radius);
     overflow: hidden;
+    transition: all 0.3s ease;
   }
 
   .gradient-border::before {
@@ -31,9 +55,10 @@
     transition: opacity 0.3s ease;
   }
 
-  .gradient-border:hover::before {
-    opacity: 0.8;
-    animation: gradient-shift 3s ease infinite;
+  /* Subtle glow and lift effect on hover */
+  .gradient-border:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(139, 92, 246, 0.2), 0 0 20px rgba(139, 92, 246, 0.1);
   }
 
   /* Custom cursor styles */

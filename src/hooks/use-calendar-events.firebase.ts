@@ -11,6 +11,9 @@ import { useAuth } from '@/contexts/AuthContext.firebase';
 import { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import { eventSchema } from '@/lib/validation';
+import { logger } from '@/lib/logger';
+import { errorHandler } from '@/lib/error-handler';
 
 interface FirebaseActionResponse {
   success: boolean;
@@ -72,21 +75,17 @@ export function useCalendarEvents() {
       setLoading(true);
       setError(null);
       
-      console.log('===== FETCH EVENTS DEBUG (Firebase) =====');
-      console.log('Authentication Status:', {
-        user: user ? 'User authenticated' : 'No user',
-        userId: user?.uid,
-        email: user?.email
+      logger.debug('useCalendarEvents', 'Fetching events', {
+        hasUser: !!user,
+        userId: user?.uid
       });
       
       if (!user) {
-        console.log('No authenticated user, clearing events');
+        logger.warn('useCalendarEvents', 'No authenticated user, clearing events');
         setEvents([]);
         setLoading(false);
         return;
       }
-      
-      console.log('Fetching calendar events for user:', user!.uid);
       
       // Query Firebase Firestore
       const firebaseEvents = await FirestoreService.query<CalendarEvent>(
@@ -96,20 +95,17 @@ export function useCalendarEvents() {
         'asc'
       );
       
-      console.log('Fetched calendar events from Firebase:', firebaseEvents);
+      logger.info('useCalendarEvents', 'Fetched calendar events', {
+        count: firebaseEvents.length
+      });
       
       // Transform Firebase events to CalendarEventType
       const transformedEvents = firebaseEvents.map(transformFirebaseEvent);
       setEvents(transformedEvents);
       
     } catch (err: any) {
-      console.error('===== FETCH EVENTS ERROR (Firebase) =====');
-      console.error('Error Details:', {
-        message: err.message,
-        name: err.name,
-        stack: err.stack,
-        fullError: err
-      });
+      logger.error('useCalendarEvents', 'Fetch events error', err);
+      errorHandler.handleFirestoreError(err);
       setError(err.message || String(err));
       setEvents([]);
     } finally {
@@ -119,39 +115,50 @@ export function useCalendarEvents() {
 
   // Add a new event to Firebase
   const addEvent = async (event: CalendarEventType): Promise<FirebaseActionResponse> => {
-    console.log('===== ADD EVENT DEBUG (Firebase) =====');
-    console.log('Authentication Status:', {
-      user: user ? 'User authenticated' : 'No user',
-      userId: user?.uid,
-      email: user?.email
+    logger.debug('useCalendarEvents', 'Add event attempt', {
+      hasUser: !!user,
+      eventTitle: event.title
     });
     
     if (!user) {
-      console.error('No authenticated user');
-      toast.error('User not authenticated');
+      logger.error('useCalendarEvents', 'No authenticated user', new Error('User not authenticated'));
+      errorHandler.handleError(
+        new Error('User not authenticated'),
+        'Cannot add event',
+        'useCalendarEvents'
+      );
       return { success: false };
     }
     
     try {
-      console.log('Incoming Event Object:', event);
+      // Validate event data
+      const validation = eventSchema.safeParse(event);
+      if (!validation.success) {
+        const errorMessage = validation.error.errors.map(e => 
+          `${e.path.join('.')}: ${e.message}`
+        ).join(', ');
+        logger.warn('useCalendarEvents', 'Event validation failed', {
+          errors: validation.error.errors
+        });
+        toast.error(`Invalid event data: ${errorMessage}`);
+        return { success: false, error: new Error(errorMessage) };
+      }
+      
+      logger.debug('useCalendarEvents', 'Processing event', {
+        date: event.date,
+        hasDescription: !!event.description
+      });
       
       // Parse the time range from description (e.g., "09:00 - 10:00 | Description")
       const timeRange = extractTimeString(event.description);
-      console.log('Extracted Time Range:', timeRange);
       
       const [startTime, endTime] = timeRange.split('-').map(t => t.trim());
-      console.log('Start Time:', startTime);
-      console.log('End Time:', endTime);
       
       const eventDate = event.date || dayjs().format('YYYY-MM-DD');
-      console.log('Event Date:', eventDate);
       
       // Create Date objects by combining date and time
       const startDateTime = dayjs(`${eventDate} ${startTime}`).toDate();
       const endDateTime = dayjs(`${eventDate} ${endTime}`).toDate();
-      
-      console.log('Start DateTime:', startDateTime);
-      console.log('End DateTime:', endDateTime);
       
       // Extract the actual description part
       const descriptionParts = event.description.split('|');
@@ -172,7 +179,9 @@ export function useCalendarEvents() {
         todoId: event.todoId
       };
       
-      console.log('Prepared Firebase Event Object:', firebaseEvent);
+      logger.debug('useCalendarEvents', 'Inserting event to Firebase', {
+        title: firebaseEvent.title
+      });
       
       // Insert into Firebase
       const docRef = await FirestoreService.create<CalendarEvent>(
@@ -180,8 +189,7 @@ export function useCalendarEvents() {
         firebaseEvent
       );
       
-      console.log('Firebase Insert Response:', { 
-        success: true, 
+      logger.info('useCalendarEvents', 'Event created successfully', {
         docId: docRef.id
       });
       
@@ -196,17 +204,11 @@ export function useCalendarEvents() {
       };
       
     } catch (err: any) {
-      console.error('===== ADD EVENT ERROR (Firebase) =====');
-      console.error('Firebase Insert Error:', {
-        message: err.message,
-        name: err.name,
-        stack: err.stack,
-        fullError: err
-      });
+      logger.error('useCalendarEvents', 'Add event error', err);
       
+      errorHandler.handleFirestoreError(err);
       const errorMessage = err.message || 'Failed to create event';
       setError(errorMessage);
-      toast.error(errorMessage);
       
       return { 
         success: false, 
@@ -224,9 +226,10 @@ export function useCalendarEvents() {
     }
 
     try {
-      console.log('===== UPDATE EVENT DEBUG (Firebase) =====');
-      console.log('Event ID:', eventId);
-      console.log('Updates:', updates);
+      logger.debug('useCalendarEvents', 'Update event attempt', {
+        eventId,
+        updateKeys: Object.keys(updates)
+      });
 
       // Transform updates to Firebase format
       const firebaseUpdates: Partial<CalendarEvent> = {};
@@ -268,9 +271,8 @@ export function useCalendarEvents() {
       return { success: true };
 
     } catch (err: any) {
-      console.error('Update event error:', err);
-      const errorMessage = err.message || 'Failed to update event';
-      toast.error(errorMessage);
+      logger.error('useCalendarEvents', 'Update event error', err);
+      errorHandler.handleFirestoreError(err);
       return { success: false, error: err };
     }
   };
@@ -283,8 +285,7 @@ export function useCalendarEvents() {
     }
 
     try {
-      console.log('===== DELETE EVENT DEBUG (Firebase) =====');
-      console.log('Event ID:', eventId);
+      logger.debug('useCalendarEvents', 'Delete event attempt', { eventId });
 
       await FirestoreService.delete(COLLECTIONS.CALENDAR_EVENTS, eventId);
 
@@ -295,9 +296,8 @@ export function useCalendarEvents() {
       return { success: true };
 
     } catch (err: any) {
-      console.error('Delete event error:', err);
-      const errorMessage = err.message || 'Failed to delete event';
-      toast.error(errorMessage);
+      logger.error('useCalendarEvents', 'Delete event error', err);
+      errorHandler.handleFirestoreError(err);
       return { success: false, error: err };
     }
   };
@@ -310,13 +310,17 @@ export function useCalendarEvents() {
       return;
     }
 
-    console.log('Setting up Firebase real-time subscription for user:', user!.uid);
+    logger.debug('useCalendarEvents', 'Setting up real-time subscription', {
+      userId: user!.uid
+    });
 
     // Set up real-time listener
     const unsubscribe = FirestoreService.subscribeToCollection<CalendarEvent>(
       COLLECTIONS.CALENDAR_EVENTS,
       (firebaseEvents) => {
-        console.log('Real-time update received:', firebaseEvents);
+        logger.debug('useCalendarEvents', 'Real-time update received', {
+          count: firebaseEvents.length
+        });
         const transformedEvents = firebaseEvents.map(transformFirebaseEvent);
         setEvents(transformedEvents);
         setLoading(false);

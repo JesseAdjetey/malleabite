@@ -1,27 +1,40 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Sparkles, FileText, Zap } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import dayjs from 'dayjs';
 import SettingsNav from './SettingsNav';
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AnalyticsNav from './AnalyticsNav';
-import TemplatesNav from './TemplatesNav';
-import QuickScheduleNav from './QuickScheduleNav';
-import PatternsNav from './PatternsNav';
 import BulkModeToggle from '../calendar/BulkModeToggle';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useNavigate, useLocation } from 'react-router-dom';
 
-const Header = () => {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const todaysDate = dayjs();
   const { userSelectedDate, setDate, setMonth, selectedMonthIndex } = useDateStore();
   const { selectedView, setView } = useViewStore();
-  const { 
-    isBulkMode, 
-    selectedCount, 
-    enableBulkMode, 
-    disableBulkMode 
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    isBulkMode,
+    selectedCount,
+    enableBulkMode,
+    disableBulkMode
   } = useBulkSelection();
 
   const handleToggleBulkMode = () => {
@@ -48,7 +61,7 @@ const Header = () => {
         break;
     }
   };
-  
+
   const handlePrevClick = () => {
     switch (selectedView) {
       case "Month":
@@ -97,73 +110,118 @@ const Header = () => {
   };
 
   return (
-    <div className="glass mx-4 mt-4 rounded-xl p-4 flex items-center justify-between border light-mode:border-gray-400 dark-mode:border-white/10">
+    <div className="glass mx-2 mt-2 rounded-xl p-2 md:p-3 flex items-center justify-between border light-mode:border-gray-400 dark-mode:border-white/10 overflow-x-auto">
       {/* Left Side - Logo and Navigation */}
-      <div className="flex items-center gap-4">
-        {/* Logo with spinning animation */}
-        <div className="relative rounded-lg cursor-pointer">
-          <img 
-            src="/lovable-uploads/50041269-e66c-4735-b847-3d4fef85beca.png" 
-            alt="Malleabite Logo" 
-            className="h-10 w-10 rounded-lg shadow-md transition-transform duration-300 hover:animate-[gentle-rotate_1s_ease-in-out]" 
+      <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
+        {/* Logo with spinning animation - Hidden on mobile */}
+        <div className="relative rounded-lg cursor-pointer hidden lg:block">
+          <img
+            src="/lovable-uploads/50041269-e66c-4735-b847-3d4fef85beca.png"
+            alt="Malleabite Logo"
+            className="h-8 w-8 md:h-10 md:w-10 rounded-lg shadow-md transition-transform duration-300 hover:animate-[gentle-rotate_1s_ease-in-out]"
           />
         </div>
-        
-        <Button 
-          variant="outline" 
-          onClick={handleTodayClick} 
-          className="light-mode:bg-white/95 light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
+ {/* Home/Dashboard button - only show when not on dashboard */}
+        {location.pathname !== '/' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/')}
+            className="h-8 md:h-9 text-xs md:text-sm light-mode:bg-white/95 light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
+          >
+            <Home className="h-4 w-4 mr-1" />
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleTodayClick}
+          className="h-8 md:h-9 text-xs md:text-sm light-mode:bg-white/95 light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
         >
-          Today
+          <span className="hidden sm:inline">Today</span>
+          <span className="sm:hidden">Now</span>
         </Button>
-        
-        <div className="flex items-center gap-2">
-          <button 
+
+       
+        <div className="flex items-center gap-0.5 md:gap-1">
+          <button
             onClick={handlePrevClick}
-            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10"
+            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
+            aria-label="Previous"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={isMobile ? 20 : 18} />
           </button>
-          <button 
+          <button
             onClick={handleNextClick}
-            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10"
+            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
+            aria-label="Next"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={isMobile ? 20 : 18} />
           </button>
         </div>
-        
-        <h1 className="text-xl font-semibold">{formatDate()}</h1>
+
+        <h1 className="text-sm md:text-base font-semibold ml-1 md:ml-2 whitespace-nowrap truncate">{formatDate()}</h1>
       </div>
 
       {/* Right Side - View Selector and Settings */}
-      <div className="flex items-center gap-4">
-        <div className="flex gap-2">
+      <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+        <div className="flex gap-1 md:gap-2">
           {["Day", "Week", "Month"].map((view) => (
             <Button
               key={view}
               variant={selectedView === view ? "default" : "outline"}
+              size="sm"
               onClick={() => setView(view)}
-              className={selectedView === view 
-                ? "bg-primary text-white" 
+              className={`h-8 text-xs md:text-sm px-2 md:px-3 touch-manipulation min-h-[44px] md:min-h-0 ${selectedView === view
+                ? "bg-primary text-white"
                 : "light-mode:bg-white light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-purple/20"
-              }
+                }`}
             >
-              {view}
+              <span className="hidden sm:inline">{view}</span>
+              <span className="sm:hidden">{view.charAt(0)}</span>
             </Button>
           ))}
         </div>
-        
+
         <TooltipProvider>
-          <BulkModeToggle 
-            isBulkMode={isBulkMode} 
+          {!isMobile && <BulkModeToggle
+            isBulkMode={isBulkMode}
             onToggle={handleToggleBulkMode}
             selectedCount={selectedCount}
-          />
-          <AnalyticsNav />
-          <TemplatesNav />
-          <QuickScheduleNav />
-          <PatternsNav />
-          <SettingsNav />
+          />}
+          {!isMobile && <AnalyticsNav />}
+          
+          {/* Tools Dropdown - Groups Templates, Quick Schedule, and Patterns */}
+          {!isMobile && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 md:h-9 px-2"
+                >
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  <span className="text-xs md:text-sm">Tools</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => navigate('/templates')}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Templates
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/quick-schedule')}>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Quick Schedule
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/patterns')}>
+                  <MoreHorizontal className="h-4 w-4 mr-2" />
+                  Patterns
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          
+          {!isMobile && <SettingsNav />}
         </TooltipProvider>
       </div>
     </div>

@@ -133,7 +133,7 @@ const DayView = () => {
 
   return (
     <>
-      <div className="glass m-4 rounded-xl overflow-hidden gradient-border cursor-glow">
+      <div className="glass mx-2 my-2 rounded-xl overflow-hidden gradient-border cursor-glow">
         <DayHeader userSelectedDate={userSelectedDate} isToday={isToday} />
 
         <TimeSlotsGrid

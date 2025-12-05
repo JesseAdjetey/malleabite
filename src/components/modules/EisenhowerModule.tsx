@@ -25,9 +25,9 @@ interface EisenhowerModuleProps {
   isDragging?: boolean;
 }
 
-const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({ 
+const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   title = "Eisenhower Matrix",
-  onRemove, 
+  onRemove,
   onTitleChange,
   onMinimize,
   isMinimized,
@@ -35,7 +35,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 }) => {
   const [focusedQuadrant, setFocusedQuadrant] = useState<QuadrantType>(null);
   const [newItemText, setNewItemText] = useState('');
-  const [submitStatus, setSubmitStatus] = useState<{success?: boolean; message?: string} | null>(null);
+  const [submitStatus, setSubmitStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const { items, loading, error, addItem, removeItem, updateQuadrant, lastResponse } = useEisenhower();
   const { user } = useAuth();
 
@@ -84,13 +84,13 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, quadrant: EisenhowerItem['quadrant']) => {
     e.preventDefault();
-    
+
     try {
       const data = e.dataTransfer.getData('application/json');
       const draggedItem = JSON.parse(data);
-      
+
       const existingItem = items.find(item => item.id === draggedItem.id);
-      
+
       if (existingItem) {
         // Update existing item's quadrant
         await updateQuadrant(existingItem.id, quadrant);
@@ -133,30 +133,30 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
   const renderFocusedQuadrant = () => {
     if (!focusedQuadrant) return null;
-    
+
     const config = quadrantConfig[focusedQuadrant];
     const quadrantItems = getQuadrantItems(focusedQuadrant);
-    const textColorClass = focusedQuadrant === 'urgent_important' ? 'text-red-400' : 
-                          focusedQuadrant === 'not_urgent_important' ? 'text-yellow-400' : 
-                          focusedQuadrant === 'urgent_not_important' ? 'text-blue-400' : 
-                          'text-green-400';
-    
+    const textColorClass = focusedQuadrant === 'urgent_important' ? 'text-red-400' :
+      focusedQuadrant === 'not_urgent_important' ? 'text-yellow-400' :
+        focusedQuadrant === 'urgent_not_important' ? 'text-blue-400' :
+          'text-green-400';
+
     return (
       <div className={`rounded-lg p-3 h-64 ${config.className}`}>
         <div className="flex items-center mb-2">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="p-0 h-6 w-6 mr-2" 
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-0 h-6 w-6 mr-2"
             onClick={() => setFocusedQuadrant(null)}
           >
             <ArrowLeft size={16} />
           </Button>
           <h3 className={`text-sm font-medium ${textColorClass}`}>{config.title}</h3>
         </div>
-        
+
         <p className="text-xs mb-3 opacity-70">{config.description}</p>
-        
+
         {submitStatus && (
           <div className={cn(
             "text-sm p-2 mb-2 rounded-md flex items-center",
@@ -170,7 +170,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
             {submitStatus.message}
           </div>
         )}
-        
+
         <div className="flex gap-2 mb-3">
           <Input
             value={newItemText}
@@ -179,16 +179,16 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
             placeholder="Add new item..."
             className="h-8 text-xs bg-white/10 border-white/10"
           />
-          <Button 
-            size="sm" 
-            variant="outline" 
+          <Button
+            size="sm"
+            variant="outline"
             className="h-8 px-2 bg-white/10 border-white/10"
             onClick={() => handleAddNewItem(focusedQuadrant)}
           >
             <Plus size={14} />
           </Button>
         </div>
-        
+
         {loading ? (
           <div className="flex justify-center items-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -204,8 +204,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               quadrantItems.map(item => (
                 <div key={item.id} className="bg-white/10 text-xs p-2 rounded mb-1 flex justify-between">
                   <span>{item.text}</span>
-                  <button 
-                    onClick={() => handleRemoveItem(item.id)} 
+                  <button
+                    onClick={() => handleRemoveItem(item.id)}
                     className="opacity-50 hover:opacity-100"
                   >×</button>
                 </div>
@@ -226,7 +226,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
         </div>
       );
     }
-    
+
     if (error) {
       return (
         <div className="flex justify-center items-center h-64 text-red-400">
@@ -241,35 +241,46 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
         {Object.entries(quadrantConfig).map(([quadrant, config]) => {
           const quadrantType = quadrant as EisenhowerItem['quadrant'];
           const quadrantItems = getQuadrantItems(quadrantType);
-          
+
           return (
-            <div 
+            <div
               key={quadrant}
               className={`${config.className} rounded-lg p-2 overflow-y-auto relative`}
               onDrop={(e) => handleDrop(e, quadrantType)}
               onDragOver={handleDragOver}
               onClick={() => setFocusedQuadrant(quadrantType)}
             >
-              <div className={`text-xs font-medium mb-1 ${
-                quadrantType === 'urgent_important' ? 'text-red-400' : 
-                quadrantType === 'not_urgent_important' ? 'text-yellow-400' : 
-                quadrantType === 'urgent_not_important' ? 'text-blue-400' : 
-                'text-green-400'
-              }`}>
+              <div className={`text-xs font-medium mb-1 ${quadrantType === 'urgent_important' ? 'text-red-400' :
+                  quadrantType === 'not_urgent_important' ? 'text-yellow-400' :
+                    quadrantType === 'urgent_not_important' ? 'text-blue-400' :
+                      'text-green-400'
+                }`}>
                 {config.title}
               </div>
-              
+
               {quadrantItems.length === 0 ? (
                 <div className="text-xs opacity-50 text-center pt-2">Click to add items</div>
               ) : (
                 quadrantItems.slice(0, 3).map(item => (
-                  <div key={item.id} className="bg-white/10 text-xs p-1 rounded mb-1 flex justify-between">
+                  <div
+                    key={item.id}
+                    className="bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing"
+                    draggable={true}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/json', JSON.stringify({
+                        id: item.id,
+                        text: item.text,
+                        source: 'eisenhower'
+                      }));
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                  >
                     <span>{item.text}</span>
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRemoveItem(item.id);
-                      }} 
+                      }}
                       className="opacity-50 hover:opacity-100"
                     >
                       ×
@@ -277,7 +288,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                   </div>
                 ))
               )}
-              
+
               {quadrantItems.length > 3 && (
                 <div className="text-xs opacity-70 text-center">+{quadrantItems.length - 3} more</div>
               )}
@@ -290,8 +301,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
   if (isMinimized) {
     return (
-      <ModuleContainer 
-        title={title} 
+      <ModuleContainer
+        title={title}
         onRemove={onRemove}
         onTitleChange={onTitleChange}
         isMinimized={isMinimized}
@@ -306,8 +317,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
   if (!user) {
     return (
-      <ModuleContainer 
-        title={title} 
+      <ModuleContainer
+        title={title}
         onRemove={onRemove}
         onTitleChange={onTitleChange}
         isMinimized={isMinimized}
@@ -321,8 +332,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   }
 
   return (
-    <ModuleContainer 
-      title={title} 
+    <ModuleContainer
+      title={title}
       onRemove={onRemove}
       onTitleChange={onTitleChange}
       isMinimized={isMinimized}

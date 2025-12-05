@@ -9,11 +9,13 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "noImplicitAny": false,
-    "noUnusedParameters": false,
+    // Gradually enable stricter type checking
+    // Start with these, then enable more as you fix type issues
+    "noImplicitAny": false, // TODO: Enable after fixing 'any' types
+    "strictNullChecks": false, // TODO: Enable after fixing null checks
+    "noUnusedParameters": false, // TODO: Enable after cleanup
+    "noUnusedLocals": false, // TODO: Enable after cleanup
     "skipLibCheck": true,
-    "allowJs": true,
-    "noUnusedLocals": false,
-    "strictNullChecks": false
+    "allowJs": true
   }
 }

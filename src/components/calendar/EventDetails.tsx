@@ -104,7 +104,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-[550px] bg-background/95 border-white/10">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto bg-background/95 border-white/10">
         {isEditing ? (
           <EnhancedEventForm 
             initialEvent={selectedEvent}

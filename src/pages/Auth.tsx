@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import AnimatedLogo from '@/components/auth/AnimatedLogo';
 import { Check, ChevronRight, Star, Award, Gift, Trophy, Timer, Calendar, BrainCircuit, Sparkles, Mail } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { authSchema, signUpSchema, sanitizeInput } from '@/lib/validation';
+import { logger } from '@/lib/logger';
+import { ZodError } from 'zod';
 
 const ACHIEVEMENTS = [
   { id: 'first_visit', title: 'First Visit', icon: Star, description: 'Welcome to Malleabite!' },
@@ -16,7 +19,7 @@ const ACHIEVEMENTS = [
 ];
 
 const Auth = () => {
-  const { user, signIn, signUp, loading, error, clearError } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,6 +33,7 @@ const Auth = () => {
     scheduling: false,
   });
   const [emailSent, setEmailSent] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   
   // References for interactive elements
   const timeOrbsRef = useRef<HTMLDivElement>(null);
@@ -243,10 +247,36 @@ const Auth = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
+    setValidationErrors({});
     
     try {
+      // Sanitize inputs
+      const sanitizedEmail = sanitizeInput(email);
+      const sanitizedName = name ? sanitizeInput(name) : undefined;
+      
       if (isSignUp) {
-        const { success, isConfirmationEmailSent } = await signUp(email, password, name);
+        // Validate signup data
+        try {
+          signUpSchema.parse({
+            email: sanitizedEmail,
+            password,
+            name: sanitizedName
+          });
+        } catch (validationError) {
+          if (validationError instanceof ZodError) {
+            const errors: Record<string, string> = {};
+            validationError.errors.forEach(err => {
+              const path = err.path.join('.');
+              errors[path] = err.message;
+            });
+            setValidationErrors(errors);
+            logger.warn('Auth', 'Sign up validation failed', { errors });
+            return;
+          }
+          throw validationError;
+        }
+        
+        const { success, isConfirmationEmailSent } = await signUp(sanitizedEmail, password, sanitizedName);
         
         if (success) {
           // If signup was successful
@@ -262,16 +292,44 @@ const Auth = () => {
           }
         }
       } else {
-        await signIn(email, password);
+        // Validate signin data
+        try {
+          authSchema.parse({
+            email: sanitizedEmail,
+            password
+          });
+        } catch (validationError) {
+          if (validationError instanceof ZodError) {
+            const errors: Record<string, string> = {};
+            validationError.errors.forEach(err => {
+              const path = err.path.join('.');
+              errors[path] = err.message;
+            });
+            setValidationErrors(errors);
+            logger.warn('Auth', 'Sign in validation failed', { errors });
+            return;
+          }
+          throw validationError;
+        }
+        
+        await signIn(sanitizedEmail, password);
       }
     } catch (err) {
-      console.error('Authentication error:', err);
+      logger.error('Auth', 'Authentication error', err as Error);
     }
   };
 
   const switchMode = () => {
     setIsSignUp(!isSignUp);
     clearError();
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err: any) {
+      logger.error('Auth', 'Google sign-in error', err);
+    }
   };
 
   // If user is already logged in, redirect to home page
@@ -282,7 +340,7 @@ const Auth = () => {
   return (
     <div 
       ref={mainContainerRef}
-      className="min-h-screen flex flex-col relative overflow-hidden bg-gradient-to-br from-black via-purple-950/40 to-black text-white"
+      className="min-h-screen flex flex-col relative overflow-x-hidden bg-gradient-to-br from-black via-purple-950/40 to-black text-white"
     >
       {/* Animated background overlay */}
       <div className="absolute inset-0 z-0">
@@ -304,7 +362,7 @@ const Auth = () => {
       {/* Interactive time orbs */}
       <div ref={timeOrbsRef} className="absolute inset-0 pointer-events-auto z-10"></div>
       
-      <div className="container mx-auto px-4 py-8 flex flex-col min-h-screen relative z-20">
+      <div className="container mx-auto px-4 py-4 md:py-6 flex flex-col relative z-20">
         {/* Progress bar */}
         <div className="fixed top-0 left-0 w-full h-1 bg-black/50 z-50">
           <div 
@@ -313,8 +371,8 @@ const Auth = () => {
           ></div>
         </div>
         
-        {/* Achievements display */}
-        <div className="fixed top-4 right-4 flex flex-col gap-2 z-50">
+        {/* Achievements display - Hidden on mobile for cleaner UI */}
+        <div className="fixed top-4 right-4 flex-col gap-2 z-50 hidden md:flex">
           {ACHIEVEMENTS.map(achievement => (
             <div 
               key={achievement.id}
@@ -330,66 +388,66 @@ const Auth = () => {
           ))}
         </div>
         
-        <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-16 py-8">
+        <div className="flex flex-col xl:flex-row items-center justify-center gap-4 md:gap-6 xl:gap-8 py-4 md:py-6 max-w-6xl mx-auto w-full my-auto">
           {/* Logo and branding */}
-          <div className="md:w-1/2 flex flex-col items-center md:items-start">
-            <div className="mb-8 interactive-element">
-              <AnimatedLogo className="w-72 h-72" />
+          <div className="xl:w-1/2 flex flex-col items-center xl:items-start max-w-lg w-full">
+            <div className="mb-3 md:mb-4 interactive-element">
+              <AnimatedLogo className="w-32 h-32 md:w-40 md:h-40 xl:w-48 xl:h-48" />
             </div>
             
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-300">
+            <h1 className="text-xl md:text-3xl xl:text-4xl font-bold mb-2 md:mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-300 text-center xl:text-left">
               Malleabite
             </h1>
             
-            <p className="text-xl md:text-2xl mb-8 text-purple-200/70 max-w-lg">
+            <p className="text-sm md:text-base xl:text-lg mb-3 md:mb-4 text-purple-200/70 max-w-lg text-center xl:text-left">
               Your malleable Integrated Time-management Environment
             </p>
             
             {/* Interactive feature highlights */}
-            <div className="grid grid-cols-2 gap-4 max-w-lg mb-8">
+            <div className="grid grid-cols-2 gap-2 md:gap-3 w-full max-w-sm md:max-w-md mb-4">
               <div 
                 ref={productivityBoostRef}
-                className="glass rounded-xl p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element"
+                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
                 onClick={() => exploreFeature('productivity')}
               >
-                <BrainCircuit className="mb-2 text-purple-400" size={28} />
-                <h3 className="font-semibold text-white">Productivity Boost</h3>
-                <p className="text-sm text-gray-300">Optimize your workflow</p>
+                <BrainCircuit className="mb-2 text-purple-400" size={24} />
+                <h3 className="font-semibold text-white text-xs md:text-sm">Productivity</h3>
+                <p className="text-[10px] md:text-xs text-gray-300 mt-1">Optimize workflow</p>
               </div>
               
               <div 
-                className="glass rounded-xl p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element"
+                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
                 onClick={() => exploreFeature('timeTracking')}
               >
-                <Timer className="mb-2 text-purple-400" size={28} />
-                <h3 className="font-semibold text-white">Time Tracking</h3>
-                <p className="text-sm text-gray-300">Monitor where time goes</p>
+                <Timer className="mb-2 text-purple-400" size={24} />
+                <h3 className="font-semibold text-white text-xs md:text-sm">Time Tracking</h3>
+                <p className="text-[10px] md:text-xs text-gray-300 mt-1">Monitor time</p>
               </div>
               
               <div 
-                className="glass rounded-xl p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element"
+                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
                 onClick={() => exploreFeature('taskManagement')}
               >
-                <Check className="mb-2 text-purple-400" size={28} />
-                <h3 className="font-semibold text-white">Task Management</h3>
-                <p className="text-sm text-gray-300">Never miss a deadline</p>
+                <Check className="mb-2 text-purple-400" size={24} />
+                <h3 className="font-semibold text-white text-xs md:text-sm">Tasks</h3>
+                <p className="text-[10px] md:text-xs text-gray-300 mt-1">Never miss deadlines</p>
               </div>
               
               <div 
-                className="glass rounded-xl p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element"
+                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
                 onClick={() => exploreFeature('scheduling')}
               >
-                <Calendar className="mb-2 text-purple-400" size={28} />
-                <h3 className="font-semibold text-white">Smart Scheduling</h3>
-                <p className="text-sm text-gray-300">Automate your calendar</p>
+                <Calendar className="mb-2 text-purple-400" size={24} />
+                <h3 className="font-semibold text-white text-xs md:text-sm">Scheduling</h3>
+                <p className="text-[10px] md:text-xs text-gray-300 mt-1">Smart calendar</p>
               </div>
             </div>
           </div>
           
           {/* Auth form */}
-          <div className="md:w-1/2 max-w-md w-full">
-            <div className="glass p-8 rounded-2xl border border-purple-500/20 shadow-[0_0_30px_rgba(138,43,226,0.2)]">
-              <h2 className="text-2xl font-bold mb-6 text-center">
+          <div className="xl:w-1/2 max-w-md w-full">
+            <div className="glass p-4 md:p-5 xl:p-6 rounded-2xl border border-purple-500/20 shadow-[0_0_30px_rgba(138,43,226,0.2)]">
+              <h2 className="text-base md:text-lg xl:text-xl font-bold mb-3 md:mb-4 text-center">
                 {isSignUp ? 'Create Your Account' : 'Welcome Back'}
               </h2>
               
@@ -418,11 +476,26 @@ const Auth = () => {
                       id="name"
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="bg-purple-950/30 border-purple-500/30 text-white"
+                      onChange={(e) => {
+                        setName(e.target.value);
+                        // Clear validation error when user types
+                        if (validationErrors.name) {
+                          setValidationErrors(prev => {
+                            const newErrors = { ...prev };
+                            delete newErrors.name;
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      className={`bg-purple-950/30 border-purple-500/30 text-white ${
+                        validationErrors.name ? 'border-red-500' : ''
+                      }`}
                       placeholder="John Doe"
                       required={isSignUp}
                     />
+                    {validationErrors.name && (
+                      <p className="text-red-400 text-sm">{validationErrors.name}</p>
+                    )}
                   </div>
                 )}
                 
@@ -432,11 +505,26 @@ const Auth = () => {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="bg-purple-950/30 border-purple-500/30 text-white"
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      // Clear validation error when user types
+                      if (validationErrors.email) {
+                        setValidationErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors.email;
+                          return newErrors;
+                        });
+                      }
+                    }}
+                    className={`bg-purple-950/30 border-purple-500/30 text-white ${
+                      validationErrors.email ? 'border-red-500' : ''
+                    }`}
                     placeholder="your@email.com"
                     required
                   />
+                  {validationErrors.email && (
+                    <p className="text-red-400 text-sm">{validationErrors.email}</p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -445,15 +533,30 @@ const Auth = () => {
                     id="password"
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="bg-purple-950/30 border-purple-500/30 text-white"
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      // Clear validation error when user types
+                      if (validationErrors.password) {
+                        setValidationErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors.password;
+                          return newErrors;
+                        });
+                      }
+                    }}
+                    className={`bg-purple-950/30 border-purple-500/30 text-white ${
+                      validationErrors.password ? 'border-red-500' : ''
+                    }`}
                     required
                   />
+                  {validationErrors.password && (
+                    <p className="text-red-400 text-sm">{validationErrors.password}</p>
+                  )}
                 </div>
                 
                 <Button 
                   type="submit" 
-                  className="w-full py-6 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white font-medium text-lg interactive-button"
+                  className="w-full py-4 md:py-5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white font-medium text-base md:text-lg interactive-button"
                   disabled={loading}
                 >
                   {loading ? (
@@ -469,6 +572,32 @@ const Auth = () => {
                   )}
                 </Button>
               </form>
+              
+              <div className="relative my-4 md:my-5">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-purple-500/20"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-purple-950/90 text-gray-400">Or continue with</span>
+                </div>
+              </div>
+              
+              <Button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full py-4 md:py-5 bg-white hover:bg-gray-100 text-gray-900 font-medium text-base md:text-lg border border-gray-300 interactive-button"
+                disabled={loading}
+              >
+                <div className="flex items-center gap-3 justify-center">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span>Sign in with Google</span>
+                </div>
+              </Button>
               
               <div className="mt-6 text-center">
                 <button

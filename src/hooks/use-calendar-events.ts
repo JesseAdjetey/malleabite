@@ -1,5 +1,5 @@
 // Firebase-only calendar events hook for production
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   collection, 
   query, 
@@ -11,7 +11,8 @@ import {
   doc, 
   orderBy,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
@@ -31,6 +32,7 @@ export function useCalendarEvents() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Helper function to format timestring from event descriptions
   const extractTimeString = (description: string): string => {
@@ -42,8 +44,8 @@ export function useCalendarEvents() {
   // Convert Firebase doc to CalendarEventType
   const convertFirebaseEvent = (doc: any): CalendarEventType => {
     const data = doc.data();
-    const startsAt = data.starts_at?.toDate?.()?.toISOString() || data.starts_at;
-    const endsAt = data.ends_at?.toDate?.()?.toISOString() || data.ends_at;
+    const startsAt = data.startsAt?.toDate?.()?.toISOString() || data.startsAt;
+    const endsAt = data.endsAt?.toDate?.()?.toISOString() || data.endsAt;
     
     // Extract date from startsAt for calendar display
     const date = startsAt ? new Date(startsAt).toISOString().split('T')[0] : '';
@@ -64,8 +66,8 @@ export function useCalendarEvents() {
     };
   };
 
-  // Fetch events from Firebase
-  const fetchEvents = async () => {
+  // One-time fetch events from Firebase (for manual refresh)
+  const fetchEvents = useCallback(async () => {
     if (!user?.uid) {
       console.log("No user found, skipping events fetch");
       setEvents([]);
@@ -79,29 +81,65 @@ export function useCalendarEvents() {
 
       const eventsQuery = query(
         collection(db, 'calendar_events'),
-        where('user_id', '==', user.uid),
-        orderBy('starts_at', 'asc')
+        where('userId', '==', user.uid),
+        orderBy('startsAt', 'asc')
       );
 
-      const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
-        const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
-        console.log(`Fetched ${eventsList.length} events from Firebase`);
-        setEvents(eventsList);
-        setLoading(false);
-        setError(null);
-      }, (error) => {
-        console.error('Error fetching events:', error);
-        setError('Failed to fetch events');
-        setLoading(false);
-      });
-
-      return unsubscribe;
+      const snapshot = await getDocs(eventsQuery);
+      const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
+      console.log(`Fetched ${eventsList.length} events from Firebase`);
+      setEvents(eventsList);
+      setLoading(false);
+      setError(null);
     } catch (err) {
       console.error('Error in fetchEvents:', err);
       setError('Failed to fetch events');
       setLoading(false);
     }
-  };
+  }, [user?.uid]);
+
+  // Set up real-time listener (only once per user)
+  useEffect(() => {
+    if (!user?.uid) {
+      setEvents([]);
+      setLoading(false);
+      return;
+    }
+
+    // Clean up any existing subscription
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
+    console.log('Setting up real-time listener for user:', user.uid);
+
+    const eventsQuery = query(
+      collection(db, 'calendar_events'),
+      where('userId', '==', user.uid),
+      orderBy('startsAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
+      const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
+      console.log(`Real-time update: ${eventsList.length} events`);
+      setEvents(eventsList);
+      setLoading(false);
+      setError(null);
+    }, (error) => {
+      console.error('Error in real-time listener:', error);
+      setError('Failed to fetch events');
+      setLoading(false);
+    });
+
+    unsubscribeRef.current = unsubscribe;
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
+  }, [user?.uid]);
 
   // Add a new event
   const addEvent = async (event: CalendarEventType): Promise<SupabaseActionResponse> => {
@@ -113,33 +151,57 @@ export function useCalendarEvents() {
     try {
       console.log('Adding event:', event);
 
-      // Parse the time range from description (e.g., "09:00 - 10:00 | Description")
-      const timeRange = extractTimeString(event.description);
-      console.log('Extracted Time Range:', timeRange);
+      let startsAt: Date;
+      let endsAt: Date;
+      let actualDescription = event.description || '';
 
-      const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
-      const eventDate = dayjs(event.startsAt || new Date()).format('YYYY-MM-DD');
+      // Check if startsAt/endsAt are already provided (from AI or direct creation)
+      // startsAt and endsAt are ISO strings
+      if (event.startsAt && event.endsAt && !event.startsAt.includes('|')) {
+        startsAt = new Date(event.startsAt);
+        endsAt = new Date(event.endsAt);
+        
+        console.log('Using provided startsAt/endsAt:', { startsAt, endsAt });
+        
+        // If description doesn't contain time info, keep it as is
+        if (!actualDescription.includes('|')) {
+          // Description is just the description, no time prefix
+        } else {
+          // Extract the actual description part after the time
+          const descriptionParts = actualDescription.split('|');
+          actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : actualDescription;
+        }
+      } else {
+        // Legacy: Parse the time range from description (e.g., "09:00 - 10:00 | Description")
+        const timeRange = extractTimeString(event.description);
+        console.log('Extracted Time Range:', timeRange);
+
+        const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
+        const eventDate = dayjs(event.date || new Date()).format('YYYY-MM-DD');
+        
+        startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
+        endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
+        
+        // Extract the actual description part
+        const descriptionParts = event.description.split('|');
+        actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+      }
       
-      const startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
-      const endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
-      
-      // Extract the actual description part
-      const descriptionParts = event.description.split('|');
-      const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+      console.log('Final startsAt:', startsAt, 'endsAt:', endsAt);
       
       const newEvent = {
         title: event.title,
         description: actualDescription,
         color: event.color || '#3b82f6',
-        is_locked: event.isLocked || false,
-        is_todo: event.isTodo || false,
-        has_alarm: event.hasAlarm || false,
-        has_reminder: event.hasReminder || false,
-        user_id: user.uid,
-        todo_id: event.todoId || null,
-        starts_at: Timestamp.fromDate(startsAt),
-        ends_at: Timestamp.fromDate(endsAt),
-        created_at: serverTimestamp()
+        isLocked: event.isLocked || false,
+        isTodo: event.isTodo || false,
+        hasAlarm: event.hasAlarm || false,
+        hasReminder: event.hasReminder || false,
+        userId: user.uid,
+        todoId: event.todoId || null,
+        startsAt: Timestamp.fromDate(startsAt),
+        endsAt: Timestamp.fromDate(endsAt),
+        createdAt: serverTimestamp()
       };
 
       await addDoc(collection(db, 'calendar_events'), newEvent);
@@ -174,13 +236,13 @@ export function useCalendarEvents() {
         title: event.title,
         description: actualDescription,
         color: event.color || '#3b82f6',
-        is_locked: event.isLocked || false,
-        is_todo: event.isTodo || false,
-        has_alarm: event.hasAlarm || false,
-        has_reminder: event.hasReminder || false,
-        todo_id: event.todoId || null,
-        starts_at: Timestamp.fromDate(startsAt),
-        ends_at: Timestamp.fromDate(endsAt)
+        isLocked: event.isLocked || false,
+        isTodo: event.isTodo || false,
+        hasAlarm: event.hasAlarm || false,
+        hasReminder: event.hasReminder || false,
+        todoId: event.todoId || null,
+        startsAt: Timestamp.fromDate(startsAt),
+        endsAt: Timestamp.fromDate(endsAt)
       };
 
       await updateDoc(doc(db, 'calendar_events', event.id), updatedEvent);
@@ -230,28 +292,6 @@ export function useCalendarEvents() {
       return { success: false, error };
     }
   };
-
-  // Set up real-time listener
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    const setupListener = async () => {
-      unsubscribe = await fetchEvents();
-    };
-
-    if (user?.uid) {
-      setupListener();
-    } else {
-      setEvents([]);
-      setLoading(false);
-    }
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [user?.uid]);
 
   return {
     events,

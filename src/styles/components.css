@@ -54,7 +54,7 @@
   }
   
   .calendar-event {
-    @apply relative p-2 rounded-md cursor-pointer text-xs hover:brightness-110 transition-all;
+    @apply relative p-2 rounded-md cursor-pointer text-xs hover:brightness-110 transition-all h-full overflow-hidden;
   }
   
   .light-mode .calendar-event {

@@ -208,7 +208,7 @@ export function QuickSchedule() {
     }
 
     return (
-      <Card className="absolute top-full mt-2 right-0 z-50 p-4 w-80 shadow-xl bg-background/95 backdrop-blur-xl border-2">
+      <Card className="glass-card absolute top-full mt-2 right-0 z-50 p-4 w-80 shadow-xl border-2">
         {/* Month Navigation */}
         <div className="flex items-center justify-between mb-4">
           <Button
@@ -304,7 +304,7 @@ export function QuickSchedule() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-white">
       {/* Back Button */}
       <Button
         variant="ghost"
@@ -342,7 +342,7 @@ export function QuickSchedule() {
             onClick={() => setShowCalendar(!showCalendar)}
             className="relative"
           >
-            <Card className="px-4 py-2.5 min-w-[200px] cursor-pointer hover:border-purple-300 dark:hover:border-purple-600 transition-colors">
+            <Card className="glass-card px-4 py-2.5 min-w-[200px] cursor-pointer hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-lg hover:shadow-purple-500/20 transition-all">
               <div className="flex items-center gap-3">
                 <Calendar className="h-4 w-4 text-purple-500" />
                 <div className="flex-1">
@@ -381,20 +381,58 @@ export function QuickSchedule() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Template Library */}
-        <Card className="p-6">
+        <Card className="glass-card p-6">
           <h3 className="font-semibold mb-4 flex items-center gap-2">
             <Calendar className="h-5 w-5" />
             Quick Add from Templates
           </h3>
           
           {displayTemplates.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No templates yet</p>
+            <div className="text-center py-12 px-6">
+              <h4 className="text-2xl font-bold mb-6 bg-gradient-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
+                Create Your First Template
+              </h4>
+              <p className="text-muted-foreground text-sm mb-6 max-w-md mx-auto leading-relaxed">
+                Save time with reusable event templates. Perfect for recurring meetings, routines, and workflows.
+              </p>
+              
+              <div className="grid grid-cols-1 gap-2.5 mb-6 text-left max-w-md mx-auto">
+                <div className="flex items-start gap-3 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 rounded-lg p-3 backdrop-blur-sm border border-indigo-500/20">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-indigo-400 font-bold text-xs">1</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Quick Batch Scheduling</p>
+                    <p className="text-xs text-muted-foreground">Schedule multiple events instantly</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3 bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-lg p-3 backdrop-blur-sm border border-violet-500/20">
+                  <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-violet-400 font-bold text-xs">2</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Consistent Routines</p>
+                    <p className="text-xs text-muted-foreground">Maintain your productivity patterns</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3 bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 rounded-lg p-3 backdrop-blur-sm border border-purple-500/20">
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-purple-400 font-bold text-xs">3</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">Save Time</p>
+                    <p className="text-xs text-muted-foreground">Never recreate the same event twice</p>
+                  </div>
+                </div>
+              </div>
+              
               <Button 
-                variant="link" 
                 onClick={() => window.open('/templates', '_blank')}
               >
-                Create your first template →
+                <Calendar className="w-4 h-4 mr-2" />
+                Create Template
               </Button>
             </div>
           ) : (
@@ -436,7 +474,7 @@ export function QuickSchedule() {
         </Card>
 
         {/* Right: Schedule Queue */}
-        <Card className="p-6">
+        <Card className="glass-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold flex items-center gap-2">
               <Clock className="h-5 w-5" />
@@ -565,7 +603,7 @@ export function QuickSchedule() {
       </div>
 
       {/* Instructions */}
-      <Card className="p-4 bg-gradient-to-r  dark:from-purple-950 dark:to-blue-950">
+      <Card className="glass-card p-4">
         <h4 className="font-semibold text-sm mb-2">💡 How to use Quick Schedule:</h4>
         <ol className="text-sm space-y-1 text-muted-foreground list-decimal list-inside">
           <li>Select a date above</li>

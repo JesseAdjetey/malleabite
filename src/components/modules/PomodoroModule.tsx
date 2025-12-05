@@ -18,8 +18,8 @@ interface PomodoroModuleProps {
   isDragging?: boolean;
 }
 
-const PomodoroModule: React.FC<PomodoroModuleProps> = ({ 
-  title = "Pomodoro", 
+const PomodoroModule: React.FC<PomodoroModuleProps> = ({
+  title = "Pomodoro",
   onRemove,
   onTitleChange,
   onMinimize,
@@ -30,7 +30,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   const [focusTime, setFocusTime] = useState(25); // in minutes
   const [breakTime, setBreakTime] = useState(5); // in minutes
   const [focusTarget, setFocusTarget] = useState(180); // in minutes (3 hours default)
-  
+
   // Timer state
   const [timeLeft, setTimeLeft] = useState(focusTime * 60); // in seconds
   const [isActive, setIsActive] = useState(false);
@@ -38,11 +38,11 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   const [showSettings, setShowSettings] = useState(false);
   const [completedFocusTime, setCompletedFocusTime] = useState(0); // in minutes
   const [cycles, setCycles] = useState(0);
-  
+
   // Calculate total time for current mode
   const totalTime = timerMode === 'focus' ? focusTime * 60 : breakTime * 60;
   const progress = (timeLeft / totalTime) * 100;
-  
+
   // Target progress percentage
   const targetProgress = Math.min((completedFocusTime / focusTarget) * 100, 100);
 
@@ -56,15 +56,45 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
       }, 1000);
     } else if (timeLeft === 0 && isActive) {
       // Timer finished
+
+      // Play sound
+      const playNotificationSound = () => {
+        try {
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioContext) return;
+
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5); // Drop to A4
+
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+          osc.start();
+          osc.stop(ctx.currentTime + 0.5);
+        } catch (e) {
+          console.error('Audio play failed', e);
+        }
+      };
+
+      playNotificationSound();
+
       if (timerMode === 'focus') {
         // Update completed focus time
         setCompletedFocusTime(prev => prev + focusTime);
         setCycles(prev => prev + 1);
-        
+
         // Switch to break
         setTimerMode('break');
         setTimeLeft(breakTime * 60);
-        
+
         // Notification
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Focus session completed!', {
@@ -75,7 +105,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         // Switch back to focus
         setTimerMode('focus');
         setTimeLeft(focusTime * 60);
-        
+
         // Notification
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Break completed!', {
@@ -132,8 +162,8 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   };
 
   return (
-    <ModuleContainer 
-      title={title} 
+    <ModuleContainer
+      title={title}
       onRemove={onRemove}
       onTitleChange={onTitleChange}
       onMinimize={onMinimize}
@@ -168,7 +198,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
               cy="50"
             />
           </svg>
-          
+
           {/* Timer display */}
           <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center">
             <span className="text-2xl font-bold">{formatTime(timeLeft)}</span>
@@ -225,7 +255,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         {showSettings && (
           <div className="w-full p-3 bg-black/10 rounded-md mb-2">
             <h4 className="text-sm font-medium mb-3">Timer Settings</h4>
-            
+
             {/* Focus time slider */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
@@ -243,7 +273,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
                 onValueChange={handleFocusTimeChange}
               />
             </div>
-            
+
             {/* Break time slider */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
@@ -261,7 +291,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
                 onValueChange={handleBreakTimeChange}
               />
             </div>
-            
+
             {/* Focus target input */}
             <div className="mb-2">
               <div className="flex justify-between items-center mb-2">

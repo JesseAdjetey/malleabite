@@ -19,8 +19,10 @@ import {
   Activity,
   Zap,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  Home
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import TimeChart from '@/components/analytics/TimeChart';
 import ProductivityHeatmap from '@/components/analytics/ProductivityHeatmap';
@@ -28,6 +30,7 @@ import WeeklySummary from '@/components/analytics/WeeklySummary';
 import { TimeDistributionChart } from '@/components/analytics/TimeDistributionChart';
 import { CategoryBreakdown } from '@/components/analytics/CategoryBreakdown';
 import { SmartSuggestions } from '@/components/suggestions/SmartSuggestions';
+import MobileNavigation from '@/components/MobileNavigation';
 import { LearningInsights } from '@/components/ai/LearningInsights';
 import { ProductivityScore } from '@/components/insights/ProductivityScore';
 
@@ -36,6 +39,7 @@ export default function Analytics() {
   const { events } = useCalendarEvents();
   const { selectedTimeRange, setTimeRange, currentMetrics } = useAnalyticsStore();
   const [activeTab, setActiveTab] = useState('overview');
+  const navigate = useNavigate();
 
   // Handle export
   const handleExport = (format: 'csv' | 'json') => {
@@ -110,13 +114,64 @@ export default function Analytics() {
 
   if (!metrics) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center max-w-md">
-          <BarChart3 className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">No Analytics Data Yet</h3>
-          <p className="text-muted-foreground">
-            Start creating events and completing tasks to see your productivity insights here.
-          </p>
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="flex items-center gap-2 p-4 border-b border-border/50">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/')}
+            className="gap-2"
+          >
+            <Home className="h-4 w-4" />
+            Dashboard
+          </Button>
+        </div>
+        
+        <div className="flex-1 flex items-center justify-center py-12 px-6">
+          <div className="text-center max-w-2xl">
+            <h3 className="text-4xl font-bold mb-4 bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">
+              Your Analytics Dashboard
+            </h3>
+            <p className="text-lg text-muted-foreground mb-8 leading-relaxed max-w-xl mx-auto">
+              Track your productivity journey with powerful insights and beautiful visualizations
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 text-left">
+              <div className="glass-card rounded-xl p-4">
+                <h4 className="font-semibold text-sm mb-1">Productivity Trends</h4>
+                <p className="text-xs text-muted-foreground">Track your progress over time</p>
+              </div>
+              
+              <div className="glass-card rounded-xl p-4">
+                <h4 className="font-semibold text-sm mb-1">Time Allocation</h4>
+                <p className="text-xs text-muted-foreground">See where your time goes</p>
+              </div>
+              
+              <div className="glass-card rounded-xl p-4">
+                <h4 className="font-semibold text-sm mb-1">Weekly Insights</h4>
+                <p className="text-xs text-muted-foreground">Compare week-over-week</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button 
+                size="lg"
+                onClick={() => navigate('/calendar')}
+              >
+                <Calendar className="w-5 h-5 mr-2" />
+                Go to Calendar
+              </Button>
+              <Button 
+                size="lg"
+                variant="outline"
+                className="border-violet-500/30 hover:bg-violet-500/10"
+                onClick={() => navigate('/')}
+              >
+                <Home className="w-5 h-5 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -125,7 +180,19 @@ export default function Analytics() {
   const { thisWeek, lastWeek, thisMonth, trends } = metrics;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
+      <div className="p-6 space-y-6 max-w-7xl mx-auto relative">
+      {/* Back to Dashboard Button */}
+      <Button
+        onClick={() => navigate('/')}
+        variant="ghost"
+        size="sm"
+        className="glass hover:bg-white/20 text-white backdrop-blur-md gap-2 mb-4"
+      >
+        <Home className="h-4 w-4" />
+        <span>Dashboard</span>
+      </Button>
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -173,7 +240,7 @@ export default function Analytics() {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* This Week Events */}
-        <Card>
+        <Card className="glass-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Events This Week</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -225,7 +292,7 @@ export default function Analytics() {
         </Card>
 
         {/* Tasks Completed */}
-        <Card>
+        <Card className="glass-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tasks Completed</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
@@ -241,7 +308,7 @@ export default function Analytics() {
         </Card>
 
         {/* Focus Time */}
-        <Card>
+        <Card className="glass-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Focus Time</CardTitle>
             <Zap className="h-4 w-4 text-muted-foreground" />
@@ -296,7 +363,7 @@ export default function Analytics() {
           </div>
 
           {/* Productivity Insights */}
-          <Card>
+          <Card className="glass-card">
             <CardHeader>
               <CardTitle>Productivity Insights</CardTitle>
               <CardDescription>Key patterns and recommendations</CardDescription>
@@ -333,7 +400,7 @@ export default function Analytics() {
           </Card>
 
           {/* Daily Breakdown */}
-          <Card>
+          <Card className="glass-card">
             <CardHeader>
               <CardTitle>Daily Breakdown</CardTitle>
               <CardDescription>Events and productivity per day</CardDescription>
@@ -381,7 +448,7 @@ export default function Analytics() {
 
         {/* Weekly Tab */}
         <TabsContent value="weekly">
-          <Card>
+          <Card className="glass-card">
             <CardHeader>
               <CardTitle>Weekly Summary</CardTitle>
               <CardDescription>
@@ -415,7 +482,7 @@ export default function Analytics() {
 
         {/* Monthly Tab */}
         <TabsContent value="monthly">
-          <Card>
+          <Card className="glass-card">
             <CardHeader>
               <CardTitle>Monthly Summary</CardTitle>
               <CardDescription>{dayjs().format('MMMM YYYY')}</CardDescription>
@@ -445,6 +512,8 @@ export default function Analytics() {
           </Card>
         </TabsContent>
       </Tabs>
+      <MobileNavigation />
+      </div>
     </div>
   );
 }

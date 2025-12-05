@@ -1,6 +1,9 @@
 // Firebase Cloud Functions integration (Simplified)
-import { httpsCallable, HttpsCallableResult } from 'firebase/functions';
-import { functions } from './config';
+import { httpsCallable, HttpsCallableResult, getFunctions } from 'firebase/functions';
+import { app, auth } from './config';
+
+// Initialize Functions instance
+const functions = getFunctions(app, 'us-central1');
 
 // Function interfaces matching your current Supabase functions
 export interface SchedulingRequest {
@@ -32,16 +35,44 @@ export class FirebaseFunctions {
   // Process AI requests with intelligent scheduling (replaces process-scheduling)
   static async processScheduling(data: SchedulingRequest): Promise<SchedulingResponse> {
     try {
-      const processAIRequestFn = httpsCallable(functions, 'processAIRequest');
+      // Ensure user is authenticated and get fresh token
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('User must be authenticated');
+      }
       
-      // Transform data to match the new function signature
-      const result = await processAIRequestFn({
-        message: data.userMessage,
-        userId: data.userId,
-        context: data.context
+      // Force token refresh to ensure it's valid
+      const token = await currentUser.getIdToken(true);
+      console.log('Auth token obtained:', token ? 'YES' : 'NO', 'User:', currentUser.uid);
+      
+      // Make direct HTTP call with Authorization header
+      const functionUrl = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processAIRequest';
+      
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          data: {
+            message: data.userMessage,
+            userId: data.userId,
+            context: data.context
+          }
+        })
       });
       
-      const responseData = result.data as any;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Function call failed:', response.status, errorText);
+        throw new Error(`Function call failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Function call succeeded!', result);
+      
+      const responseData = result.result || result.data || result;
       
       // Transform response to match expected format
       return {
@@ -52,6 +83,8 @@ export class FirebaseFunctions {
           data: responseData.eventData,
           conflicts: responseData.conflicts 
         }] : [],
+        intent: responseData.intent || 'general',
+        actionRequired: responseData.actionRequired || false,
         error: responseData.error
       };
     } catch (error: any) {
@@ -122,33 +155,28 @@ export class FirebaseFunctions {
     }
   }
 
-  // Transcribe audio (replaces transcribe-audio)
+  // Transcribe audio - uses mock transcription for development
+  // TODO: Implement actual speech-to-text when needed (e.g., using Google Cloud Speech-to-Text)
   static async transcribeAudio(data: TranscriptionRequest): Promise<TranscriptionResponse> {
-    try {
-      const transcribeAudioFn = httpsCallable(functions, 'transcribeAudio');
-      
-      const result = await transcribeAudioFn(data);
-      return result.data as TranscriptionResponse;
-    } catch (error: any) {
-      console.error('Error calling transcribeAudio function:', error);
-      
-      // Return a helpful fallback response for development
-      const mockTranscriptions = [
-        'Schedule a meeting tomorrow at 2 PM',
-        'Create a doctor appointment for Friday morning',
-        'Add a lunch meeting with the team next week',
-        'Set up a project review for Thursday afternoon',
-        'Schedule a call with the client at 3 PM'
-      ];
-      
-      const mockTranscript = mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)];
-      
-      return {
-        success: true,
-        transcript: mockTranscript,
-        error: undefined
-      };
-    }
+    // For now, return mock transcriptions since we don't have a transcribeAudio cloud function deployed
+    // This allows voice input to work with sample scheduling phrases
+    const mockTranscriptions = [
+      'Schedule a meeting tomorrow at 2 PM',
+      'Create a doctor appointment for Friday morning',
+      'Add a lunch meeting with the team next week',
+      'Set up a project review for Thursday afternoon',
+      'Schedule a call with the client at 3 PM'
+    ];
+    
+    const mockTranscript = mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)];
+    
+    console.log('Using mock transcription:', mockTranscript);
+    
+    return {
+      success: true,
+      transcript: mockTranscript,
+      error: undefined
+    };
   }
 
   // Generic function caller for future functions

@@ -6,23 +6,27 @@ import { useViewStore } from "@/lib/store";
 import DayView from "@/components/day-view";
 import WeekView from "@/components/week-view";
 import Header from "@/components/header/Header";
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Menu, X } from 'lucide-react';
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Button } from "@/components/ui/button";
 
 const Mainview = () => {
   const { selectedView } = useViewStore();
-  const [sidebarWidth, setSidebarWidth] = useState(500); // Increased from 450 to 500 for better module layout
+  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const isTouchDevice = useRef(false);
+  const isMobile = useIsMobile();
 
   // Set limits for sidebar width
-  const MIN_WIDTH = 400;
+  const MIN_WIDTH = 300;
   const MAX_WIDTH = 1000;
 
   // Detect touch device on mount
   useEffect(() => {
     isTouchDevice.current = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
+
     // Add touch-specific styles
     if (isTouchDevice.current) {
       const style = document.createElement('style');
@@ -35,12 +39,19 @@ const Mainview = () => {
         }
       `;
       document.head.appendChild(style);
-      
+
       return () => {
         document.head.removeChild(style);
       };
     }
   }, []);
+
+  // Close sidebar when switching to mobile
+  useEffect(() => {
+    if (isMobile) {
+      setIsSidebarOpen(false);
+    }
+  }, [isMobile]);
 
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -54,7 +65,7 @@ const Mainview = () => {
 
   const handleDrag = (e: MouseEvent) => {
     if (!isDragging.current) return;
-    let newWidth = e.clientX; // Get current mouse X position
+    let newWidth = e.clientX;
 
     // Constrain sidebar width between min and max
     newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, MAX_WIDTH));
@@ -73,25 +84,25 @@ const Mainview = () => {
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     isDragging.current = true;
-    
+
     const handleTouchMove = (e: TouchEvent) => {
       if (!isDragging.current) return;
-      
+
       const touch = e.touches[0];
       let newWidth = touch.clientX;
-      
+
       // Constrain sidebar width
       newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, MAX_WIDTH));
-      
+
       setSidebarWidth(newWidth);
     };
-    
+
     const handleTouchEnd = () => {
       isDragging.current = false;
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
     };
-    
+
     document.addEventListener('touchmove', handleTouchMove);
     document.addEventListener('touchend', handleTouchEnd);
   };
@@ -107,30 +118,58 @@ const Mainview = () => {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar */}
+      {/* Mobile Menu Button */}
+      {isMobile && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="fixed top-4 left-4 z-50 md:hidden bg-background/80 backdrop-blur-sm border border-border"
+        >
+          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+        </Button>
+      )}
+
+      {/* Overlay for mobile sidebar */}
+      {isMobile && isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Mobile: Slide-in overlay, Desktop: Fixed side panel */}
       <div
         ref={sidebarRef}
-        style={{ width: `${sidebarWidth}px`, minWidth: `${MIN_WIDTH}px`, maxWidth: `${MAX_WIDTH}px` }}
-        className="transition-all duration-100"
+        style={!isMobile ? { width: `${sidebarWidth}px`, minWidth: `${MIN_WIDTH}px`, maxWidth: `${MAX_WIDTH}px` } : {}}
+        className={`
+          transition-all duration-300 z-50
+          ${isMobile 
+            ? `fixed top-0 left-0 h-full w-[85vw] max-w-sm transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}` 
+            : 'relative'
+          }
+        `}
       >
         <SideBar />
       </div>
 
-      {/* Resizer */}
-      <div
-        className="flex items-center justify-center w-6 cursor-ew-resize z-10 hover:bg-purple-400/30 transition-colors"
-        onMouseDown={startDrag}
-        onTouchStart={handleTouchStart}
-      >
-        <div className="h-16 w-4 rounded-md flex items-center justify-center light-mode:bg-purple-200 light-mode:hover:bg-purple-300 dark-mode:bg-purple-600/30 dark-mode:hover:bg-purple-500/60">
-          <GripVertical className="text-purple-500 h-10" />
+      {/* Resizer - Only show on desktop */}
+      {!isMobile && (
+        <div
+          className="hidden md:flex items-center justify-center w-6 cursor-ew-resize z-10 hover:bg-purple-400/30 transition-colors"
+          onMouseDown={startDrag}
+          onTouchStart={handleTouchStart}
+        >
+          <div className="h-16 w-4 rounded-md flex items-center justify-center light-mode:bg-purple-200 light-mode:hover:bg-purple-300 dark-mode:bg-purple-600/30 dark-mode:hover:bg-purple-500/60">
+            <GripVertical className="text-purple-500 h-10" />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
-      <div className="flex flex-col flex-1 h-screen">
-        <Header />
-        <div className="overflow-y-auto flex-1">
+      <div className="flex flex-col flex-1 h-screen w-full md:w-auto overflow-hidden">
+        <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
+        <div className="overflow-y-auto flex-1 touch-pan-y">
           {selectedView === "Month" && <MonthView />}
           {selectedView === "Day" && <DayView />}
           {selectedView === "Week" && <WeekView />}

@@ -51,14 +51,24 @@ const DayColumn: React.FC<DayColumnProps> = ({
 
       {/* Events displayed at their exact positions */}
       {dayEvents.map(event => {
-        const timeInfo = getTimeInfo(event.description);
+        const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
         const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
         const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
+        
+        // Debug logging
+        console.log('=== EVENT DISPLAY DEBUG ===', {
+          title: event.title,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          timeInfo,
+          topPosition,
+          eventHeight
+        });
         
         return (
           <div 
             key={event.id} 
-            className="absolute inset-x-0.5 z-10"
+            className="absolute inset-x-0.5 z-10 border-2 border-red-500"
             style={{ 
               top: `${topPosition}px`,
               height: `${eventHeight}px`

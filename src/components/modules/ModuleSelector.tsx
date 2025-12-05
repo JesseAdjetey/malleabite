@@ -18,9 +18,9 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
 
   if (!isOpen) {
     return (
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
-        className="flex items-center justify-center w-full p-2 glass-card mb-4 text-primary hover:text-primary-foreground hover:bg-primary/30 transition-all"
+        className="flex items-center justify-center w-full p-1.5 glass-card mb-3 text-primary hover:text-primary-foreground hover:bg-primary/30 transition-all"
       >
         <Plus size={20} className="mr-2" />
         <span>Add Module</span>
@@ -30,40 +30,40 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
 
   return (
     <div className="glass-card p-4 mb-4 relative">
-      <button 
+      <button
         onClick={() => setIsOpen(false)}
         className="absolute top-2 right-2 text-muted-foreground hover:text-primary"
       >
         <X size={16} />
       </button>
       <h3 className="text-lg font-semibold mb-3 text-primary">Select a Module</h3>
-      
+
       <div className="grid grid-cols-2 gap-2">
-        <button 
+        <button
           onClick={() => handleSelect('todo')}
           className="bg-white/5 p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Todo List
         </button>
-        <button 
+        <button
           onClick={() => handleSelect('pomodoro')}
           className="bg-white/5 p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Pomodoro Timer
         </button>
-        <button 
+        <button
           onClick={() => handleSelect('alarms')}
           className="bg-white/5 p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Alarms
         </button>
-        <button 
+        <button
           onClick={() => handleSelect('eisenhower')}
           className="bg-white/5 p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Eisenhower Matrix
         </button>
-        <button 
+        <button
           onClick={() => handleSelect('invites')}
           className="bg-white/5 p-2 rounded-lg hover:bg-primary/20 transition-all"
         >

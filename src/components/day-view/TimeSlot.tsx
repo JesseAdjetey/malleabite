@@ -201,7 +201,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
 
   // Get events for this specific hour slot
   const hourEvents = events.filter(event => {
-    const timeInfo = getTimeInfo(event.description);
+    const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
     const eventHour = parseInt(timeInfo.start.split(':')[0], 10);
     return eventHour === hour.hour();
   });

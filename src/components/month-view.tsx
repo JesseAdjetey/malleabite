@@ -13,12 +13,14 @@ import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
   const { openEventSummary, isEventSummaryOpen, closeEventSummary } =
     useEventStore();
   const { events, updateEvent, addEvent } = useCalendarEvents();
+  const isMobile = useIsMobile();
   const {
     isBulkMode,
     selectedIds,
@@ -124,16 +126,17 @@ const MonthView = () => {
 
   return (
     <>
-      <div className="glass m-4 rounded-xl overflow-hidden">
+      <div className="glass mx-2 my-2 rounded-xl overflow-hidden">
         <div className="grid grid-cols-7 text-center py-2 bg-secondary/50 border-b border-white/10">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <div key={day} className="text-sm font-medium">
-              {day}
+            <div key={day} className="text-xs md:text-sm font-medium">
+              <span className="hidden sm:inline">{day}</span>
+              <span className="sm:hidden">{day.charAt(0)}</span>
             </div>
           ))}
         </div>
 
-        <section className="grid grid-cols-7 grid-rows-5 lg:h-[85vh]">
+        <section className={`grid grid-cols-7 ${isMobile ? 'grid-rows-6' : 'grid-rows-5'} lg:h-[calc(100vh-160px)] touch-pan-y`}>
           {twoDMonthArray.map((row, i) => (
             <Fragment key={i}>
               {row.map((day, index) => (
@@ -156,7 +159,7 @@ const MonthView = () => {
           ))}
         </section>
       </div>
-      <AddEventButton />
+      {!isMobile && <AddEventButton />}
 
       {isBulkMode && selectedCount > 0 && (
         <BulkActionToolbar

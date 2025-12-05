@@ -54,11 +54,12 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   return (
     <div
       className={cn(
-        "calendar-event group",
+        "calendar-event group h-full",
         color,
         !isLocked && "cursor-move",
         isDragging && "opacity-70"
       )}
+      style={{ height: '100%', minHeight: '100%' }}
       onClick={(e) => handleClick(e, onClick)}
       draggable={!isLocked}
       onDragStart={handleDragStart}

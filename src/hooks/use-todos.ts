@@ -18,9 +18,9 @@ import { toast } from 'sonner';
 
 export interface TodoType {
   id: string;
-  title: string;
+  text: string;
   completed: boolean;
-  user_id: string;
+  userId: string;
   created_at: string;
   event_id?: string;
   isCalendarEvent?: boolean;
@@ -29,7 +29,7 @@ export interface TodoType {
 // Legacy interface for compatibility
 export interface TodoItem {
   id: string;
-  title: string;
+  text: string;
   completed: boolean;
   created_at?: string;
   completed_at?: string;
@@ -54,7 +54,7 @@ export function useTodos() {
 
     const todosQuery = query(
       collection(db, 'todos'),
-      where('user_id', '==', user.uid),
+      where('userId', '==', user.uid),
       orderBy('created_at', 'desc')
     );
 
@@ -87,16 +87,16 @@ export function useTodos() {
   };
 
   // Add a new todo
-  const addTodo = async (title: string): Promise<{ success: boolean; message: string }> => {
-    if (!user?.uid || !title.trim()) {
-      return { success: false, message: !user ? 'User not authenticated' : 'Title cannot be empty' };
+  const addTodo = async (text: string): Promise<{ success: boolean; message: string }> => {
+    if (!user?.uid || !text.trim()) {
+      return { success: false, message: !user ? 'User not authenticated' : 'Text cannot be empty' };
     }
 
     try {
       await addDoc(collection(db, 'todos'), {
-        title: title.trim(),
+        text: text.trim(),
         completed: false,
-        user_id: user.uid,
+        userId: user.uid,
         created_at: serverTimestamp()
       });
       toast.success('Todo added');
@@ -143,15 +143,15 @@ export function useTodos() {
     }
   };
 
-  // Update todo title
-  const updateTodoTitle = async (id: string, newTitle: string): Promise<{ success: boolean; message: string }> => {
-    if (!user?.uid || !newTitle.trim()) {
-      return { success: false, message: !user ? 'User not authenticated' : 'Title cannot be empty' };
+  // Update a todo's text
+  const updateTodoText = async (id: string, newText: string): Promise<{ success: boolean; message: string }> => {
+    if (!user?.uid || !newText.trim()) {
+      return { success: false, message: !user ? 'User not authenticated' : 'Text cannot be empty' };
     }
 
     try {
       await updateDoc(doc(db, 'todos', id), {
-        title: newTitle.trim()
+        text: newText.trim()
       });
       return { success: true, message: 'Todo title updated successfully' };
     } catch (error) {
@@ -198,7 +198,7 @@ export function useTodos() {
     addTodo,
     toggleTodo,
     deleteTodo,
-    updateTodoTitle,
+    updateTodoText,
     linkTodoToEvent,
     unlinkTodoFromEvent,
     refetchTodos

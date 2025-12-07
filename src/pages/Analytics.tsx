@@ -1,7 +1,7 @@
 // Phase 1.2 + 3.1: Unified Analytics Dashboard
 // Comprehensive productivity metrics, charts, insights, and export capabilities
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAnalyticsData } from '@/hooks/use-analytics-data';
 import { useAnalyticsStore } from '@/lib/stores/analytics-store';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
@@ -37,9 +37,50 @@ import { ProductivityScore } from '@/components/insights/ProductivityScore';
 export default function Analytics() {
   const { metrics, timeDistribution, loading, isSyncing } = useAnalyticsData();
   const { events } = useCalendarEvents();
-  const { selectedTimeRange, setTimeRange, currentMetrics } = useAnalyticsStore();
+  const { selectedTimeRange, setTimeRange } = useAnalyticsStore();
   const [activeTab, setActiveTab] = useState('overview');
   const navigate = useNavigate();
+
+  // Derive AnalyticsMetrics from ProductivityMetrics for chart components
+  const chartMetrics = useMemo(() => {
+    if (!metrics) return null;
+    
+    const { thisWeek } = metrics;
+    const totalTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.totalEventTime, 0);
+    const focusTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0);
+    const meetingTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.meetingTimeMinutes, 0);
+    
+    // Count events by category (derived from title keywords)
+    const eventsByCategory: Record<string, number> = {};
+    events.forEach(event => {
+      const text = `${event.title} ${event.description}`.toLowerCase();
+      let category = 'other';
+      
+      if (text.includes('work') || text.includes('meeting')) category = 'work';
+      else if (text.includes('personal') || text.includes('home')) category = 'personal';
+      else if (text.includes('health') || text.includes('exercise') || text.includes('gym')) category = 'health';
+      else if (text.includes('learn') || text.includes('study') || text.includes('course')) category = 'learning';
+      else if (text.includes('social') || text.includes('friend')) category = 'social';
+      else if (text.includes('entertainment') || text.includes('fun')) category = 'entertainment';
+      
+      eventsByCategory[category] = (eventsByCategory[category] || 0) + 1;
+    });
+
+    return {
+      totalEvents: thisWeek.totalEvents,
+      completedEvents: thisWeek.tasksCompleted,
+      totalTime,
+      eventsByCategory,
+      eventsByColor: {},
+      timeByCategory: {},
+      completionRate: thisWeek.totalEvents > 0 ? (thisWeek.tasksCompleted / thisWeek.totalEvents) * 100 : 0,
+      averageEventDuration: thisWeek.averageEventDuration,
+      pomodoroSessions: 0,
+      focusTime,
+      meetingTime,
+      productivityScore: 0,
+    };
+  }, [metrics, events]);
 
   // Handle export
   const handleExport = (format: 'csv' | 'json') => {
@@ -352,13 +393,13 @@ export default function Analytics() {
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <TimeChart data={thisWeek.dailyBreakdown} type="area" />
-            <TimeDistributionChart metrics={currentMetrics} />
+            {chartMetrics && <TimeDistributionChart metrics={chartMetrics} />}
           </div>
 
           <ProductivityHeatmap data={thisWeek.dailyBreakdown} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CategoryBreakdown metrics={currentMetrics} events={events} />
+            {chartMetrics && <CategoryBreakdown metrics={chartMetrics} events={events} />}
             <WeeklySummary data={thisWeek.dailyBreakdown} />
           </div>
 

@@ -131,10 +131,13 @@ service cloud.firestore {
 
     // Sidebar Pages (for multi-page sidebar system)
     match /sidebar_pages/{pageId} {
-      allow read, delete: if isOwner(resource.data.userId);
+      // For list queries, we need to allow read if the query filters by userId
+      allow read: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid);
+      allow delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner()
         && isValidString('title', 1, 100)
-        && request.resource.data.keys().hasAll(['userId', 'title', 'icon', 'modules', 'createdAt']);
+        && request.resource.data.keys().hasAll(['userId', 'title', 'icon', 'modules']);
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
         && isValidString('title', 1, 100)

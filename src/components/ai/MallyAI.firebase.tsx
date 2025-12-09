@@ -314,62 +314,131 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     }
   }, [initialPrompt, isOpen]);
 
-  // Text-to-Speech function with high-quality English voice
+  // Text-to-Speech function with high-quality, fluent English voice
   const speak = (text: string) => {
     if (isMuted || !window.speechSynthesis) return;
 
     // Cancel any current speech
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Preprocess text for more natural speech
+    const processTextForSpeech = (input: string): string => {
+      return input
+        // Remove markdown formatting
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1')
+        .replace(/#{1,6}\s/g, '')
+        // Convert bullet points to natural pauses
+        .replace(/^[-•]\s*/gm, '... ')
+        .replace(/^\d+\.\s*/gm, '... ')
+        // Add natural pauses for punctuation
+        .replace(/([.!?])\s+/g, '$1 ... ')
+        .replace(/,\s+/g, ', ')
+        // Handle common abbreviations for natural speech
+        .replace(/\be\.g\./gi, 'for example')
+        .replace(/\bi\.e\./gi, 'that is')
+        .replace(/\betc\./gi, 'and so on')
+        .replace(/\bvs\./gi, 'versus')
+        // Clean up extra spaces
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const processedText = processTextForSpeech(text);
+    const utterance = new SpeechSynthesisUtterance(processedText);
     
     // Get available voices
     const voices = window.speechSynthesis.getVoices();
     
-    // Priority order for natural-sounding English voices
+    // Priority order for most natural, fluent English voices
+    // These are ranked by quality and naturalness
     const preferredVoiceNames = [
+      // Google's neural/natural voices (highest quality)
       'Google UK English Female',
+      'Google US English Female',
       'Google US English',
-      'Microsoft Zira',
+      // Microsoft neural voices (very natural)
+      'Microsoft Jenny Online (Natural)',
+      'Microsoft Aria Online (Natural)',
       'Microsoft Jenny',
+      'Microsoft Aria',
+      'Microsoft Zira Desktop',
+      'Microsoft Zira',
+      // Apple high-quality voices
       'Samantha',
       'Karen',
-      'Daniel',
+      'Moira',
+      'Tessa',
+      // Other quality English voices
       'Google UK English Male',
+      'Daniel',
       'Alex',
       'Victoria',
-      'Moira'
+      'Fiona',
+      'Veena'
     ];
     
     // Find the best available voice
-    let selectedVoice = null;
+    let selectedVoice: SpeechSynthesisVoice | null = null;
     
-    // First try to find a preferred voice
+    // First try exact match for preferred voices
     for (const name of preferredVoiceNames) {
-      selectedVoice = voices.find(v => v.name.includes(name));
+      selectedVoice = voices.find(v => v.name === name) || null;
       if (selectedVoice) break;
     }
     
-    // Fallback: find any English voice
+    // Then try partial match for preferred voices
+    if (!selectedVoice) {
+      for (const name of preferredVoiceNames) {
+        selectedVoice = voices.find(v => v.name.toLowerCase().includes(name.toLowerCase())) || null;
+        if (selectedVoice) break;
+      }
+    }
+    
+    // Fallback: find any high-quality English voice (prefer Female for assistant)
     if (!selectedVoice) {
       selectedVoice = voices.find(v => 
         v.lang.startsWith('en-') && 
-        (v.name.includes('Female') || v.name.includes('Google') || v.name.includes('Microsoft'))
-      );
+        v.localService === false && // Cloud/neural voices are usually non-local
+        (v.name.toLowerCase().includes('female') || 
+         v.name.toLowerCase().includes('natural') ||
+         v.name.toLowerCase().includes('neural'))
+      ) || null;
     }
     
-    // Last resort: any English voice
+    // Fallback: any Google or Microsoft English voice
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang.startsWith('en-'));
+      selectedVoice = voices.find(v => 
+        v.lang.startsWith('en-') && 
+        (v.name.includes('Google') || v.name.includes('Microsoft'))
+      ) || null;
+    }
+    
+    // Last resort: any English voice, preferring US/UK
+    if (!selectedVoice) {
+      selectedVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en-GB') || 
+                      voices.find(v => v.lang.startsWith('en-')) || null;
     }
     
     if (selectedVoice) {
       utterance.voice = selectedVoice;
+      console.log('Using voice:', selectedVoice.name, selectedVoice.lang);
     }
 
-    utterance.rate = 0.95; // Slightly slower for clarity
-    utterance.pitch = 1.0;
+    // Optimize speech parameters for natural, fluent speech
+    utterance.rate = 0.92; // Slightly slower for clarity and naturalness
+    utterance.pitch = 1.0; // Natural pitch
     utterance.volume = 1.0;
+
+    // Handle speech events for better UX
+    utterance.onstart = () => {
+      console.log('Speech started');
+    };
+    
+    utterance.onerror = (event) => {
+      console.error('Speech error:', event.error);
+    };
 
     window.speechSynthesis.speak(utterance);
   };
@@ -534,7 +603,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       logger.debug('MallyAI', 'Processing user message', {
         messageLength: textToSend.length,
         userId: user.uid,
-        hasPendingEvent: !!pendingEvent
+        hasPendingAction: !!pendingAction
       });
 
       // Build conversation history (last 10 messages for context)

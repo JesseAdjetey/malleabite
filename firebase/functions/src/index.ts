@@ -140,7 +140,15 @@ function getFallbackResponse(message: string) {
  */
 export const processAIRequest = onRequest(
   { 
-    cors: ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:3000', 'https://malleabite-97d35.web.app', 'https://malleabite-97d35.firebaseapp.com'],
+    cors: [
+      'http://localhost:8080', 
+      'http://localhost:5173', 
+      'http://localhost:3000', 
+      'https://malleabite-97d35.web.app', 
+      'https://malleabite-97d35.firebaseapp.com',
+      'https://malleabite.vercel.app',
+      /\.vercel\.app$/  // Allow all Vercel preview deployments
+    ],
     region: 'us-central1',
     secrets: [geminiApiKey]
   }, 

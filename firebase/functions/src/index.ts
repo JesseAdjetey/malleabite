@@ -223,6 +223,7 @@ export const processAIRequest = onRequest(
       let eventsContext = 'No upcoming events scheduled.';
       let todosContext = 'No todos.';
       let eisenhowerContext = 'No priority items.';
+      let alarmsContext = 'No alarms set.';
       
       // Fetch events
       try {
@@ -272,6 +273,28 @@ export const processAIRequest = onRequest(
         console.warn('Could not fetch Eisenhower items:', dbError);
       }
 
+      // Fetch alarms
+      try {
+        const alarmsSnapshot = await db.collection('alarms')
+          .where('userId', '==', userId)
+          .where('enabled', '==', true)
+          .limit(20)
+          .get();
+
+        const alarms: any[] = [];
+        alarmsSnapshot.forEach(doc => alarms.push({ id: doc.id, ...doc.data() }));
+        if (alarms.length > 0) {
+          alarmsContext = alarms.map(a => {
+            const time = a.time?.toDate?.() || (a.time ? new Date(a.time) : null);
+            const linkedInfo = a.linkedEventId ? ` [Linked to Event ${a.linkedEventId}]` : 
+                             a.linkedTodoId ? ` [Linked to Todo ${a.linkedTodoId}]` : '';
+            return `- [ID: ${a.id}] "${a.title}": ${time?.toLocaleString() || 'Unknown'}${linkedInfo}`;
+          }).join('\n');
+        }
+      } catch (dbError) {
+        console.warn('Could not fetch alarms:', dbError);
+      }
+
       // Build conversation history string
       const conversationHistory = clientContext?.conversationHistory || [];
       const historyString = conversationHistory.length > 0
@@ -287,10 +310,19 @@ Current Date/Time: ${clientContext?.currentTime || new Date().toISOString()}
 User Timezone: ${clientContext?.timeZone || 'UTC'}
 
 YOUR CAPABILITIES:
-1. CALENDAR EVENTS: Create, update, delete calendar events
+1. CALENDAR EVENTS: Create, update, delete calendar events (including recurring events)
 2. TODO LIST: Add, complete, delete todos
 3. EISENHOWER MATRIX: Add, update, delete priority items (4 quadrants: urgent_important, not_urgent_important, urgent_not_important, not_urgent_not_important)
-4. QUERY: Answer questions about the user's schedule, todos, or priorities
+4. ALARMS: Create, update, delete, link alarms to events or todos
+5. RECURRING EVENTS: Create events that repeat daily, weekly, monthly, or yearly
+6. QUERY: Answer questions about the user's schedule, todos, priorities, or alarms
+
+RECURRING EVENT PATTERNS:
+- Daily: "every day", "daily"
+- Weekly: "every week", "weekly", can specify days like "every Monday and Wednesday"
+- Monthly: "every month", "monthly", can specify day like "15th of every month"
+- Yearly: "every year", "annually", like "every January 1st"
+- Custom intervals: "every 2 weeks", "every 3 days"
 
 USER'S CURRENT DATA:
 
@@ -302,6 +334,9 @@ ${todosContext}
 
 === EISENHOWER MATRIX (Priority Items) ===
 ${eisenhowerContext}
+
+=== ALARMS ===
+${alarmsContext}
 
 === PREVIOUS CONVERSATION ===
 ${historyString}
@@ -317,20 +352,21 @@ Return a JSON object with this EXACT structure (no markdown, just raw JSON):
 {
   "response": "Your friendly response to the user",
   "actionRequired": true or false,
-  "intent": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower" | "query" | "confirmation" | "general",
+  "intent": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower" | "create_alarm" | "update_alarm" | "delete_alarm" | "link_alarm" | "query" | "confirmation" | "general",
   "action": {
-    "type": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower",
+    "type": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower" | "create_alarm" | "update_alarm" | "delete_alarm" | "link_alarm",
     "data": {
       // For events: { title, start, end, description }
       // For update/delete events: { eventId, title?, start?, end? }
       // For todos: { text } or { todoId }
       // For eisenhower: { text, quadrant } or { itemId, quadrant? }
+      // For alarms: { title, time, linkedEventId?, linkedTodoId? }
     }
   }
 }
 
 ACTION DATA FORMATS:
-- create_event: { title: string, start: ISO datetime, end: ISO datetime, description?: string }
+- create_event: { title: string, start: ISO datetime, end: ISO datetime, description?: string, isRecurring?: boolean, recurrenceRule?: { frequency: "daily" | "weekly" | "monthly" | "yearly", interval?: number, daysOfWeek?: number[], dayOfMonth?: number, monthOfYear?: number, endDate?: ISO date, count?: number } }
 - update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime }
 - delete_event: { eventId: string }
 - create_todo: { text: string }
@@ -339,6 +375,19 @@ ACTION DATA FORMATS:
 - create_eisenhower: { text: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
 - update_eisenhower: { itemId: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
 - delete_eisenhower: { itemId: string }
+- create_alarm: { title: string, time: ISO datetime, linkedEventId?: string, linkedTodoId?: string }
+- update_alarm: { alarmId: string, title?: string, time?: ISO datetime }
+- delete_alarm: { alarmId: string }
+- link_alarm: { alarmId: string, linkedEventId?: string, linkedTodoId?: string }
+
+RECURRENCE RULE EXAMPLES:
+- Daily: { frequency: "daily", interval: 1 }
+- Every 2 days: { frequency: "daily", interval: 2 }
+- Weekly on Mon/Wed/Fri: { frequency: "weekly", daysOfWeek: [1, 3, 5] }
+- Monthly on 15th: { frequency: "monthly", dayOfMonth: 15 }
+- Yearly on Jan 1st: { frequency: "yearly", monthOfYear: 0, dayOfMonth: 1 }
+- With end date: Add "endDate": "2025-12-31"
+- With occurrence count: Add "count": 10
 
 QUADRANT MEANINGS:
 - urgent_important = Do First (crisis, deadlines)

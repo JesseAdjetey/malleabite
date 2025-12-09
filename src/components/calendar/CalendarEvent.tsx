@@ -6,7 +6,7 @@ import EventIndicators from "./event-components/EventIndicators";
 import EventLockToggle from "./event-components/EventLockToggle";
 import DragHandle from "./event-components/DragHandle";
 import { CalendarEventType } from "@/lib/stores/types";
-import { CheckSquare, ListTodo } from "lucide-react";
+import { CheckSquare, ListTodo, Repeat } from "lucide-react";
 
 interface CalendarEventProps {
   event: CalendarEventType;
@@ -50,6 +50,9 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
 
   // Whether this is a todo-related event
   const isTodoEvent = Boolean(event.isTodo || event.todoId || hasTodo);
+  
+  // Whether this is a recurring event
+  const isRecurring = Boolean(event.isRecurring || event.recurrenceParentId);
 
   return (
     <div
@@ -75,6 +78,13 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
 
         {/* Drag Handle (only shown if not locked) */}
         {!isLocked && <DragHandle />}
+        
+        {/* Recurring indicator at top right */}
+        {isRecurring && (
+          <div className="absolute top-0 right-0 bg-white/20 rounded-full p-1 m-0.5">
+            <Repeat size={10} className="text-white" />
+          </div>
+        )}
 
         {/* Event Title */}
         <div className="font-medium">{event.title}</div>

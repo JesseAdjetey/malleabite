@@ -22,6 +22,7 @@ import { CalendarEventType } from "@/lib/stores/types";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { useTodos } from "@/hooks/use-todos";
 import { useEisenhower } from "@/hooks/use-eisenhower";
+import { useAlarms } from "@/hooks/use-alarms";
 import { shouldUseFirebase, logMigrationStatus } from "@/lib/migration-flags";
 import { logger } from "@/lib/logger";
 import { errorHandler } from "@/lib/error-handler";
@@ -74,6 +75,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const { fetchEvents, addEvent, removeEvent, updateEvent, events } = useCalendarEvents();
   const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
+  const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo, alarms } = useAlarms();
 
   // Track pending action for confirmation
   const [pendingAction, setPendingAction] = useState<any>(null);
@@ -218,6 +220,73 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           await removeEisenhowerItem(data.itemId);
           toast.success('Priority item deleted!');
           return true;
+        }
+
+        case 'create_alarm': {
+          if (!data.title || !data.time) {
+            toast.error('Missing alarm title or time');
+            return false;
+          }
+          const result = await addAlarm(data.title, data.time, {
+            linkedEventId: data.linkedEventId,
+            linkedTodoId: data.linkedTodoId,
+            repeatDays: data.repeatDays || []
+          });
+          if (result.success) {
+            toast.success(`Alarm "${data.title}" created!`);
+            return true;
+          }
+          return false;
+        }
+
+        case 'update_alarm': {
+          if (!data.alarmId) {
+            toast.error('No alarm ID provided');
+            return false;
+          }
+          const updates: any = {};
+          if (data.title) updates.title = data.title;
+          if (data.time) updates.time = data.time;
+          const result = await updateAlarm(data.alarmId, updates);
+          if (result.success) {
+            toast.success('Alarm updated!');
+            return true;
+          }
+          return false;
+        }
+
+        case 'delete_alarm': {
+          if (!data.alarmId) {
+            toast.error('No alarm ID provided');
+            return false;
+          }
+          const result = await deleteAlarm(data.alarmId);
+          if (result.success) {
+            toast.success('Alarm deleted!');
+            return true;
+          }
+          return false;
+        }
+
+        case 'link_alarm': {
+          if (!data.alarmId) {
+            toast.error('No alarm ID provided');
+            return false;
+          }
+          if (data.linkedEventId) {
+            const result = await linkToEvent(data.alarmId, data.linkedEventId);
+            if (result.success) {
+              toast.success('Alarm linked to event!');
+              return true;
+            }
+          } else if (data.linkedTodoId) {
+            const result = await linkToTodo(data.alarmId, data.linkedTodoId);
+            if (result.success) {
+              toast.success('Alarm linked to todo!');
+              return true;
+            }
+          }
+          return false;
         }
 
         default:

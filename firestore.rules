@@ -122,9 +122,22 @@ service cloud.firestore {
     match /alarms/{alarmId} {
       allow read, delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner()
-        && request.resource.data.alarmTime is timestamp;
+        && request.resource.data.alarmTime is timestamp
+        && request.resource.data.keys().hasAll(['userId', 'alarmTime']);
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
+
+    // Sidebar Pages (for multi-page sidebar system)
+    match /sidebar_pages/{pageId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('title', 1, 100)
+        && request.resource.data.keys().hasAll(['userId', 'title', 'icon', 'modules', 'createdAt']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isValidString('title', 1, 100)
         && isNotRateLimited();
     }
 

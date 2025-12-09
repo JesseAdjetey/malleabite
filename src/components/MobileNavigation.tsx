@@ -14,8 +14,8 @@ const MobileNavigation = () => {
   }
 
   const navItems = [
-    { icon: Home, label: 'Home', path: '/' },
-    { icon: Calendar, label: 'Calendar', path: '/calendar' },
+    { icon: Calendar, label: 'Calendar', path: '/' },
+    { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Zap, label: 'Quick', path: '/quick-schedule' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: Settings, label: 'Settings', path: '/settings' },

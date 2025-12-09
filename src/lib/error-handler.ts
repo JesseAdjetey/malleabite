@@ -69,9 +69,9 @@ class ErrorHandler {
   /**
    * Handle Firestore errors
    */
-  handleFirestoreError(error: any, operation: string): void {
+  handleFirestoreError(error: any, operation?: string): void {
     const appError: AppError = {
-      message: `Failed to ${operation}. Please try again.`,
+      message: operation ? `Failed to ${operation}. Please try again.` : 'Database operation failed. Please try again.',
       code: error.code,
       severity: ErrorSeverity.ERROR,
       error: error,
@@ -91,6 +91,23 @@ class ErrorHandler {
       severity: ErrorSeverity.WARNING,
       error: error,
       context: { type: 'network' }
+    };
+
+    this.handle(appError);
+  }
+
+  /**
+   * Handle generic errors with custom message and context
+   * @param error - The error object
+   * @param message - User-friendly message to display
+   * @param source - The source/component where the error occurred
+   */
+  handleError(error: Error, message: string, source?: string): void {
+    const appError: AppError = {
+      message: message,
+      severity: ErrorSeverity.ERROR,
+      error: error,
+      context: { type: 'generic', source }
     };
 
     this.handle(appError);

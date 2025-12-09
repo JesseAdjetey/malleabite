@@ -56,6 +56,11 @@ const SideBar = () => {
 
   return (
     <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20">
+      {/* New Page Creator - at top */}
+      <div className="p-3 border-b border-white/10">
+        <NewPageCreator onCreatePage={handleCreateNewPage} />
+      </div>
+
       {/* Header with page title and navigation */}
       <PageHeader
         title={pages[currentPageIndex]?.title || 'Untitled'}
@@ -81,9 +86,6 @@ const SideBar = () => {
           onReorderModules={handleReorderModules}
           pageIndex={currentPageIndex}
         />
-
-        {/* New Page Creator */}
-        <NewPageCreator onCreatePage={handleCreateNewPage} />
       </div>
     </div>
   );

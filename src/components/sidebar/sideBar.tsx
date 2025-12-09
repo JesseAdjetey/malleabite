@@ -5,7 +5,6 @@ import ModuleSelector from '../modules/ModuleSelector';
 import PageHeader from './PageHeader';
 import ModuleGrid from './ModuleGrid';
 import NewPageCreator from './NewPageCreator';
-import { PageSwitcher } from './PageSwitcher';
 
 const SideBar = () => {
   const {
@@ -57,11 +56,6 @@ const SideBar = () => {
 
   return (
     <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20">
-      {/* Firebase-Based Page Switcher */}
-      <div className="p-3 border-b border-white/10">
-        <PageSwitcher />
-      </div>
-      
       {/* Header with page title and navigation */}
       <PageHeader
         title={pages[currentPageIndex]?.title || 'Untitled'}

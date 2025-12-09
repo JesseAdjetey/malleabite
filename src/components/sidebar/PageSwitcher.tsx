@@ -4,10 +4,6 @@ import { useSidebarPages } from '@/hooks/use-sidebar-pages';
 import {
   Home,
   Plus,
-  MoreVertical,
-  Edit,
-  Trash2,
-  ChevronDown,
   Folder,
   Briefcase,
   Star,
@@ -42,7 +38,6 @@ export const PageSwitcher: React.FC = () => {
     deletePage
   } = useSidebarPages();
 
-  const [showDropdown, setShowDropdown] = useState(false);
   const [showNewPageDialog, setShowNewPageDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
@@ -96,120 +91,20 @@ export const PageSwitcher: React.FC = () => {
     setNewPageTitle(page.title);
     setNewPageIcon(page.icon || 'folder');
     setShowEditDialog(true);
-    setShowDropdown(false);
   };
-
-  const IconComponent = activePage?.icon 
-    ? ICON_MAP[activePage.icon] || Folder 
-    : Folder;
 
   return (
     <div className="relative">
-      {/* Active Page Button */}
+      {/* New Page Button - Simple button that opens create dialog */}
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
-        className="flex items-center justify-between w-full glass-input hover:border-purple-400/50 transition-all"
+        onClick={() => setShowNewPageDialog(true)}
+        className="flex items-center justify-center gap-2 w-full glass-input hover:border-purple-400/50 hover:bg-purple-500/10 transition-all"
       >
-        <div className="flex items-center gap-2">
-          <IconComponent className="w-4 h-4 text-purple-400" />
-          <span className="font-medium text-foreground">
-            {activePage?.title || 'Main'}
-          </span>
-        </div>
-        <ChevronDown
-          className={`w-4 h-4 text-muted-foreground transition-transform ${
-            showDropdown ? 'rotate-180' : ''
-          }`}
-        />
+        <Plus className="w-4 h-4 text-purple-400" />
+        <span className="font-medium text-purple-400">
+          New Page
+        </span>
       </button>
-
-      {/* Dropdown Menu */}
-      {showDropdown && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setShowDropdown(false)}
-          />
-
-          {/* Dropdown Content */}
-          <div className="absolute top-full left-0 right-0 mt-2 glass-card z-50 max-h-96 overflow-y-auto">
-            {/* Page List */}
-            <div className="py-1">
-              {pages.map((page) => {
-                const PageIcon = page.icon ? ICON_MAP[page.icon] || Folder : Folder;
-                const isActive = page.id === activePageId;
-
-                return (
-                  <div
-                    key={page.id}
-                    className={`group flex items-center justify-between px-3 py-2 hover:bg-purple-500/10 transition-colors ${
-                      isActive ? 'bg-purple-500/20 border-l-2 border-purple-500' : ''
-                    }`}
-                  >
-                    <button
-                      onClick={() => {
-                        setActivePageId(page.id!);
-                        setShowDropdown(false);
-                      }}
-                      className="flex items-center gap-2 flex-1"
-                    >
-                      <PageIcon className={`w-4 h-4 ${isActive ? 'text-purple-400' : 'text-muted-foreground'}`} />
-                      <span className={`text-sm ${isActive ? 'text-purple-400 font-medium' : 'text-foreground'}`}>
-                        {page.title}
-                      </span>
-                      {page.isDefault && (
-                        <span className="text-xs text-muted-foreground">(Default)</span>
-                      )}
-                    </button>
-
-                    {/* Page Actions */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditPage(page.id!);
-                        }}
-                        className="p-1 hover:bg-purple-500/20 rounded"
-                        title="Edit page"
-                      >
-                        <Edit className="w-3 h-3 text-muted-foreground" />
-                      </button>
-                      {!page.isDefault && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeletePage(page.id!);
-                          }}
-                          className="p-1 hover:bg-red-500/20 rounded"
-                          title="Delete page"
-                        >
-                          <Trash2 className="w-3 h-3 text-red-400" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-white/10" />
-
-            {/* New Page Button */}
-            <button
-              onClick={() => {
-                setShowNewPageDialog(true);
-                setShowDropdown(false);
-              }}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-purple-400 hover:bg-purple-500/10 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Page</span>
-            </button>
-          </div>
-        </>
-      )}
 
       {/* New Page Dialog */}
       {showNewPageDialog && (

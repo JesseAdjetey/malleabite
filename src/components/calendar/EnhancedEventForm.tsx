@@ -9,7 +9,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, MapPin, Video, Globe, Sun } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,6 +28,7 @@ import { useFocusTimeCheck } from './FocusTimeBlocks';
 import { Shield } from 'lucide-react';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
+import { useCalendars } from '@/hooks/use-calendars';
 
 interface EnhancedEventFormProps {
   event?: CalendarEventType | null;
@@ -76,9 +77,18 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [hasReminder, setHasReminder] = useState(false);
   const [participants, setParticipants] = useState('');
   const [category, setCategory] = useState<import('@/lib/algorithms/event-classifier').EventCategory | undefined>();
+  
+  // NEW: Google Calendar-style fields
+  const [location, setLocation] = useState('');
+  const [isAllDay, setIsAllDay] = useState(false);
+  const [meetingUrl, setMeetingUrl] = useState('');
+  const [meetingProvider, setMeetingProvider] = useState<'zoom' | 'google_meet' | 'teams' | 'other' | ''>('');
+  const [selectedCalendarId, setSelectedCalendarId] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { events } = useCalendarEvents();
+  const { calendars } = useCalendars();
   const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
   
@@ -157,6 +167,14 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       if (eventData.participants && Array.isArray(eventData.participants)) {
         setParticipants(eventData.participants.join(', '));
       }
+      
+      // NEW: Load Google Calendar-style fields
+      setLocation(eventData.location || '');
+      setIsAllDay(eventData.isAllDay || false);
+      setMeetingUrl(eventData.meetingUrl || '');
+      setMeetingProvider(eventData.meetingProvider || '');
+      setSelectedCalendarId(eventData.calendarId || '');
+      setVisibility(eventData.visibility === 'private' ? 'private' : 'public');
     }
   }, [eventData]);
 
@@ -211,7 +229,14 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       color: selectedColor,
       participants: participantsArray,
       timeStart: startTime,
-      timeEnd: endTime
+      timeEnd: endTime,
+      // NEW: Google Calendar-style fields
+      location: location || undefined,
+      isAllDay,
+      meetingUrl: meetingUrl || undefined,
+      meetingProvider: meetingProvider || undefined,
+      calendarId: selectedCalendarId || undefined,
+      visibility: visibility,
     };
 
     if (onUpdateEvent) {
@@ -357,6 +382,120 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        {/* All-Day Event Toggle */}
+        <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">
+          <div className="flex items-center space-x-2">
+            <Sun className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="isAllDay">All-day event</Label>
+          </div>
+          <Switch
+            id="isAllDay"
+            checked={isAllDay}
+            onCheckedChange={(checked) => {
+              setIsAllDay(checked);
+              if (checked) {
+                setStartTime('00:00');
+                setEndTime('23:59');
+              }
+            }}
+          />
+        </div>
+
+        {/* Location Input */}
+        <div className="mb-4">
+          <Label htmlFor="location" className="mb-1 block">Location</Label>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              id="location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Add location or address"
+              className="pl-9 transition-all duration-200 focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+        </div>
+
+        {/* Video Conferencing */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label htmlFor="meetingProvider" className="mb-1 block">Video Call</Label>
+            <Select
+              value={meetingProvider}
+              onValueChange={(v) => setMeetingProvider(v as any)}
+            >
+              <SelectTrigger className="w-full">
+                <div className="flex items-center">
+                  <Video className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Add video conferencing" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                <SelectItem value="zoom">Zoom</SelectItem>
+                <SelectItem value="google_meet">Google Meet</SelectItem>
+                <SelectItem value="teams">Microsoft Teams</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {meetingProvider && (
+            <div>
+              <Label htmlFor="meetingUrl" className="mb-1 block">Meeting URL</Label>
+              <Input
+                type="url"
+                id="meetingUrl"
+                value={meetingUrl}
+                onChange={(e) => setMeetingUrl(e.target.value)}
+                placeholder="https://..."
+                className="transition-all duration-200"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Calendar Selection */}
+        {calendars.length > 0 && (
+          <div className="mb-4">
+            <Label htmlFor="calendar" className="mb-1 block">Calendar</Label>
+            <Select
+              value={selectedCalendarId}
+              onValueChange={setSelectedCalendarId}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select calendar" />
+              </SelectTrigger>
+              <SelectContent>
+                {calendars.filter(c => c.isVisible).map((cal) => (
+                  <SelectItem key={cal.id} value={cal.id}>
+                    <div className="flex items-center">
+                      <div 
+                        className="h-3 w-3 rounded-full mr-2" 
+                        style={{ backgroundColor: cal.color }}
+                      />
+                      {cal.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Visibility */}
+        <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">
+          <div className="flex items-center space-x-2">
+            <Globe className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="visibility">Public event</Label>
+          </div>
+          <Switch
+            id="visibility"
+            checked={visibility === 'public'}
+            onCheckedChange={(checked) => setVisibility(checked ? 'public' : 'private')}
+          />
         </div>
 
         <div className="mb-4">

@@ -47,7 +47,58 @@ export type CalendarEventType = {
   recurrenceRule?: RecurrenceRule;
   recurrenceParentId?: string; // For instances of recurring events
   recurrenceExceptions?: string[]; // ISO dates to skip
+  
+  // NEW: Google Calendar-style fields
+  calendarId?: string; // Which calendar this event belongs to
+  isAllDay?: boolean; // All-day event flag
+  location?: string; // Event location (address, room, etc.)
+  meetingUrl?: string; // Video conferencing URL (Zoom, Meet, Teams)
+  meetingProvider?: 'zoom' | 'google_meet' | 'teams' | 'other';
+  
+  // Time zone support
+  timeZone?: string; // IANA time zone (e.g., 'America/New_York')
+  
+  // Status and visibility
+  status?: 'confirmed' | 'tentative' | 'cancelled';
+  visibility?: 'public' | 'private' | 'confidential';
+  
+  // Guest/attendee management
+  attendees?: EventAttendee[];
+  guestsCanModify?: boolean;
+  guestsCanInviteOthers?: boolean;
+  guestsCanSeeOtherGuests?: boolean;
+  
+  // Reminder settings per event
+  reminders?: EventReminder[];
+  useDefaultReminders?: boolean;
+  
+  // Event metadata
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  etag?: string; // For sync conflict detection
+  
+  // Focus time / Out of office
+  eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
+  focusTimeDeclineMessage?: string;
 };
+
+// Event attendee type
+export interface EventAttendee {
+  email: string;
+  displayName?: string;
+  responseStatus: 'needsAction' | 'declined' | 'tentative' | 'accepted';
+  optional?: boolean;
+  organizer?: boolean;
+  self?: boolean;
+  comment?: string;
+}
+
+// Event reminder type
+export interface EventReminder {
+  method: 'email' | 'popup' | 'notification';
+  minutes: number; // Minutes before event
+}
 
 export interface RecurrenceRule {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';

@@ -1,7 +1,7 @@
 
 // src/components/month-view.tsx
 
-import React, { Fragment, useState, useEffect } from "react";
+import React, { Fragment, useState, useEffect, useMemo } from "react";
 import MonthViewBox from "@/components/month-view-box";
 import { useDateStore, useEventStore } from "@/lib/store";
 import AddEventButton from "@/components/calendar/AddEventButton";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
@@ -73,11 +74,38 @@ const MonthView = () => {
     }
   }, [pendingDaySelection]);
 
+  // Get month date range for recurring event expansion
+  const monthStart = twoDMonthArray[0]?.[0]?.startOf('day').toDate() || new Date();
+  const monthEnd = twoDMonthArray[twoDMonthArray.length - 1]?.[6]?.endOf('day').toDate() || new Date();
+
+  // Expand recurring events into instances for the current month view
+  const expandedEvents = useMemo(() => {
+    const allInstances: CalendarEventType[] = [];
+    
+    events.forEach(event => {
+      if (event.isRecurring && event.recurrenceRule) {
+        const instances = generateRecurringInstances(event, monthStart, monthEnd);
+        allInstances.push(...instances);
+      } else {
+        allInstances.push(event);
+      }
+    });
+    
+    return allInstances;
+  }, [events, monthStart.getTime(), monthEnd.getTime()]);
+
   const getEventsForDay = (day: any) => {
     if (!day) return [];
 
     const dayStr = day.format("YYYY-MM-DD");
-    return events.filter((event) => event.date === dayStr);
+    return expandedEvents.filter((event) => {
+      if (event.date === dayStr) return true;
+      if (event.startsAt) {
+        const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
+        return eventDate === dayStr;
+      }
+      return false;
+    });
   };
 
   const handleDayClick = (day: any) => {

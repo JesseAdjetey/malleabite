@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getWeekDays } from "@/lib/getTime";
 import { useDateStore, useEventStore } from "@/lib/store";
 import dayjs from "dayjs";
@@ -22,6 +22,7 @@ import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDi
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
+import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -89,9 +90,38 @@ const WeekView = () => {
     }
   }, [pendingTimeSelection]);
 
+  // Expand recurring events into instances for the current week view
+  const weekDays = getWeekDays(userSelectedDate);
+  const weekStart = weekDays[0].startOf('day').toDate();
+  const weekEnd = weekDays[weekDays.length - 1].endOf('day').toDate();
+
+  const expandedEvents = useMemo(() => {
+    const allInstances: CalendarEventType[] = [];
+    
+    events.forEach(event => {
+      if (event.isRecurring && event.recurrenceRule) {
+        // Generate instances for this week
+        const instances = generateRecurringInstances(event, weekStart, weekEnd);
+        allInstances.push(...instances);
+      } else {
+        allInstances.push(event);
+      }
+    });
+    
+    return allInstances;
+  }, [events, weekStart.getTime(), weekEnd.getTime()]);
+
   const getEventsForDay = (day: dayjs.Dayjs) => {
     const dayStr = day.format("YYYY-MM-DD");
-    return events.filter((event) => event.date === dayStr);
+    return expandedEvents.filter((event) => {
+      // Check both date field and startsAt
+      if (event.date === dayStr) return true;
+      if (event.startsAt) {
+        const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
+        return eventDate === dayStr;
+      }
+      return false;
+    });
   };
 
   const handleTimeSlotClick = (day: dayjs.Dayjs, hour: dayjs.Dayjs) => {

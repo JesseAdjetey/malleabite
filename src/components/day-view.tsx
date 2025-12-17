@@ -1,6 +1,6 @@
 // src/components/day-view.tsx
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import dayjs from "dayjs";
 import { useDateStore, useEventStore } from "@/lib/store";
 import AddEventButton from "@/components/calendar/AddEventButton";
@@ -13,6 +13,7 @@ import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
+import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -72,9 +73,35 @@ const DayView = () => {
   const isToday =
     userSelectedDate.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
 
-  const dayEvents = events.filter(
-    (event) => event.date === userSelectedDate.format("YYYY-MM-DD")
-  );
+  // Get day date range for recurring event expansion
+  const dayStart = userSelectedDate.startOf('day').toDate();
+  const dayEnd = userSelectedDate.endOf('day').toDate();
+
+  // Expand recurring events into instances for the current day
+  const expandedEvents = useMemo(() => {
+    const allInstances: CalendarEventType[] = [];
+    
+    events.forEach(event => {
+      if (event.isRecurring && event.recurrenceRule) {
+        const instances = generateRecurringInstances(event, dayStart, dayEnd);
+        allInstances.push(...instances);
+      } else {
+        allInstances.push(event);
+      }
+    });
+    
+    return allInstances;
+  }, [events, dayStart.getTime(), dayEnd.getTime()]);
+
+  const dayEvents = expandedEvents.filter((event) => {
+    const dayStr = userSelectedDate.format("YYYY-MM-DD");
+    if (event.date === dayStr) return true;
+    if (event.startsAt) {
+      const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
+      return eventDate === dayStr;
+    }
+    return false;
+  });
 
   // Update to use the pending time selection approach
   const handleTimeSlotClick = (hour: dayjs.Dayjs) => {

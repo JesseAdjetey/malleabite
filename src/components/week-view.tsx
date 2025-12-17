@@ -99,8 +99,9 @@ const WeekView = () => {
       return events;
     }
     
-    const weekStart = weekDays[0].startOf('day').toDate();
-    const weekEnd = weekDays[weekDays.length - 1].endOf('day').toDate();
+    // weekDays returns { currentDate, today } objects, not dayjs directly
+    const weekStart = weekDays[0].currentDate.startOf('day').toDate();
+    const weekEnd = weekDays[weekDays.length - 1].currentDate.endOf('day').toDate();
     
     const allInstances: CalendarEventType[] = [];
     

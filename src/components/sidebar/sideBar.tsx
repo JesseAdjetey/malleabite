@@ -1,6 +1,7 @@
 
 import React, { useRef } from 'react';
-import { useSidebarStore, ModuleType } from '@/lib/store';
+import { useSidebarPages } from '@/hooks/use-sidebar-pages';
+import { ModuleType } from '@/lib/store';
 import ModuleSelector from '../modules/ModuleSelector';
 import PageHeader from './PageHeader';
 import ModuleGrid from './ModuleGrid';
@@ -9,50 +10,84 @@ import NewPageCreator from './NewPageCreator';
 const SideBar = () => {
   const {
     pages,
-    currentPageIndex,
-    setCurrentPage,
+    activePage,
+    activePageId,
+    setActivePageId,
+    createPage,
+    updatePage,
     addModule,
     removeModule,
-    updatePageTitle,
-    addPage,
-    updateModuleTitle,
-    reorderModules
-  } = useSidebarStore();
+    updateModule,
+    reorderModules,
+    loading
+  } = useSidebarPages();
 
   const sidebarContentRef = useRef<HTMLDivElement>(null);
 
+  // Find current page index for navigation
+  const currentPageIndex = pages.findIndex(p => p.id === activePageId);
+
   const handlePrevPage = () => {
     if (currentPageIndex > 0) {
-      setCurrentPage(currentPageIndex - 1);
+      setActivePageId(pages[currentPageIndex - 1].id);
     }
   };
 
   const handleNextPage = () => {
     if (currentPageIndex < pages.length - 1) {
-      setCurrentPage(currentPageIndex + 1);
+      setActivePageId(pages[currentPageIndex + 1].id);
     }
   };
 
   const handleAddModule = (moduleType: ModuleType) => {
-    addModule(currentPageIndex, moduleType);
+    if (!activePageId) return;
+    
+    let defaultTitle = '';
+    switch (moduleType) {
+      case 'todo': defaultTitle = 'To-Do List'; break;
+      case 'pomodoro': defaultTitle = 'Pomodoro'; break;
+      case 'alarms': defaultTitle = 'Reminders'; break;
+      case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
+      case 'invites': defaultTitle = 'Event Invites'; break;
+    }
+    
+    addModule(activePageId, { type: moduleType, title: defaultTitle });
   };
 
   const handleRemoveModule = (moduleIndex: number) => {
-    removeModule(currentPageIndex, moduleIndex);
+    if (!activePageId) return;
+    removeModule(activePageId, moduleIndex);
   };
 
   const handleUpdateModuleTitle = (moduleIndex: number, newTitle: string) => {
-    updateModuleTitle(currentPageIndex, moduleIndex, newTitle);
+    if (!activePageId) return;
+    updateModule(activePageId, moduleIndex, { title: newTitle });
   };
 
   const handleReorderModules = (fromIndex: number, toIndex: number) => {
-    reorderModules(currentPageIndex, fromIndex, toIndex);
+    if (!activePageId) return;
+    reorderModules(activePageId, fromIndex, toIndex);
   };
 
-  const handleCreateNewPage = (title: string) => {
-    addPage(title);
-    setCurrentPage(pages.length); // Switch to the newly added page
+  const handleCreateNewPage = async (title: string) => {
+    const result = await createPage(title);
+    if (result.success && result.pageId) {
+      setActivePageId(result.pageId);
+    }
   };
+
+  const handleUpdatePageTitle = (newTitle: string) => {
+    if (!activePageId) return;
+    updatePage(activePageId, { title: newTitle });
+  };
+
+  if (loading) {
+    return (
+      <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20 items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20">
@@ -63,8 +98,8 @@ const SideBar = () => {
 
       {/* Header with page title and navigation */}
       <PageHeader
-        title={pages[currentPageIndex]?.title || 'Untitled'}
-        onUpdateTitle={(newTitle) => updatePageTitle(currentPageIndex, newTitle)}
+        title={activePage?.title || 'Untitled'}
+        onUpdateTitle={handleUpdatePageTitle}
         onPrevPage={handlePrevPage}
         onNextPage={handleNextPage}
         canGoToPrevPage={currentPageIndex > 0}
@@ -80,11 +115,11 @@ const SideBar = () => {
 
         {/* Module container - uses grid for two columns or flex for one column */}
         <ModuleGrid
-          modules={pages[currentPageIndex]?.modules || []}
+          modules={activePage?.modules || []}
           onRemoveModule={handleRemoveModule}
           onUpdateModuleTitle={handleUpdateModuleTitle}
           onReorderModules={handleReorderModules}
-          pageIndex={currentPageIndex}
+          pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
         />
       </div>
     </div>

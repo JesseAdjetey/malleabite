@@ -252,6 +252,56 @@ export function useSidebarPages() {
     }
   };
 
+  // Reorder modules in a page
+  const reorderModules = async (pageId: string, fromIndex: number, toIndex: number) => {
+    if (!user?.uid) return { success: false };
+
+    try {
+      const page = pages.find(p => p.id === pageId);
+      if (!page) return { success: false };
+
+      const modules = [...page.modules];
+      const [movedModule] = modules.splice(fromIndex, 1);
+      modules.splice(toIndex, 0, movedModule);
+      
+      await updateDoc(doc(db, 'sidebar_pages', pageId), {
+        modules,
+        updatedAt: serverTimestamp()
+      });
+      
+      return { success: true };
+    } catch (err) {
+      console.error('Error reordering modules:', err);
+      return { success: false };
+    }
+  };
+
+  // Toggle module minimized state
+  const toggleModuleMinimized = async (pageId: string, moduleIndex: number) => {
+    if (!user?.uid) return { success: false };
+
+    try {
+      const page = pages.find(p => p.id === pageId);
+      if (!page || !page.modules[moduleIndex]) return { success: false };
+
+      const updatedModules = [...page.modules];
+      updatedModules[moduleIndex] = {
+        ...updatedModules[moduleIndex],
+        minimized: !updatedModules[moduleIndex].minimized
+      };
+      
+      await updateDoc(doc(db, 'sidebar_pages', pageId), {
+        modules: updatedModules,
+        updatedAt: serverTimestamp()
+      });
+      
+      return { success: true };
+    } catch (err) {
+      console.error('Error toggling module minimized:', err);
+      return { success: false };
+    }
+  };
+
   // Get active page
   const activePage = pages.find(p => p.id === activePageId);
 
@@ -267,6 +317,8 @@ export function useSidebarPages() {
     deletePage,
     addModule,
     removeModule,
-    updateModule
+    updateModule,
+    reorderModules,
+    toggleModuleMinimized
   };
 }

@@ -73,30 +73,30 @@ export function CategorySuggestions({
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-lg">{icon}</span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm capitalize">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-lg flex-shrink-0">{icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm capitalize text-gray-900 dark:text-gray-100">
                         {suggestion.category}
                       </span>
                       <Badge
                         variant="secondary"
-                        className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}
+                        className={`text-xs px-1.5 py-0 ${getConfidenceColor(suggestion.confidence)}`}
                       >
                         {getConfidenceBadge(suggestion.confidence)}
                       </Badge>
                       {isSelected && (
-                        <Check className="h-3 w-3 text-purple-600" />
+                        <Check className="h-3 w-3 text-purple-600 dark:text-purple-400" />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
                       {suggestion.reason}
                     </p>
                   </div>
                 </div>
                 <div
-                  className="w-8 h-8 rounded-full flex-shrink-0"
+                  className="w-6 h-6 rounded-full flex-shrink-0"
                   style={{ backgroundColor: color }}
                 />
               </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarEventType } from '@/lib/stores/types';
+import { CalendarEventType, RecurrenceRule } from '@/lib/stores/types';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +9,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, MapPin, Video, Globe, Sun } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, MapPin, Video, Globe, Sun, Repeat } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -29,6 +29,7 @@ import { Shield } from 'lucide-react';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 import { useCalendars } from '@/hooks/use-calendars';
+import { RecurrenceRuleEditor } from './RecurrenceRuleEditor';
 
 interface EnhancedEventFormProps {
   event?: CalendarEventType | null;
@@ -85,6 +86,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [meetingProvider, setMeetingProvider] = useState<'zoom' | 'google_meet' | 'teams' | 'other' | ''>('');
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | undefined>(undefined);
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { events } = useCalendarEvents();
@@ -175,6 +177,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       setMeetingProvider(eventData.meetingProvider || '');
       setSelectedCalendarId(eventData.calendarId || '');
       setVisibility(eventData.visibility === 'private' ? 'private' : 'public');
+      setRecurrenceRule(eventData.recurrenceRule);
     }
   }, [eventData]);
 
@@ -237,6 +240,9 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       meetingProvider: meetingProvider || undefined,
       calendarId: selectedCalendarId || undefined,
       visibility: visibility,
+      // Recurring event fields
+      isRecurring: !!recurrenceRule,
+      recurrenceRule: recurrenceRule,
     };
 
     if (onUpdateEvent) {
@@ -495,6 +501,19 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             id="visibility"
             checked={visibility === 'public'}
             onCheckedChange={(checked) => setVisibility(checked ? 'public' : 'private')}
+          />
+        </div>
+
+        {/* Recurring Event */}
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Repeat className="h-4 w-4 text-muted-foreground" />
+            <Label>Repeat</Label>
+          </div>
+          <RecurrenceRuleEditor
+            value={recurrenceRule}
+            onChange={setRecurrenceRule}
+            startDate={selectedDate}
           />
         </div>
 

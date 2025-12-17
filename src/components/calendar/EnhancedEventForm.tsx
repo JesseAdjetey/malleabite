@@ -677,6 +677,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         <div className="flex justify-between pt-4 border-t border-border">
           {onCancel || onClose ? (
             <Button 
+              type="button"
               variant="ghost" 
               onClick={onCancel || onClose}
               className="hover:bg-secondary/80 transition-colors"
@@ -686,6 +687,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           ) : null}
           <div className="flex space-x-2">
             <Button 
+              type="button"
               variant="outline" 
               onClick={onUseAI}
               className="transition-all hover:bg-primary/20"
@@ -693,6 +695,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
               Use AI
             </Button>
             <Button 
+              type="button"
               variant="outline" 
               onClick={handleCreateTodo}
               className="transition-all hover:bg-secondary/80"
@@ -700,6 +703,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
               Create Todo
             </Button>
             <Button 
+              type="button"
               onClick={handleSubmit}
               className="transition-all hover:bg-primary/90"
             >

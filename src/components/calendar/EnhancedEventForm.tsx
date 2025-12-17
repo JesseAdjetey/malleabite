@@ -424,8 +424,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           <div>
             <Label htmlFor="meetingProvider" className="mb-1 block">Video Call</Label>
             <Select
-              value={meetingProvider}
-              onValueChange={(v) => setMeetingProvider(v as any)}
+              value={meetingProvider || 'none'}
+              onValueChange={(v) => setMeetingProvider(v === 'none' ? '' : v as any)}
             >
               <SelectTrigger className="w-full">
                 <div className="flex items-center">
@@ -434,7 +434,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
                 </div>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 <SelectItem value="zoom">Zoom</SelectItem>
                 <SelectItem value="google_meet">Google Meet</SelectItem>
                 <SelectItem value="teams">Microsoft Teams</SelectItem>
@@ -469,7 +469,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
                 <SelectValue placeholder="Select calendar" />
               </SelectTrigger>
               <SelectContent>
-                {calendars.filter(c => c.isVisible).map((cal) => (
+                {calendars.filter(c => c.isVisible && c.id).map((cal) => (
                   <SelectItem key={cal.id} value={cal.id}>
                     <div className="flex items-center">
                       <div 

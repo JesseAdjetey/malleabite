@@ -61,6 +61,49 @@ export interface CalendarEvent extends BaseDocument {
   todoId?: string;
   hasAlarm?: boolean;
   hasReminder?: boolean;
+  
+  // Google Calendar-style fields
+  location?: string;
+  meetingUrl?: string;
+  meetingProvider?: 'zoom' | 'google_meet' | 'teams' | 'other';
+  calendarId?: string;
+  isAllDay?: boolean;
+  visibility?: 'public' | 'private' | 'confidential';
+  status?: 'confirmed' | 'tentative' | 'cancelled';
+  timeZone?: string;
+  
+  // Recurring event fields
+  isRecurring?: boolean;
+  recurrenceRule?: {
+    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval?: number;
+    count?: number;
+    until?: Timestamp;
+    byDay?: string[];
+    byMonth?: number[];
+    byMonthDay?: number[];
+  };
+  recurrenceParentId?: string;
+  recurrenceExceptions?: string[];
+  
+  // Attendees
+  attendees?: Array<{
+    email: string;
+    displayName?: string;
+    responseStatus: 'needsAction' | 'declined' | 'tentative' | 'accepted';
+    optional?: boolean;
+    organizer?: boolean;
+  }>;
+  
+  // Reminders
+  reminders?: Array<{
+    method: 'email' | 'popup' | 'notification';
+    minutes: number;
+  }>;
+  useDefaultReminders?: boolean;
+  
+  // Event type
+  eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
 }
 
 export interface Todo extends BaseDocument {

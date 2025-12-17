@@ -65,7 +65,48 @@ export function useCalendarEvents() {
       todoId: firebaseEvent.todoId,
       startsAt: startDate.toISOString(),
       endsAt: endDate.toISOString(),
-      date: eventDate
+      date: eventDate,
+      
+      // Google Calendar-style fields
+      location: firebaseEvent.location || undefined,
+      meetingUrl: firebaseEvent.meetingUrl || undefined,
+      meetingProvider: firebaseEvent.meetingProvider || undefined,
+      calendarId: firebaseEvent.calendarId || undefined,
+      isAllDay: firebaseEvent.isAllDay || false,
+      visibility: firebaseEvent.visibility || 'public',
+      status: firebaseEvent.status || 'confirmed',
+      timeZone: firebaseEvent.timeZone || undefined,
+      
+      // Recurring event fields
+      isRecurring: firebaseEvent.isRecurring || false,
+      recurrenceRule: firebaseEvent.recurrenceRule ? {
+        frequency: firebaseEvent.recurrenceRule.frequency,
+        interval: firebaseEvent.recurrenceRule.interval,
+        count: firebaseEvent.recurrenceRule.count,
+        until: firebaseEvent.recurrenceRule.until ? timestampToDate(firebaseEvent.recurrenceRule.until).toISOString() : undefined,
+        byDay: firebaseEvent.recurrenceRule.byDay,
+        byMonth: firebaseEvent.recurrenceRule.byMonth,
+        byMonthDay: firebaseEvent.recurrenceRule.byMonthDay,
+      } : undefined,
+      recurrenceParentId: firebaseEvent.recurrenceParentId || undefined,
+      recurrenceExceptions: firebaseEvent.recurrenceExceptions || undefined,
+      
+      // Attendees and reminders
+      attendees: firebaseEvent.attendees?.map(a => ({
+        email: a.email,
+        displayName: a.displayName,
+        responseStatus: a.responseStatus,
+        optional: a.optional,
+        organizer: a.organizer,
+      })) || undefined,
+      reminders: firebaseEvent.reminders?.map(r => ({
+        method: r.method,
+        minutes: r.minutes,
+      })) || undefined,
+      useDefaultReminders: firebaseEvent.useDefaultReminders ?? true,
+      
+      // Event type
+      eventType: firebaseEvent.eventType || 'default',
     };
   };
 
@@ -176,7 +217,48 @@ export function useCalendarEvents() {
         isTodo: event.isTodo || false,
         hasAlarm: event.hasAlarm || false,
         hasReminder: event.hasReminder || false,
-        todoId: event.todoId
+        todoId: event.todoId,
+        
+        // Google Calendar-style fields
+        location: event.location || undefined,
+        meetingUrl: event.meetingUrl || undefined,
+        meetingProvider: event.meetingProvider || undefined,
+        calendarId: event.calendarId || undefined,
+        isAllDay: event.isAllDay || false,
+        visibility: event.visibility || 'public',
+        status: event.status || 'confirmed',
+        timeZone: event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        
+        // Recurring event fields
+        isRecurring: event.isRecurring || false,
+        recurrenceRule: event.recurrenceRule ? {
+          frequency: event.recurrenceRule.frequency,
+          interval: event.recurrenceRule.interval,
+          count: event.recurrenceRule.count,
+          until: event.recurrenceRule.until ? timestampFromDate(new Date(event.recurrenceRule.until)) : undefined,
+          byDay: event.recurrenceRule.byDay,
+          byMonth: event.recurrenceRule.byMonth,
+          byMonthDay: event.recurrenceRule.byMonthDay,
+        } : undefined,
+        recurrenceParentId: event.recurrenceParentId || undefined,
+        recurrenceExceptions: event.recurrenceExceptions || undefined,
+        
+        // Attendees and reminders
+        attendees: event.attendees?.map(a => ({
+          email: a.email,
+          displayName: a.displayName,
+          responseStatus: a.responseStatus,
+          optional: a.optional,
+          organizer: a.organizer,
+        })) || undefined,
+        reminders: event.reminders?.map(r => ({
+          method: r.method,
+          minutes: r.minutes,
+        })) || undefined,
+        useDefaultReminders: event.useDefaultReminders ?? true,
+        
+        // Event type
+        eventType: event.eventType || 'default',
       };
       
       logger.debug('useCalendarEvents', 'Inserting event to Firebase', {
@@ -241,6 +323,51 @@ export function useCalendarEvents() {
       if (updates.hasAlarm !== undefined) firebaseUpdates.hasAlarm = updates.hasAlarm;
       if (updates.hasReminder !== undefined) firebaseUpdates.hasReminder = updates.hasReminder;
       if (updates.todoId) firebaseUpdates.todoId = updates.todoId;
+      
+      // Google Calendar-style fields
+      if (updates.location !== undefined) firebaseUpdates.location = updates.location || undefined;
+      if (updates.meetingUrl !== undefined) firebaseUpdates.meetingUrl = updates.meetingUrl || undefined;
+      if (updates.meetingProvider !== undefined) firebaseUpdates.meetingProvider = updates.meetingProvider || undefined;
+      if (updates.calendarId !== undefined) firebaseUpdates.calendarId = updates.calendarId || undefined;
+      if (updates.isAllDay !== undefined) firebaseUpdates.isAllDay = updates.isAllDay;
+      if (updates.visibility !== undefined) firebaseUpdates.visibility = updates.visibility;
+      if (updates.status !== undefined) firebaseUpdates.status = updates.status;
+      if (updates.timeZone !== undefined) firebaseUpdates.timeZone = updates.timeZone;
+      
+      // Recurring event fields
+      if (updates.isRecurring !== undefined) firebaseUpdates.isRecurring = updates.isRecurring;
+      if (updates.recurrenceRule !== undefined) {
+        firebaseUpdates.recurrenceRule = updates.recurrenceRule ? {
+          frequency: updates.recurrenceRule.frequency,
+          interval: updates.recurrenceRule.interval,
+          count: updates.recurrenceRule.count,
+          until: updates.recurrenceRule.until ? timestampFromDate(new Date(updates.recurrenceRule.until)) : undefined,
+          byDay: updates.recurrenceRule.byDay,
+          byMonth: updates.recurrenceRule.byMonth,
+          byMonthDay: updates.recurrenceRule.byMonthDay,
+        } : undefined;
+      }
+      if (updates.recurrenceParentId !== undefined) firebaseUpdates.recurrenceParentId = updates.recurrenceParentId;
+      if (updates.recurrenceExceptions !== undefined) firebaseUpdates.recurrenceExceptions = updates.recurrenceExceptions;
+      
+      // Attendees and reminders
+      if (updates.attendees !== undefined) {
+        firebaseUpdates.attendees = updates.attendees?.map(a => ({
+          email: a.email,
+          displayName: a.displayName,
+          responseStatus: a.responseStatus,
+          optional: a.optional,
+          organizer: a.organizer,
+        }));
+      }
+      if (updates.reminders !== undefined) {
+        firebaseUpdates.reminders = updates.reminders?.map(r => ({
+          method: r.method,
+          minutes: r.minutes,
+        }));
+      }
+      if (updates.useDefaultReminders !== undefined) firebaseUpdates.useDefaultReminders = updates.useDefaultReminders;
+      if (updates.eventType !== undefined) firebaseUpdates.eventType = updates.eventType;
 
       // Handle description and time updates
       if (updates.description) {

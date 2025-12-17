@@ -56,13 +56,37 @@ export function useCalendarEvents() {
       description: data.description || '',
       date: date,
       color: data.color || '#3b82f6',
-      isLocked: data.is_locked || false,
-      isTodo: data.is_todo || false,
-      hasAlarm: data.has_alarm || false,
-      hasReminder: data.has_reminder || false,
-      todoId: data.todo_id || null,
+      isLocked: data.isLocked || data.is_locked || false,
+      isTodo: data.isTodo || data.is_todo || false,
+      hasAlarm: data.hasAlarm || data.has_alarm || false,
+      hasReminder: data.hasReminder || data.has_reminder || false,
+      todoId: data.todoId || data.todo_id || null,
       startsAt: startsAt,
-      endsAt: endsAt
+      endsAt: endsAt,
+      
+      // Google Calendar-style fields
+      location: data.location || undefined,
+      meetingUrl: data.meetingUrl || undefined,
+      meetingProvider: data.meetingProvider || undefined,
+      calendarId: data.calendarId || undefined,
+      isAllDay: data.isAllDay || false,
+      visibility: data.visibility || 'public',
+      status: data.status || 'confirmed',
+      timeZone: data.timeZone || undefined,
+      
+      // Recurring event fields
+      isRecurring: data.isRecurring || false,
+      recurrenceRule: data.recurrenceRule || undefined,
+      recurrenceParentId: data.recurrenceParentId || undefined,
+      recurrenceExceptions: data.recurrenceExceptions || undefined,
+      
+      // Attendees and reminders
+      attendees: data.attendees || undefined,
+      reminders: data.reminders || undefined,
+      useDefaultReminders: data.useDefaultReminders ?? true,
+      
+      // Event type
+      eventType: data.eventType || 'default',
     };
   };
 
@@ -189,7 +213,7 @@ export function useCalendarEvents() {
       
       console.log('Final startsAt:', startsAt, 'endsAt:', endsAt);
       
-      const newEvent = {
+      const newEvent: Record<string, any> = {
         title: event.title,
         description: actualDescription,
         color: event.color || '#3b82f6',
@@ -201,7 +225,31 @@ export function useCalendarEvents() {
         todoId: event.todoId || null,
         startsAt: Timestamp.fromDate(startsAt),
         endsAt: Timestamp.fromDate(endsAt),
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        
+        // Google Calendar-style fields
+        location: event.location || null,
+        meetingUrl: event.meetingUrl || null,
+        meetingProvider: event.meetingProvider || null,
+        calendarId: event.calendarId || null,
+        isAllDay: event.isAllDay || false,
+        visibility: event.visibility || 'public',
+        status: event.status || 'confirmed',
+        timeZone: event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        
+        // Recurring event fields
+        isRecurring: event.isRecurring || false,
+        recurrenceRule: event.recurrenceRule || null,
+        recurrenceParentId: event.recurrenceParentId || null,
+        recurrenceExceptions: event.recurrenceExceptions || null,
+        
+        // Attendees and reminders
+        attendees: event.attendees || null,
+        reminders: event.reminders || null,
+        useDefaultReminders: event.useDefaultReminders ?? true,
+        
+        // Event type
+        eventType: event.eventType || 'default',
       };
 
       await addDoc(collection(db, 'calendar_events'), newEvent);
@@ -222,17 +270,34 @@ export function useCalendarEvents() {
     }
 
     try {
-      const timeRange = extractTimeString(event.description);
-      const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
-      const eventDate = dayjs(event.startsAt || new Date()).format('YYYY-MM-DD');
-      
-      const startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
-      const endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
-      
-      const descriptionParts = event.description.split('|');
-      const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+      let startsAt: Date;
+      let endsAt: Date;
+      let actualDescription = event.description || '';
 
-      const updatedEvent = {
+      // Check if startsAt/endsAt are already provided as ISO strings
+      if (event.startsAt && event.endsAt && !event.startsAt.includes('|')) {
+        startsAt = new Date(event.startsAt);
+        endsAt = new Date(event.endsAt);
+        
+        // Extract the actual description part after the time if present
+        if (actualDescription.includes('|')) {
+          const descriptionParts = actualDescription.split('|');
+          actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : actualDescription;
+        }
+      } else {
+        // Legacy: Parse the time range from description
+        const timeRange = extractTimeString(event.description);
+        const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
+        const eventDate = dayjs(event.startsAt || new Date()).format('YYYY-MM-DD');
+        
+        startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
+        endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
+        
+        const descriptionParts = event.description.split('|');
+        actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+      }
+
+      const updatedEvent: Record<string, any> = {
         title: event.title,
         description: actualDescription,
         color: event.color || '#3b82f6',
@@ -242,7 +307,31 @@ export function useCalendarEvents() {
         hasReminder: event.hasReminder || false,
         todoId: event.todoId || null,
         startsAt: Timestamp.fromDate(startsAt),
-        endsAt: Timestamp.fromDate(endsAt)
+        endsAt: Timestamp.fromDate(endsAt),
+        
+        // Google Calendar-style fields
+        location: event.location || null,
+        meetingUrl: event.meetingUrl || null,
+        meetingProvider: event.meetingProvider || null,
+        calendarId: event.calendarId || null,
+        isAllDay: event.isAllDay || false,
+        visibility: event.visibility || 'public',
+        status: event.status || 'confirmed',
+        timeZone: event.timeZone || null,
+        
+        // Recurring event fields
+        isRecurring: event.isRecurring || false,
+        recurrenceRule: event.recurrenceRule || null,
+        recurrenceParentId: event.recurrenceParentId || null,
+        recurrenceExceptions: event.recurrenceExceptions || null,
+        
+        // Attendees and reminders
+        attendees: event.attendees || null,
+        reminders: event.reminders || null,
+        useDefaultReminders: event.useDefaultReminders ?? true,
+        
+        // Event type
+        eventType: event.eventType || 'default',
       };
 
       await updateDoc(doc(db, 'calendar_events', event.id), updatedEvent);

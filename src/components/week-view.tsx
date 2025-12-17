@@ -90,26 +90,36 @@ const WeekView = () => {
     }
   }, [pendingTimeSelection]);
 
-  // Expand recurring events into instances for the current week view
+  // Get week days for the current view
   const weekDays = getWeekDays(userSelectedDate);
-  const weekStart = weekDays[0].startOf('day').toDate();
-  const weekEnd = weekDays[weekDays.length - 1].endOf('day').toDate();
 
+  // Expand recurring events into instances for the current week view
   const expandedEvents = useMemo(() => {
+    if (!weekDays.length) {
+      return events;
+    }
+    
+    const weekStart = weekDays[0].startOf('day').toDate();
+    const weekEnd = weekDays[weekDays.length - 1].endOf('day').toDate();
+    
     const allInstances: CalendarEventType[] = [];
     
     events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
-        // Generate instances for this week
-        const instances = generateRecurringInstances(event, weekStart, weekEnd);
-        allInstances.push(...instances);
+        try {
+          const instances = generateRecurringInstances(event, weekStart, weekEnd);
+          allInstances.push(...instances);
+        } catch (e) {
+          console.error('Error generating recurring instances:', e);
+          allInstances.push(event);
+        }
       } else {
         allInstances.push(event);
       }
     });
     
     return allInstances;
-  }, [events, weekStart.getTime(), weekEnd.getTime()]);
+  }, [events, userSelectedDate]);
 
   const getEventsForDay = (day: dayjs.Dayjs) => {
     const dayStr = day.format("YYYY-MM-DD");

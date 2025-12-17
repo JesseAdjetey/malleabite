@@ -74,25 +74,38 @@ const MonthView = () => {
     }
   }, [pendingDaySelection]);
 
-  // Get month date range for recurring event expansion
-  const monthStart = twoDMonthArray[0]?.[0]?.startOf('day').toDate() || new Date();
-  const monthEnd = twoDMonthArray[twoDMonthArray.length - 1]?.[6]?.endOf('day').toDate() || new Date();
-
   // Expand recurring events into instances for the current month view
   const expandedEvents = useMemo(() => {
+    // Get month date range for recurring event expansion
+    const firstDay = twoDMonthArray[0]?.[0];
+    const lastWeek = twoDMonthArray[twoDMonthArray.length - 1];
+    const lastDay = lastWeek?.[6] || lastWeek?.[lastWeek.length - 1];
+    
+    if (!firstDay || !lastDay) {
+      return events; // Return original events if month array not ready
+    }
+    
+    const monthStart = firstDay.startOf('day').toDate();
+    const monthEnd = lastDay.endOf('day').toDate();
+    
     const allInstances: CalendarEventType[] = [];
     
     events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
-        const instances = generateRecurringInstances(event, monthStart, monthEnd);
-        allInstances.push(...instances);
+        try {
+          const instances = generateRecurringInstances(event, monthStart, monthEnd);
+          allInstances.push(...instances);
+        } catch (e) {
+          console.error('Error generating recurring instances:', e);
+          allInstances.push(event);
+        }
       } else {
         allInstances.push(event);
       }
     });
     
     return allInstances;
-  }, [events, monthStart.getTime(), monthEnd.getTime()]);
+  }, [events, twoDMonthArray]);
 
   const getEventsForDay = (day: any) => {
     if (!day) return [];

@@ -73,25 +73,29 @@ const DayView = () => {
   const isToday =
     userSelectedDate.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
 
-  // Get day date range for recurring event expansion
-  const dayStart = userSelectedDate.startOf('day').toDate();
-  const dayEnd = userSelectedDate.endOf('day').toDate();
-
   // Expand recurring events into instances for the current day
   const expandedEvents = useMemo(() => {
+    const dayStart = userSelectedDate.startOf('day').toDate();
+    const dayEnd = userSelectedDate.endOf('day').toDate();
+    
     const allInstances: CalendarEventType[] = [];
     
     events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
-        const instances = generateRecurringInstances(event, dayStart, dayEnd);
-        allInstances.push(...instances);
+        try {
+          const instances = generateRecurringInstances(event, dayStart, dayEnd);
+          allInstances.push(...instances);
+        } catch (e) {
+          console.error('Error generating recurring instances:', e);
+          allInstances.push(event);
+        }
       } else {
         allInstances.push(event);
       }
     });
     
     return allInstances;
-  }, [events, dayStart.getTime(), dayEnd.getTime()]);
+  }, [events, userSelectedDate]);
 
   const dayEvents = expandedEvents.filter((event) => {
     const dayStr = userSelectedDate.format("YYYY-MM-DD");

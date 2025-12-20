@@ -136,7 +136,7 @@ const AnimatedLogo: React.FC<AnimatedLogoProps> = ({ className }) => {
         className="transition-all duration-200 ease-out z-10 relative"
       >
         <img 
-          src="/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png" 
+          src="/assets/logo.png" 
           alt="Malleabite Logo" 
           className="w-full h-full object-contain"
         />

@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
@@ -12,11 +11,9 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === 'development' &&
-    componentTagger(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['lovable-uploads/*.png'],
+      includeAssets: ['assets/*.png'],
       manifest: {
         name: 'Malleabite',
         short_name: 'Malleabite',
@@ -26,12 +23,12 @@ export default defineConfig(({ mode }) => ({
         display: 'standalone',
         icons: [
           {
-            src: 'lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png',
+            src: 'assets/logo.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: 'lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png',
+            src: 'assets/logo.png',
             sizes: '512x512',
             type: 'image/png'
           }
@@ -40,7 +37,7 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],
         // Exclude large images from precache, they'll be cached at runtime
-        globIgnores: ['**/lovable-uploads/**'],
+        globIgnores: ['**/assets/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
         runtimeCaching: [
           {
@@ -58,7 +55,7 @@ export default defineConfig(({ mode }) => ({
             }
           },
           {
-            urlPattern: /\/lovable-uploads\/.*/i,
+            urlPattern: /\/assets\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'image-cache',

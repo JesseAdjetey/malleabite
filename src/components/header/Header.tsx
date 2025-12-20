@@ -116,7 +116,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         {/* Logo with spinning animation - Hidden on mobile */}
         <div className="relative rounded-lg cursor-pointer hidden lg:block">
           <img
-            src="/lovable-uploads/50041269-e66c-4735-b847-3d4fef85beca.png"
+            src="/assets/logo-header.png"
             alt="Malleabite Logo"
             className="h-8 w-8 md:h-10 md:w-10 rounded-lg shadow-md transition-transform duration-300 hover:animate-[gentle-rotate_1s_ease-in-out]"
           />

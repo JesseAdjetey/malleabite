@@ -9,25 +9,25 @@
     "orientation": "any",
     "icons": [
         {
-            "src": "/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png",
+            "src": "/assets/logo.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "any"
         },
         {
-            "src": "/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png",
+            "src": "/assets/logo.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "any"
         },
         {
-            "src": "/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png",
+            "src": "/assets/logo.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "maskable"
         },
         {
-            "src": "/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png",
+            "src": "/assets/logo.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
@@ -45,7 +45,7 @@
             "url": "/",
             "icons": [
                 {
-                    "src": "/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png",
+                    "src": "/assets/logo.png",
                     "sizes": "192x192"
                 }
             ]

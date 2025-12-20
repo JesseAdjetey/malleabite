@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Trash2, Palette, Clock, Copy, X, Calendar } from 'lucide-react';
@@ -60,9 +61,10 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
     }
   };
 
-  return (
+  // Use Portal to render outside any overflow:hidden containers
+  return createPortal(
     <>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] animate-in slide-in-from-bottom-5">
         <Card className="glass border-2 border-primary shadow-2xl p-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -178,7 +180,8 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </>,
+    document.body
   );
 };
 

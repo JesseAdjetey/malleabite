@@ -1,36 +1,35 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { CalendarEventType } from '@/lib/stores/types';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useBulkSelectionStore } from '@/lib/stores/bulk-selection-store';
 import dayjs from 'dayjs';
 
 export function useBulkSelection() {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isBulkMode, setIsBulkMode] = useState(false);
   const { events, updateEvent, removeEvent, addEvent } = useCalendarEvents();
+  
+  // Use global Zustand store for bulk selection state
+  const {
+    selectedIds,
+    isBulkMode,
+    toggleSelection: storeToggleSelection,
+    selectAll: storeSelectAll,
+    deselectAll,
+    isSelected: storeIsSelected,
+    enableBulkMode,
+    disableBulkMode,
+  } = useBulkSelectionStore();
 
   const toggleSelection = useCallback((eventId: string) => {
-    setSelectedIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(eventId)) {
-        newSet.delete(eventId);
-      } else {
-        newSet.add(eventId);
-      }
-      return newSet;
-    });
-  }, []);
+    storeToggleSelection(eventId);
+  }, [storeToggleSelection]);
 
   const selectAll = useCallback(() => {
-    setSelectedIds(new Set(events.map(e => e.id)));
-  }, [events]);
-
-  const deselectAll = useCallback(() => {
-    setSelectedIds(new Set());
-  }, []);
+    storeSelectAll(events.map(e => e.id));
+  }, [events, storeSelectAll]);
 
   const isSelected = useCallback((eventId: string) => {
-    return selectedIds.has(eventId);
-  }, [selectedIds]);
+    return storeIsSelected(eventId);
+  }, [storeIsSelected]);
 
   const getSelectedEvents = useCallback((): CalendarEventType[] => {
     return events.filter(e => selectedIds.has(e.id));
@@ -40,8 +39,8 @@ export function useBulkSelection() {
   const bulkDelete = useCallback(async () => {
     const promises = Array.from(selectedIds).map(id => removeEvent(id));
     await Promise.all(promises);
-    setSelectedIds(new Set());
-  }, [selectedIds, removeEvent]);
+    deselectAll();
+  }, [selectedIds, removeEvent, deselectAll]);
 
   const bulkUpdateColor = useCallback(async (color: string) => {
     const selectedEvents = getSelectedEvents();
@@ -78,17 +77,8 @@ export function useBulkSelection() {
     });
     
     await Promise.all(promises);
-    setSelectedIds(new Set());
-  }, [getSelectedEvents, addEvent]);
-
-  const enableBulkMode = useCallback(() => {
-    setIsBulkMode(true);
-  }, []);
-
-  const disableBulkMode = useCallback(() => {
-    setIsBulkMode(false);
-    setSelectedIds(new Set());
-  }, []);
+    deselectAll();
+  }, [getSelectedEvents, addEvent, deselectAll]);
 
   return {
     // State

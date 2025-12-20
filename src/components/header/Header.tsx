@@ -34,7 +34,12 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     isBulkMode,
     selectedCount,
     enableBulkMode,
-    disableBulkMode
+    disableBulkMode,
+    bulkDelete,
+    bulkUpdateColor,
+    bulkReschedule,
+    bulkDuplicate,
+    deselectAll
   } = useBulkSelection();
 
   const handleToggleBulkMode = () => {
@@ -188,6 +193,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             isBulkMode={isBulkMode}
             onToggle={handleToggleBulkMode}
             selectedCount={selectedCount}
+            onDelete={bulkDelete}
+            onUpdateColor={bulkUpdateColor}
+            onReschedule={bulkReschedule}
+            onDuplicate={bulkDuplicate}
+            onDeselectAll={deselectAll}
           />}
           {!isMobile && <AnalyticsNav />}
           

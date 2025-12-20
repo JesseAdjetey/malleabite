@@ -222,34 +222,34 @@ export default function Analytics() {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-6">
-      <div className="p-6 space-y-6 max-w-7xl mx-auto relative">
+      <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto relative">
       {/* Back to Dashboard Button */}
       <Button
         onClick={() => navigate('/')}
         variant="ghost"
         size="sm"
-        className="glass hover:bg-white/20 text-white backdrop-blur-md gap-2 mb-4"
+        className="glass hover:bg-white/20 text-white backdrop-blur-md gap-2"
       >
         <Home className="h-4 w-4" />
         <span>Dashboard</span>
       </Button>
       
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-8 w-8 text-primary" />
+          <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
             Productivity Analytics
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             Track your progress and optimize your schedule
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Time Range Selector */}
           <Select value={selectedTimeRange} onValueChange={(value: any) => setTimeRange(value)}>
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="w-28 sm:w-36">
               <SelectValue placeholder="Time range" />
             </SelectTrigger>
             <SelectContent>
@@ -261,15 +261,15 @@ export default function Analytics() {
           </Select>
 
           {/* Export Button */}
-          <Button variant="outline" onClick={() => handleExport('csv')}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
+          <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export CSV</span>
           </Button>
           
           {isSyncing && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-              <span>Syncing...</span>
+              <span className="hidden sm:inline">Syncing...</span>
             </div>
           )}
         </div>
@@ -279,15 +279,15 @@ export default function Analytics() {
       <SmartSuggestions />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* This Week Events */}
         <Card className="glass-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Events This Week</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Events This Week</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{thisWeek.totalEvents}</div>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">{thisWeek.totalEvents}</div>
             <p className="text-xs text-muted-foreground flex items-center mt-1">
               {trends.eventsChange >= 0 ? (
                 <>
@@ -300,19 +300,19 @@ export default function Analytics() {
                   <span className="text-red-500">{trends.eventsChange}%</span>
                 </>
               )}
-              <span className="ml-1">from last week</span>
+              <span className="ml-1 hidden sm:inline">from last week</span>
             </p>
           </CardContent>
         </Card>
 
         {/* Total Hours */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Productive Hours</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Productive Hours</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">
               {Math.round((thisWeek.totalEventTime / 60) * 10) / 10}h
             </div>
             <p className="text-xs text-muted-foreground flex items-center mt-1">
@@ -327,22 +327,22 @@ export default function Analytics() {
                   <span className="text-red-500">{trends.productivityChange}%</span>
                 </>
               )}
-              <span className="ml-1">from last week</span>
+              <span className="ml-1 hidden sm:inline">from last week</span>
             </p>
           </CardContent>
         </Card>
 
         {/* Tasks Completed */}
         <Card className="glass-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tasks Completed</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Tasks Completed</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{thisWeek.tasksCompleted}</div>
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">{thisWeek.tasksCompleted}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {thisMonth.completionRate > 0 && (
-                <span>{thisMonth.completionRate.toFixed(0)}% completion rate</span>
+                <span>{thisMonth.completionRate.toFixed(0)}% <span className="hidden sm:inline">completion rate</span></span>
               )}
             </p>
           </CardContent>
@@ -350,12 +350,12 @@ export default function Analytics() {
 
         {/* Focus Time */}
         <Card className="glass-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Focus Time</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Focus Time</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">
               {Math.round(
                 (thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0) / 60) * 10
               ) / 10}h
@@ -372,7 +372,7 @@ export default function Analytics() {
                   <span className="text-red-500">{trends.focusTimeChange}%</span>
                 </>
               )}
-              <span className="ml-1">from last week</span>
+              <span className="ml-1 hidden sm:inline">from last week</span>
             </p>
           </CardContent>
         </Card>

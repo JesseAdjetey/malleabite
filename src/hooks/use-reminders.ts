@@ -120,12 +120,13 @@ export function useReminders() {
     }
     
     try {
-      // Format the data for insertion
+      // Format the data for insertion - reminderTime must be a Firestore Timestamp
+      const reminderTimeDate = data.reminderTime ? new Date(data.reminderTime) : new Date();
       const reminderData = {
         userId: user.uid,
         title: data.title,
         description: data.description || null,
-        reminderTime: data.reminderTime || new Date().toISOString(),
+        reminderTime: Timestamp.fromDate(reminderTimeDate),
         eventId: data.eventId || null,
         timeBeforeMinutes: data.timeBeforeMinutes || null,
         timeAfterMinutes: data.timeAfterMinutes || null,
@@ -160,7 +161,9 @@ export function useReminders() {
       
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined) updateData.description = data.description;
-      if (data.reminderTime !== undefined) updateData.reminderTime = data.reminderTime;
+      if (data.reminderTime !== undefined) {
+        updateData.reminderTime = Timestamp.fromDate(new Date(data.reminderTime));
+      }
       if (data.eventId !== undefined) updateData.eventId = data.eventId;
       if (data.timeBeforeMinutes !== undefined) updateData.timeBeforeMinutes = data.timeBeforeMinutes;
       if (data.timeAfterMinutes !== undefined) updateData.timeAfterMinutes = data.timeAfterMinutes;

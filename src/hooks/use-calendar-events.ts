@@ -27,6 +27,22 @@ interface SupabaseActionResponse {
   diagnosticMessage?: string;
 }
 
+// Helper function to clean recurrence rule object for Firestore
+// Firestore doesn't accept undefined values, so we filter them out
+const cleanRecurrenceRule = (rule: Record<string, any>): Record<string, any> | null => {
+  if (!rule) return null;
+  
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(rule)) {
+    if (value !== undefined && value !== null) {
+      cleaned[key] = value;
+    }
+  }
+  
+  // Return null if no valid fields remain
+  return Object.keys(cleaned).length > 0 ? cleaned : null;
+};
+
 export function useCalendarEvents() {
   const [events, setEvents] = useState<CalendarEventType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,9 +250,9 @@ export function useCalendarEvents() {
         status: event.status || 'confirmed',
         timeZone: event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         
-        // Recurring event fields
+        // Recurring event fields - clean undefined values for Firestore
         isRecurring: event.isRecurring || false,
-        recurrenceRule: event.recurrenceRule || null,
+        recurrenceRule: event.recurrenceRule ? cleanRecurrenceRule(event.recurrenceRule) : null,
         recurrenceParentId: event.recurrenceParentId || null,
         recurrenceExceptions: event.recurrenceExceptions || null,
         
@@ -316,9 +332,9 @@ export function useCalendarEvents() {
         status: event.status || 'confirmed',
         timeZone: event.timeZone || null,
         
-        // Recurring event fields
+        // Recurring event fields - clean undefined values for Firestore
         isRecurring: event.isRecurring || false,
-        recurrenceRule: event.recurrenceRule || null,
+        recurrenceRule: event.recurrenceRule ? cleanRecurrenceRule(event.recurrenceRule) : null,
         recurrenceParentId: event.recurrenceParentId || null,
         recurrenceExceptions: event.recurrenceExceptions || null,
         

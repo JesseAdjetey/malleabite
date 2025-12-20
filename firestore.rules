@@ -204,5 +204,25 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.userId)
         && isNotRateLimited();
     }
+
+    // Analytics data
+    match /analytics/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // Calendars
+    match /calendars/{calendarId} {
+      allow read: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid);
+      allow delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && isValidString('name', 1, 100);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && isNotRateLimited();
+    }
   }
 }

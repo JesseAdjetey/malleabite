@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Calendar, BarChart3, Settings, Zap } from 'lucide-react';
+import { LayoutTemplate, Calendar, BarChart3, Settings, Zap } from 'lucide-react';
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const MobileNavigation = () => {
@@ -15,8 +15,8 @@ const MobileNavigation = () => {
 
   const navItems = [
     { icon: Calendar, label: 'Calendar', path: '/' },
-    { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Zap, label: 'Quick', path: '/quick-schedule' },
+    { icon: LayoutTemplate, label: 'Templates', path: '/templates' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

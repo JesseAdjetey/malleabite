@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Search, Star, Clock, Tag, Trash2, Edit, Calendar } from 'lucide-react';
+import { Plus, Search, Star, Clock, Trash2, Edit, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -73,29 +73,29 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
   };
 
   const TemplateCard = ({ template }: { template: EventTemplate }) => (
-    <Card className="p-4 hover:shadow-md transition-shadow">
-      <div className="space-y-3">
+    <Card className="p-3 hover:shadow-md transition-shadow">
+      <div className="space-y-2">
         {/* Header */}
         <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
               <div
-                className="w-3 h-3 rounded-full"
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                 style={{ backgroundColor: template.color }}
               />
-              <h4 className="font-semibold">{template.name}</h4>
+              <h4 className="font-semibold text-sm truncate">{template.name}</h4>
               <button
                 onClick={() => toggleFavorite(template.id)}
-                className="text-yellow-500 hover:scale-110 transition-transform"
+                className="text-yellow-500 hover:scale-110 transition-transform flex-shrink-0"
               >
                 <Star
-                  className="h-4 w-4"
+                  className="h-3.5 w-3.5"
                   fill={template.isFavorite ? 'currentColor' : 'none'}
                 />
               </button>
             </div>
             {template.description && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                 {template.description}
               </p>
             )}
@@ -103,52 +103,44 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
         </div>
 
         {/* Details */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-0.5">
               <Clock className="h-3 w-3" />
-              {template.duration} min
+              {template.duration}m
             </div>
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5">
               {template.category}
             </Badge>
+            <span className="text-[10px]">Used {template.usageCount}x</span>
           </div>
 
-          <div className="text-sm">
+          <div className="text-xs truncate">
             <span className="font-medium">Title:</span> {template.title}
           </div>
 
-          {template.location && (
-            <div className="text-sm">
-              <span className="font-medium">Location:</span> {template.location}
-            </div>
-          )}
-
           {template.tags && template.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {template.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  <Tag className="h-3 w-3 mr-1" />
+              {template.tags.slice(0, 2).map((tag) => (
+                <Badge key={tag} variant="secondary" className="text-[10px] h-5 px-1.5">
                   {tag}
                 </Badge>
               ))}
+              {template.tags.length > 2 && (
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                  +{template.tags.length - 2}
+                </Badge>
+              )}
             </div>
           )}
-
-          <div className="text-xs text-muted-foreground">
-            Used {template.usageCount} times
-            {template.lastUsed && (
-              <> · Last: {new Date(template.lastUsed).toLocaleDateString()}</>
-            )}
-          </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 pt-2 border-t">
+        <div className="flex gap-1.5 pt-2 border-t">
           <Button
             size="sm"
             variant="default"
-            className="flex-1"
+            className="flex-1 h-8 text-xs"
             onClick={() => handleApply(template)}
           >
             <Calendar className="h-3 w-3 mr-1" />
@@ -157,6 +149,7 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
           <Button
             size="sm"
             variant="outline"
+            className="h-8 w-8 p-0"
             onClick={() => {
               setEditingTemplate(template);
               setShowForm(true);
@@ -167,6 +160,7 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
           <Button
             size="sm"
             variant="outline"
+            className="h-8 w-8 p-0"
             onClick={() => handleDelete(template)}
           >
             <Trash2 className="h-3 w-3" />
@@ -177,66 +171,52 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Event Templates</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-base sm:text-lg font-semibold">Event Templates</h2>
+          <p className="text-xs text-muted-foreground">
             Save time with reusable event templates
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+        <Button size="sm" className="h-8 text-xs" onClick={() => setShowForm(true)}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
           New Template
         </Button>
       </div>
 
       {/* Search */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search templates..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-8 h-9 text-sm"
+        />
       </div>
 
       {/* Category Tabs */}
       <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="work">Work</TabsTrigger>
-          <TabsTrigger value="personal">Personal</TabsTrigger>
-          <TabsTrigger value="health">Health</TabsTrigger>
-          <TabsTrigger value="social">Social</TabsTrigger>
+        <TabsList className="h-9 w-full grid grid-cols-5 p-1">
+          <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+          <TabsTrigger value="work" className="text-xs">Work</TabsTrigger>
+          <TabsTrigger value="personal" className="text-xs">Personal</TabsTrigger>
+          <TabsTrigger value="health" className="text-xs">Health</TabsTrigger>
+          <TabsTrigger value="social" className="text-xs">Social</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeCategory} className="space-y-6">
+        <TabsContent value={activeCategory} className="space-y-4 mt-3">
           {/* Favorites Section */}
           {favoriteTemplates.length > 0 && activeCategory === 'all' && (
             <div>
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <Star className="h-5 w-5 text-yellow-500" fill="currentColor" />
+              <h3 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />
                 Favorites
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {favoriteTemplates.slice(0, 3).map((template) => (
-                  <TemplateCard key={template.id} template={template} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Most Used Section */}
-          {mostUsedTemplates.length > 0 && activeCategory === 'all' && (
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Most Used</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {mostUsedTemplates.slice(0, 3).map((template) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {favoriteTemplates.slice(0, 2).map((template) => (
                   <TemplateCard key={template.id} template={template} />
                 ))}
               </div>
@@ -245,23 +225,23 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
 
           {/* All Templates */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">
+            <h3 className="text-sm font-medium mb-2">
               {activeCategory === 'all' ? 'All Templates' : 'Templates'}
             </h3>
             {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-6 text-muted-foreground text-sm">
                 Loading templates...
               </div>
             ) : filteredBySearch.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">No templates found</p>
-                <Button onClick={() => setShowForm(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
+                <p className="text-muted-foreground text-sm mb-3">No templates found</p>
+                <Button size="sm" onClick={() => setShowForm(true)}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Create Your First Template
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredBySearch.map((template) => (
                   <TemplateCard key={template.id} template={template} />
                 ))}

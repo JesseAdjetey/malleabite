@@ -11,7 +11,6 @@ import EventDataProvider from '@/contexts/EventDataProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
 // Lazy load pages for better performance
-const Dashboard = lazy(() => import('@/pages/Dashboard'));
 const Calendar = lazy(() => import('@/pages/Calendar'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const Analytics = lazy(() => import('@/pages/Analytics'));
@@ -42,7 +41,6 @@ const AppRoutes = () => {
           <Route path="/auth" element={<Auth />} />
           <Route path="/" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />

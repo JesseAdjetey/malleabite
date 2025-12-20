@@ -44,16 +44,16 @@ export function CategorySuggestions({
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.8) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
-    if (confidence >= 0.6) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100';
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
+    if (confidence >= 0.8) return 'bg-green-500/20 text-green-400 border-green-500/30';
+    if (confidence >= 0.6) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
   };
 
   return (
-    <div className="p-3 rounded-lg bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 border border-purple-200 dark:border-purple-800">
+    <div className="p-3 rounded-lg bg-black/30 backdrop-blur-sm border border-purple-500/30">
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-        <span className="text-sm font-medium">Smart Category Suggestions</span>
+        <Sparkles className="h-4 w-4 text-purple-400" />
+        <span className="text-sm font-medium text-white">Smart Category Suggestions</span>
       </div>
 
       <div className="space-y-2">
@@ -68,8 +68,8 @@ export function CategorySuggestions({
               onClick={() => onSelectCategory(suggestion.category)}
               className={`w-full text-left p-2 rounded-md border transition-all ${
                 isSelected
-                  ? 'bg-white dark:bg-gray-800 border-purple-400 shadow-sm'
-                  : 'bg-white/50 dark:bg-gray-800/50 border-purple-200 dark:border-purple-800 hover:bg-white dark:hover:bg-gray-800'
+                  ? 'bg-purple-500/20 border-purple-400 shadow-sm'
+                  : 'bg-white/5 border-white/10 hover:bg-white/10'
               }`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -77,7 +77,7 @@ export function CategorySuggestions({
                   <span className="text-lg flex-shrink-0">{icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm capitalize text-gray-900 dark:text-gray-100">
+                      <span className="font-medium text-sm capitalize text-white">
                         {suggestion.category}
                       </span>
                       <Badge
@@ -87,10 +87,10 @@ export function CategorySuggestions({
                         {getConfidenceBadge(suggestion.confidence)}
                       </Badge>
                       {isSelected && (
-                        <Check className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                        <Check className="h-3 w-3 text-purple-400" />
                       )}
                     </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {suggestion.reason}
                     </p>
                   </div>

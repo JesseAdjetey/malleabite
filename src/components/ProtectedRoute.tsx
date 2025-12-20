@@ -51,11 +51,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
   
   if (!user) {
-    console.log('No user found, redirecting to auth page');
     return <Navigate to="/auth" replace state={{ from: location }} />;
   }
   
-  console.log('User authenticated, rendering protected content');
   return <>{children}</>;
 };
 

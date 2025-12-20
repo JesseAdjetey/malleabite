@@ -52,8 +52,6 @@ export function useEisenhower() {
         setLoading(false);
         return;
       }
-
-      console.log('Setting up Firebase subscription for Eisenhower items for user:', user.uid);
       
       const itemsQuery = query(
         collection(db, 'eisenhower_items'),
@@ -78,7 +76,6 @@ export function useEisenhower() {
             });
           });
           
-          console.log('Received Eisenhower items from Firebase:', itemsData);
           setItems(itemsData);
           setLoading(false);
         },
@@ -180,10 +177,8 @@ export function useEisenhower() {
 
     const setupSubscription = async () => {
       if (user) {
-        console.log('User is authenticated, setting up Eisenhower items subscription');
         unsubscribe = await fetchItems();
       } else {
-        console.log('No user, clearing Eisenhower items');
         setItems([]);
         setLoading(false);
       }
@@ -193,7 +188,6 @@ export function useEisenhower() {
 
     return () => {
       if (unsubscribe) {
-        console.log('Cleaning up Eisenhower items subscription');
         unsubscribe();
       }
     };

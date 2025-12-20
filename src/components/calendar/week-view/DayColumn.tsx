@@ -55,16 +55,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
         const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
         const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
         
-        // Debug logging
-        console.log('=== EVENT DISPLAY DEBUG ===', {
-          title: event.title,
-          startsAt: event.startsAt,
-          endsAt: event.endsAt,
-          timeInfo,
-          topPosition,
-          eventHeight
-        });
-        
         return (
           <div 
             key={event.id} 

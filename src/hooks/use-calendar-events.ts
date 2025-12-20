@@ -135,8 +135,6 @@ export function useCalendarEvents() {
       unsubscribeRef.current();
     }
 
-    console.log('Setting up real-time listener for user:', user.uid);
-
     const eventsQuery = query(
       collection(db, 'calendar_events'),
       where('userId', '==', user.uid),
@@ -145,7 +143,6 @@ export function useCalendarEvents() {
 
     const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
       const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
-      console.log(`Real-time update: ${eventsList.length} events`);
       setEvents(eventsList);
       setLoading(false);
       setError(null);

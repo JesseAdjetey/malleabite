@@ -12,17 +12,6 @@ export const getTimeInfo = (description?: string, startsAt?: string | Date, ends
     const start = dayjs(startsAt);
     const end = dayjs(endsAt);
     
-    console.log('=== getTimeInfo DEBUG ===', {
-      rawStartsAt: startsAt,
-      rawEndsAt: endsAt,
-      startValid: start.isValid(),
-      endValid: end.isValid(),
-      startFormatted: start.format('HH:mm'),
-      endFormatted: end.format('HH:mm'),
-      startHour: start.hour(),
-      endHour: end.hour()
-    });
-    
     if (start.isValid() && end.isValid()) {
       return {
         start: start.format('HH:mm'),

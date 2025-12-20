@@ -117,7 +117,6 @@ export function useCalendars() {
     }
 
     setLoading(true);
-    console.log('Subscribing to calendars for user:', user.uid);
 
     const calendarsQuery = query(
       collection(db, 'calendars'),
@@ -133,7 +132,6 @@ export function useCalendars() {
         
         // If no calendars exist, create a default one
         if (calendarList.length === 0) {
-          console.log('No calendars found, creating default calendar');
           await createDefaultCalendar();
         } else {
           setCalendars(calendarList);

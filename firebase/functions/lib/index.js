@@ -332,15 +332,29 @@ ${eisenhowerContext}
 === ALARMS ===
 ${alarmsContext}
 
-=== PREVIOUS CONVERSATION ===
+=== CONVERSATION HISTORY ===
 ${historyString}
+
+CRITICAL - HANDLING CONFIRMATIONS:
+When the user responds with JUST a confirmation word like:
+- "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "alright", "confirm", "do it", "go ahead", "please", "sounds good", "perfect", "great"
+
+You MUST:
+1. Look at the PREVIOUS message in conversation history to find what action was suggested
+2. Set intent to "confirmation" 
+3. Set actionRequired to true
+4. Include the FULL action object with ALL the data from the previous suggestion (including isRecurring and recurrenceRule if it was a recurring event)
+
+Example: If previous assistant message mentioned creating "Gym" event from 3:00 PM to 4:00 PM every day, and user says "yes":
+- Extract the event details from the previous context
+- Return the full action with isRecurring: true and the recurrenceRule
 
 INSTRUCTIONS:
 1. Analyze the user's message AND conversation history to understand intent
 2. Determine which action type is needed
-3. For follow-up messages like "yes", "ok", "delete it", "mark it done", refer to previous conversation
+3. For confirmation messages, ALWAYS refer to previous conversation and execute the pending action
 4. Be conversational and helpful
-5. When user confirms an action, execute it immediately
+5. When creating recurring events, ALWAYS set isRecurring: true and include recurrenceRule
 
 Return a JSON object with this EXACT structure (no markdown, just raw JSON):
 {
@@ -350,7 +364,7 @@ Return a JSON object with this EXACT structure (no markdown, just raw JSON):
   "action": {
     "type": "create_event" | "update_event" | "delete_event" | "create_todo" | "complete_todo" | "delete_todo" | "create_eisenhower" | "update_eisenhower" | "delete_eisenhower" | "create_alarm" | "update_alarm" | "delete_alarm" | "link_alarm",
     "data": {
-      // For events: { title, start, end, description }
+      // For events: { title, start, end, description, isRecurring, recurrenceRule }
       // For update/delete events: { eventId, title?, start?, end? }
       // For todos: { text } or { todoId }
       // For eisenhower: { text, quadrant } or { itemId, quadrant? }
@@ -439,7 +453,10 @@ Notes:
                     startsAt: startDate.toISOString(),
                     endsAt: endDate.toISOString(),
                     description: actionData.description || 'Created by Mally AI',
-                    color: '#3b82f6'
+                    color: '#3b82f6',
+                    // Include recurring event properties
+                    isRecurring: actionData.isRecurring || false,
+                    recurrenceRule: actionData.recurrenceRule || undefined,
                 };
             }
         }

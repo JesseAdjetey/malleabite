@@ -16,6 +16,30 @@ export interface SchedulingResponse {
   success: boolean;
   message: string;
   operations?: any[];
+  intent?: string;
+  actionRequired?: boolean;
+  action?: {
+    type: string;
+    data: {
+      title?: string;
+      start?: string;
+      end?: string;
+      description?: string;
+      isRecurring?: boolean;
+      recurrenceRule?: {
+        frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+        interval?: number;
+        daysOfWeek?: number[];
+        dayOfMonth?: number;
+        monthOfYear?: number;
+        endDate?: string;
+        count?: number;
+      };
+      eventId?: string;
+      todoId?: string;
+      [key: string]: any;
+    };
+  } | null;
   error?: string;
 }
 
@@ -75,6 +99,7 @@ export class FirebaseFunctions {
       const responseData = result.result || result.data || result;
       
       // Transform response to match expected format
+      // Include the action field with recurring event properties
       return {
         success: responseData.success || false,
         message: responseData.response || responseData.message || 'No response from AI',
@@ -85,6 +110,7 @@ export class FirebaseFunctions {
         }] : [],
         intent: responseData.intent || 'general',
         actionRequired: responseData.actionRequired || false,
+        action: responseData.action || null, // Pass through the action with recurring properties
         error: responseData.error
       };
     } catch (error: any) {

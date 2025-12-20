@@ -112,13 +112,28 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     if (!user || !action) return false;
 
     const { type, data } = action;
-    logger.info('MallyAI', 'Executing action', { type, data });
+    logger.info('MallyAI', 'Executing action', { 
+      type, 
+      data,
+      hasRecurring: data?.isRecurring,
+      recurrenceRule: data?.recurrenceRule
+    });
 
     try {
       switch (type) {
         case 'create_event': {
           const startsAt = new Date(data.startsAt || data.start);
           const endsAt = new Date(data.endsAt || data.end);
+          
+          // Check for recurring properties
+          const isRecurring = data.isRecurring === true;
+          const recurrenceRule = data.recurrenceRule;
+          
+          logger.info('MallyAI', 'Creating event with recurring settings', {
+            isRecurring,
+            recurrenceRule,
+            title: data.title
+          });
           
           // Build the event with recurring properties if present
           const newEvent: CalendarEventType = {
@@ -130,17 +145,22 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             endsAt: endsAt.toISOString(),
             color: data.color || '#8b5cf6',
             // Add recurring event properties
-            isRecurring: data.isRecurring || false,
-            recurrenceRule: data.recurrenceRule ? {
-              frequency: data.recurrenceRule.frequency || 'daily',
-              interval: data.recurrenceRule.interval || 1,
-              daysOfWeek: data.recurrenceRule.daysOfWeek,
-              dayOfMonth: data.recurrenceRule.dayOfMonth,
-              monthOfYear: data.recurrenceRule.monthOfYear,
-              endDate: data.recurrenceRule.endDate,
-              count: data.recurrenceRule.count,
+            isRecurring: isRecurring,
+            recurrenceRule: recurrenceRule ? {
+              frequency: recurrenceRule.frequency || 'daily',
+              interval: recurrenceRule.interval || 1,
+              daysOfWeek: recurrenceRule.daysOfWeek,
+              dayOfMonth: recurrenceRule.dayOfMonth,
+              monthOfYear: recurrenceRule.monthOfYear,
+              endDate: recurrenceRule.endDate,
+              count: recurrenceRule.count,
             } : undefined,
           };
+          
+          logger.info('MallyAI', 'Final event object', { 
+            newEvent,
+            hasRecurrenceRule: !!newEvent.recurrenceRule
+          });
           
           const result = await addEvent(newEvent);
           if (result.success) {

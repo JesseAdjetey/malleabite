@@ -1,6 +1,7 @@
 // Templates Page - Mobile-First Design
 import { useState } from 'react';
-import { Plus, Search, Star, Clock, Trash2, Edit, Calendar, ChevronRight, Sparkles, X } from 'lucide-react';
+import { Plus, Search, Star, Clock, Trash2, Edit, Calendar, ChevronRight, ChevronLeft, Sparkles, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,7 @@ export default function Templates() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [showSearch, setShowSearch] = useState(false);
+  const navigate = useNavigate();
 
   const filteredBySearch = filteredTemplates.filter((template) => {
     const matchesSearch =
@@ -151,9 +153,17 @@ export default function Templates() {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Templates</h1>
-            <p className="text-sm text-muted-foreground">Reusable event templates</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/')}
+              className="hidden md:flex w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 items-center justify-center transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold">Templates</h1>
+              <p className="text-sm text-muted-foreground">Reusable event templates</p>
+            </div>
           </div>
           <button
             onClick={() => setShowForm(true)}

@@ -14,6 +14,7 @@ import {
   Download,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   Flame,
   BarChart2
 } from 'lucide-react';
@@ -212,9 +213,17 @@ export default function Analytics() {
         
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Analytics</h1>
-            <p className="text-sm text-muted-foreground">Your productivity insights</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/')}
+              className="hidden md:flex w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 items-center justify-center transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold">Analytics</h1>
+              <p className="text-sm text-muted-foreground">Your productivity insights</p>
+            </div>
           </div>
           
           <div className="flex items-center gap-2">

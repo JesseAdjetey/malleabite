@@ -112,7 +112,15 @@ const Settings = () => {
       <div className="min-h-screen bg-background pb-24">
         <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
           {/* Header */}
-          <h1 className="text-2xl font-bold mb-6">Settings</h1>
+          <div className="flex items-center gap-3 mb-6">
+            <button
+              onClick={() => navigate('/')}
+              className="hidden md:flex w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 items-center justify-center transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-2xl font-bold">Settings</h1>
+          </div>
 
           {/* Profile Card */}
           <button

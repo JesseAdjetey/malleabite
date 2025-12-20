@@ -140,31 +140,32 @@ export default function FocusTimeBlocks() {
     <div className="space-y-4">
       {/* Header Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary/10 rounded-full p-2">
+        <CardHeader className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="bg-primary/10 rounded-full p-2 shrink-0">
                 <Shield className="h-5 w-5 text-primary" />
               </div>
-              <div>
-                <CardTitle>Focus Time Protection</CardTitle>
-                <CardDescription>
+              <div className="min-w-0">
+                <CardTitle className="text-base sm:text-lg">Focus Time Protection</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
                   Define and protect your most productive hours
                 </CardDescription>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
-                <Label htmlFor="dnd-mode">Do Not Disturb</Label>
+                <Label htmlFor="dnd-mode" className="text-xs sm:text-sm whitespace-nowrap">Do Not Disturb</Label>
                 <Switch
                   id="dnd-mode"
                   checked={dndMode}
                   onCheckedChange={toggleDndMode}
                 />
               </div>
-              <Button onClick={addFocusBlock} size="sm">
-                <Zap className="h-4 w-4 mr-2" />
-                Add Focus Block
+              <Button onClick={addFocusBlock} size="sm" className="shrink-0">
+                <Zap className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Focus Block</span>
+                <span className="sm:hidden">Add</span>
               </Button>
             </div>
           </div>
@@ -212,16 +213,16 @@ export default function FocusTimeBlocks() {
       )}
 
       {/* Focus Blocks List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {focusBlocks.map((block) => (
           <Card
             key={block.id}
             className={block.isActive ? 'border-primary' : 'opacity-60'}
           >
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
+            <CardHeader className="p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Clock className="h-4 w-4 shrink-0" />
                   <input
                     type="text"
                     value={block.label}
@@ -240,9 +241,9 @@ export default function FocusTimeBlocks() {
                 />
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-0 sm:pt-0">
               <div>
-                <Label className="text-sm mb-2 block">Day of Week</Label>
+                <Label className="text-xs sm:text-sm mb-2 block">Day of Week</Label>
                 <Select
                   value={block.dayOfWeek.toString()}
                   onValueChange={(value) =>
@@ -262,9 +263,9 @@ export default function FocusTimeBlocks() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4">
                 <div>
-                  <Label className="text-sm mb-2 block">Start Time</Label>
+                  <Label className="text-xs sm:text-sm mb-2 block">Start Time</Label>
                   <Select
                     value={block.startHour.toString()}
                     onValueChange={(value) =>
@@ -285,7 +286,7 @@ export default function FocusTimeBlocks() {
                 </div>
 
                 <div>
-                  <Label className="text-sm mb-2 block">End Time</Label>
+                  <Label className="text-xs sm:text-sm mb-2 block">End Time</Label>
                   <Select
                     value={block.endHour.toString()}
                     onValueChange={(value) =>

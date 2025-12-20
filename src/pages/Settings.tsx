@@ -85,17 +85,17 @@ const Settings = () => {
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-6 bg-black/30">
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="voice">
-            <Mic className="h-4 w-4 mr-2" />
+        <TabsList className="mb-6 bg-black/30 flex-wrap h-auto gap-1 p-1 w-full justify-start overflow-x-auto">
+          <TabsTrigger value="appearance" className="text-xs sm:text-sm px-2 sm:px-3">Appearance</TabsTrigger>
+          <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 sm:px-3">Profile</TabsTrigger>
+          <TabsTrigger value="focus" className="text-xs sm:text-sm px-2 sm:px-3">Focus Time</TabsTrigger>
+          <TabsTrigger value="voice" className="text-xs sm:text-sm px-2 sm:px-3">
+            <Mic className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
             Voice
           </TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="focus">Focus Time</TabsTrigger>
-          <TabsTrigger value="import-export">
-            <Upload className="h-4 w-4 mr-2" />
-            Import/Export
+          <TabsTrigger value="import-export" className="text-xs sm:text-sm px-2 sm:px-3">
+            <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+            Import
           </TabsTrigger>
         </TabsList>
 

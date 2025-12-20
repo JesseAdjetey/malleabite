@@ -1,5 +1,5 @@
 // Firebase-compatible MallyAI component
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot,
   Send,
@@ -84,6 +84,29 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     logMigrationStatus('MallyAI', 'firebase');
   }, []);
 
+  // Listen for "Hey Mally" activation
+  useEffect(() => {
+    const handleHeyMallyActivation = () => {
+      logger.info('MallyAI', 'Hey Mally activation received');
+      
+      // Open the assistant
+      setIsOpen(true);
+      
+      // Start voice recording after a brief delay
+      setTimeout(() => {
+        if (!isRecording) {
+          toggleRecording();
+        }
+      }, 500);
+    };
+
+    window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
+    
+    return () => {
+      window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
+    };
+  }, [isRecording]);
+
   // Execute an action based on type
   const executeAction = async (action: any): Promise<boolean> => {
     if (!user || !action) return false;
@@ -97,6 +120,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           const startsAt = new Date(data.startsAt || data.start);
           const endsAt = new Date(data.endsAt || data.end);
           
+          // Build the event with recurring properties if present
           const newEvent: CalendarEventType = {
             id: crypto.randomUUID(),
             title: data.title,
@@ -105,11 +129,23 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             startsAt: startsAt.toISOString(),
             endsAt: endsAt.toISOString(),
             color: data.color || '#8b5cf6',
+            // Add recurring event properties
+            isRecurring: data.isRecurring || false,
+            recurrenceRule: data.recurrenceRule ? {
+              frequency: data.recurrenceRule.frequency || 'daily',
+              interval: data.recurrenceRule.interval || 1,
+              daysOfWeek: data.recurrenceRule.daysOfWeek,
+              dayOfMonth: data.recurrenceRule.dayOfMonth,
+              monthOfYear: data.recurrenceRule.monthOfYear,
+              endDate: data.recurrenceRule.endDate,
+              count: data.recurrenceRule.count,
+            } : undefined,
           };
           
           const result = await addEvent(newEvent);
           if (result.success) {
-            toast.success(`Event "${data.title}" created!`);
+            const recurringText = newEvent.isRecurring ? ' (recurring)' : '';
+            toast.success(`Event "${data.title}"${recurringText} created!`);
             await fetchEvents();
             return true;
           }
@@ -599,6 +635,69 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
     setIsLoading(true);
 
+    // Check if this is a simple confirmation and we have a pending action
+    const confirmationWords = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'alright', 'confirm', 'do it', 'go ahead', 'please', 'sounds good', 'perfect', 'great', 'create it', 'make it', 'add it'];
+    const isSimpleConfirmation = confirmationWords.some(word => 
+      textToSend.toLowerCase().trim() === word || 
+      textToSend.toLowerCase().trim() === word + '!'
+    );
+
+    // If user confirms and we have a pending action, execute it directly
+    if (isSimpleConfirmation && pendingAction) {
+      logger.info('MallyAI', 'User confirmed pending action', { pendingAction });
+      
+      const loadingMessageId = addMessage({
+        text: "Creating your event...",
+        sender: "ai",
+        isLoading: true,
+      });
+
+      try {
+        const actionExecuted = await executeAction(pendingAction);
+        
+        if (actionExecuted) {
+          const actionType = pendingAction.type;
+          const actionData = pendingAction.data;
+          let successMessage = "Done!";
+          
+          if (actionType === 'create_event') {
+            const isRecurring = actionData.isRecurring;
+            const frequency = actionData.recurrenceRule?.frequency;
+            if (isRecurring && frequency) {
+              successMessage = `Great! I've set up your recurring '${actionData.title}' event (${frequency}). You're all set!`;
+            } else {
+              successMessage = `Done! I've created your '${actionData.title}' event. You're all set!`;
+            }
+          } else if (actionType === 'create_todo') {
+            successMessage = `Added '${actionData.text}' to your todo list!`;
+          }
+          
+          updateMessage(loadingMessageId, {
+            text: successMessage,
+            isLoading: false,
+          });
+          speak(successMessage);
+          setPendingAction(null);
+        } else {
+          updateMessage(loadingMessageId, {
+            text: "Sorry, I couldn't complete that action. Please try again.",
+            isLoading: false,
+            isError: true,
+          });
+        }
+      } catch (error) {
+        logger.error('MallyAI', 'Failed to execute pending action', error as Error);
+        updateMessage(loadingMessageId, {
+          text: "Sorry, something went wrong. Please try again.",
+          isLoading: false,
+          isError: true,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     try {
       logger.debug('MallyAI', 'Processing user message', {
         messageLength: textToSend.length,
@@ -641,20 +740,22 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       const intent = aiResponse.intent;
 
       if (response.success && action) {
-        // Check if this is a confirmation or direct action
-        const isConfirmation = intent === 'confirmation' || 
-          ['create_event', 'delete_event', 'create_todo', 'complete_todo', 'delete_todo', 
-           'create_eisenhower', 'update_eisenhower', 'delete_eisenhower'].includes(intent);
+        // Check if this is a confirmation (user said yes to a previous suggestion)
+        const isConfirmation = intent === 'confirmation';
+        
+        // Check if this is a direct action that should execute immediately
+        const isDirectAction = ['delete_event', 'complete_todo', 'delete_todo', 
+           'update_eisenhower', 'delete_eisenhower', 'update_alarm', 'delete_alarm'].includes(action.type);
 
-        if (isConfirmation) {
+        if (isConfirmation || isDirectAction) {
           // Execute the action immediately
-          logger.info('MallyAI', 'Executing AI action', { action });
+          logger.info('MallyAI', 'Executing AI action', { action, isConfirmation, isDirectAction });
           actionExecuted = await executeAction(action);
           if (actionExecuted) {
             setPendingAction(null);
           }
         } else {
-          // Store as pending for confirmation
+          // Store as pending for user confirmation (creation actions)
           logger.info('MallyAI', 'Storing pending action for confirmation', { action });
           setPendingAction(action);
         }

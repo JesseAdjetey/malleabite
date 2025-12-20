@@ -5,8 +5,17 @@ import { CalendarEventType } from '@/lib/stores/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Sparkles, X, Brain } from 'lucide-react';
+import { Sparkles, X, Brain, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+// Try to import HeyMally context, but don't fail if not available
+let useHeyMally: () => { isListening: boolean; isWakeWordEnabled: boolean } = () => ({ isListening: false, isWakeWordEnabled: false });
+try {
+  const HeyMallyContext = require('@/contexts/HeyMallyContext');
+  useHeyMally = HeyMallyContext.useHeyMally;
+} catch (e) {
+  // Context not available
+}
 
 interface DraggableMallyAIProps {
   onScheduleEvent: (event: CalendarEventType) => Promise<any>;
@@ -19,6 +28,26 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [wasDragged, setWasDragged] = useState(false);
+  
+  // Try to get Hey Mally status
+  let heyMallyStatus = { isListening: false, isWakeWordEnabled: false };
+  try {
+    heyMallyStatus = useHeyMally();
+  } catch (e) {
+    // Context not available
+  }
+
+  // Listen for "Hey Mally" activation
+  useEffect(() => {
+    const handleHeyMallyActivation = () => {
+      if (isMobile) {
+        setIsMobileOpen(true);
+      }
+    };
+
+    window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
+    return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
+  }, [isMobile]);
 
   // Initial position
   useEffect(() => {
@@ -99,6 +128,15 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
         >
           <Brain size={24} />
+          {/* Hey Mally listening indicator */}
+          {heyMallyStatus.isListening && heyMallyStatus.isWakeWordEnabled && (
+            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500 items-center justify-center">
+                <Mic size={10} />
+              </span>
+            </span>
+          )}
         </motion.button>
 
         {/* Mobile Bottom Sheet */}

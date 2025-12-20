@@ -5,6 +5,7 @@ import { ToastProvider } from "@/hooks/toast-context";
 import { Toaster } from "@/components/ui/toaster";
 import ThemeProvider from '@/components/ThemeProvider';
 import { AuthProvider } from '@/contexts/AuthContext.unified';
+import { HeyMallyProvider } from '@/contexts/HeyMallyContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import EventDataProvider from '@/contexts/EventDataProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -58,13 +59,15 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <ToastProvider>
-          <Router>
-            <EventDataProvider>
-              <AppRoutes />
-            </EventDataProvider>
-          </Router>
-        </ToastProvider>
+        <HeyMallyProvider>
+          <ToastProvider>
+            <Router>
+              <EventDataProvider>
+                <AppRoutes />
+              </EventDataProvider>
+            </Router>
+          </ToastProvider>
+        </HeyMallyProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

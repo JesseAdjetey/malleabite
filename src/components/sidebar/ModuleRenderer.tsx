@@ -39,7 +39,8 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     onTitleChange: onTitleChange,
     onMinimize: onToggleMinimize,
     isMinimized: module.minimized,
-    isDragging: isDragging
+    isDragging: isDragging,
+    listId: module.listId
   };
   
   const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;

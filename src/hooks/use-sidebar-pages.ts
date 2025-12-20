@@ -17,6 +17,7 @@ import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import { SidebarPage, ModuleInstance } from '@/lib/stores/types';
+import { useTodoLists } from './use-todo-lists';
 
 export function useSidebarPages() {
   const [pages, setPages] = useState<SidebarPage[]>([]);
@@ -24,6 +25,7 @@ export function useSidebarPages() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { createList } = useTodoLists();
 
   // Ensure default page exists
   const ensureDefaultPage = useCallback(async () => {
@@ -191,7 +193,16 @@ export function useSidebarPages() {
       const page = pages.find(p => p.id === pageId);
       if (!page) return { success: false };
 
-      const updatedModules = [...page.modules, { ...module, pageId }];
+      // For todo modules, create a new todo list
+      let moduleToAdd = { ...module, pageId };
+      if (module.type === 'todo' && !module.listId) {
+        const listResult = await createList(module.title || 'My Tasks');
+        if (listResult.success && listResult.listId) {
+          moduleToAdd.listId = listResult.listId;
+        }
+      }
+
+      const updatedModules = [...page.modules, moduleToAdd];
       
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,

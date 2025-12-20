@@ -6,6 +6,7 @@ export interface ModuleInstance {
   title: string;
   minimized?: boolean; // New property to track minimized state
   pageId?: string; // Reference to which page this module belongs to
+  listId?: string; // For todo modules - reference to the specific todo list
 }
 
 export interface SidebarPage {

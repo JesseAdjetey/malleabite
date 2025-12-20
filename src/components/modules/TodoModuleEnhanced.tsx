@@ -8,33 +8,14 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Plus,
-  ChevronDown,
   Trash2,
-  Edit2,
   List,
-  MoreVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEventStore } from "@/lib/store";
 import { useTodoLists } from "@/hooks/use-todo-lists";
 import { useAuth } from "@/contexts/AuthContext.firebase";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 
 interface TodoModuleEnhancedProps {
   title: string;
@@ -43,17 +24,8 @@ interface TodoModuleEnhancedProps {
   isMinimized?: boolean;
   onMinimize?: () => void;
   isDragging?: boolean;
+  listId?: string; // Specific list ID for this module
 }
-
-const COLORS = [
-  { value: '#8b5cf6', label: 'Purple' },
-  { value: '#3b82f6', label: 'Blue' },
-  { value: '#10b981', label: 'Green' },
-  { value: '#f59e0b', label: 'Amber' },
-  { value: '#ef4444', label: 'Red' },
-  { value: '#ec4899', label: 'Pink' },
-  { value: '#06b6d4', label: 'Cyan' },
-];
 
 const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   title,
@@ -62,12 +34,9 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   isMinimized,
   onMinimize,
   isDragging,
+  listId: moduleListId,
 }) => {
   const [newItem, setNewItem] = useState("");
-  const [showNewListDialog, setShowNewListDialog] = useState(false);
-  const [newListName, setNewListName] = useState("");
-  const [newListColor, setNewListColor] = useState('#8b5cf6');
-  const [editingListId, setEditingListId] = useState<string | null>(null);
   const [submitStatus, setSubmitStatus] = useState<{
     success?: boolean;
     message?: string;
@@ -75,21 +44,27 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   
   const { addEvent, events } = useEventStore();
   const {
+    getTodosForList,
     lists,
-    activeTodos,
-    activeList,
-    activeListId,
-    setActiveListId,
     loading,
     error,
-    createList,
-    updateList,
-    deleteList,
     addTodo,
     toggleTodo,
     deleteTodo,
+    updateList,
   } = useTodoLists();
+  
+  // Use module-specific list
+  const activeList = lists.find(l => l.id === moduleListId);
+  const activeTodos = moduleListId ? getTodosForList(moduleListId) : [];
   const { user } = useAuth();
+
+  // Sync title changes to the todo list
+  useEffect(() => {
+    if (moduleListId && title && activeList && title !== activeList.name) {
+      updateList(moduleListId, { name: title });
+    }
+  }, [title, moduleListId, activeList, updateList]);
 
   useEffect(() => {
     if (submitStatus) {
@@ -101,9 +76,9 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   }, [submitStatus]);
 
   const handleAddItem = async () => {
-    if (newItem.trim()) {
+    if (newItem.trim() && moduleListId) {
       setSubmitStatus(null);
-      const response = await addTodo(newItem.trim());
+      const response = await addTodo(newItem.trim(), moduleListId);
 
       if (response.success) {
         setNewItem("");
@@ -117,24 +92,6 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           message: "Failed to add todo",
         });
       }
-    }
-  };
-
-  const handleCreateList = async () => {
-    if (newListName.trim()) {
-      const result = await createList(newListName.trim(), newListColor);
-      if (result.success && result.listId) {
-        setActiveListId(result.listId);
-        setNewListName("");
-        setNewListColor('#8b5cf6');
-        setShowNewListDialog(false);
-      }
-    }
-  };
-
-  const handleDeleteList = async (listId: string) => {
-    if (confirm('Delete this list? Todos will be moved to default list.')) {
-      await deleteList(listId, false);
     }
   };
 
@@ -206,62 +163,6 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       isMinimized={isMinimized}
       onMinimize={onMinimize}
     >
-      {/* List Selector */}
-      <div className="flex items-center gap-2 mb-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors flex-1 text-left">
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: activeList?.color || '#8b5cf6' }}
-              />
-              <span className="text-sm flex-1 truncate">{activeList?.name || 'Select List'}</span>
-              <ChevronDown size={14} className="text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            {lists.map(list => (
-              <DropdownMenuItem 
-                key={list.id}
-                onClick={() => setActiveListId(list.id)}
-                className="flex items-center gap-2"
-              >
-                <div 
-                  className="w-3 h-3 rounded-full flex-shrink-0" 
-                  style={{ backgroundColor: list.color }}
-                />
-                <span className="flex-1 truncate">{list.name}</span>
-                {list.id === activeListId && (
-                  <CheckCircle2 size={14} className="text-primary" />
-                )}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShowNewListDialog(true)}>
-              <Plus size={14} className="mr-2" />
-              Create New List
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* List Actions */}
-        {activeList && !activeList.isDefault && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-1.5 rounded-md hover:bg-white/10 transition-colors">
-                <MoreVertical size={16} className="text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleDeleteList(activeList.id)}>
-                <Trash2 size={14} className="mr-2" />
-                Delete List
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
       {/* Todo Items */}
       <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
         {loading ? (
@@ -354,57 +255,6 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           Add
         </button>
       </div>
-
-      {/* New List Dialog */}
-      <Dialog open={showNewListDialog} onOpenChange={setShowNewListDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create New List</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm text-muted-foreground mb-1 block">
-                List Name
-              </label>
-              <Input
-                value={newListName}
-                onChange={(e) => setNewListName(e.target.value)}
-                placeholder="e.g., Work Tasks, Shopping, etc."
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateList()}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-2 block">
-                Color
-              </label>
-              <div className="flex gap-2 flex-wrap">
-                {COLORS.map(color => (
-                  <button
-                    key={color.value}
-                    onClick={() => setNewListColor(color.value)}
-                    className={cn(
-                      "w-8 h-8 rounded-full transition-all",
-                      newListColor === color.value 
-                        ? "ring-2 ring-white ring-offset-2 ring-offset-background scale-110" 
-                        : "hover:scale-105"
-                    )}
-                    style={{ backgroundColor: color.value }}
-                    title={color.label}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNewListDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateList} disabled={!newListName.trim()}>
-              Create List
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </ModuleContainer>
   );
 };

@@ -58,7 +58,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
         return (
           <div 
             key={event.id} 
-            className="absolute inset-x-0.5 z-10 border-2 border-red-500"
+            className="absolute inset-x-0.5 sm:inset-x-1 z-10 border-2 border-red-500"
             style={{ 
               top: `${topPosition}px`,
               height: `${eventHeight}px`

@@ -16,10 +16,10 @@ const EventIndicators: React.FC<EventIndicatorsProps> = ({
   participants = [],
 }) => {
   return (
-    <div className="flex gap-1 mt-1">
-      {hasAlarm && <Bell size={12} className="text-white/70" />}
-      {hasReminder && <CalendarClock size={12} className="text-white/70" />}
-      {hasTodo && <ListTodo size={12} className="text-white/70" />}
+    <div className="hidden sm:flex gap-1 mt-0.5 sm:mt-1">
+      {hasAlarm && <Bell size={10} className="text-white/70 sm:w-3 sm:h-3" />}
+      {hasReminder && <CalendarClock size={10} className="text-white/70 sm:w-3 sm:h-3" />}
+      {hasTodo && <ListTodo size={10} className="text-white/70 sm:w-3 sm:h-3" />}
 
       {/* Participants */}
       {participants && participants.length > 0 && (
@@ -27,13 +27,13 @@ const EventIndicators: React.FC<EventIndicatorsProps> = ({
           {participants.slice(0, 3).map((participant, i) => (
             <div
               key={i}
-              className="h-4 w-4 rounded-full bg-white/30 text-[8px] flex items-center justify-center ring-1 ring-white/10"
+              className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white/30 text-[6px] sm:text-[8px] flex items-center justify-center ring-1 ring-white/10"
             >
               {participant.charAt(0)}
             </div>
           ))}
           {participants.length > 3 && (
-            <div className="h-4 w-4 rounded-full bg-white/30 text-[8px] flex items-center justify-center ring-1 ring-white/10">
+            <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-white/30 text-[6px] sm:text-[8px] flex items-center justify-center ring-1 ring-white/10">
               +{participants.length - 3}
             </div>
           )}

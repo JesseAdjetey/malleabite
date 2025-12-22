@@ -57,7 +57,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   return (
     <div
       className={cn(
-        "calendar-event group h-full",
+        "calendar-event group h-full rounded-sm sm:rounded overflow-hidden",
         color,
         !isLocked && "cursor-move",
         isDragging && "opacity-70"
@@ -72,7 +72,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
       onTouchEnd={handleTouchEnd}
       onMouseDown={onMouseDown}
     >
-      <div className="relative">
+      <div className="relative h-full p-1 sm:p-1.5">
         {/* Lock/Unlock Button */}
         <EventLockToggle isLocked={Boolean(isLocked)} onToggle={handleLockToggle} />
 
@@ -81,16 +81,16 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
         
         {/* Recurring indicator at top right */}
         {isRecurring && (
-          <div className="absolute top-0 right-0 bg-white/20 rounded-full p-1 m-0.5">
-            <Repeat size={10} className="text-white" />
+          <div className="absolute top-0 right-0 bg-white/20 rounded-full p-0.5 sm:p-1 m-0.5">
+            <Repeat size={8} className="text-white sm:w-[10px] sm:h-[10px]" />
           </div>
         )}
 
         {/* Event Title */}
-        <div className="font-medium">{event.title}</div>
+        <div className="font-medium text-[10px] sm:text-xs leading-tight truncate">{event.title}</div>
 
-        {/* Event Time or Description */}
-        <div className="text-xs opacity-80">{event.description}</div>
+        {/* Event Time or Description - hidden on very small events */}
+        <div className="text-[9px] sm:text-xs opacity-80 truncate hidden sm:block">{event.description}</div>
 
         {/* Indicators */}
         <EventIndicators
@@ -103,7 +103,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
         {/* Todo indicator at bottom right */}
         {isTodoEvent && (
           <div className="absolute bottom-0 right-0 bg-white/10 rounded-full p-0.5 m-0.5">
-            <ListTodo size={12} className="text-white" />
+            <ListTodo size={10} className="text-white sm:w-3 sm:h-3" />
           </div>
         )}
       </div>

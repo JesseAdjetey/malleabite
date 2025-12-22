@@ -5,7 +5,8 @@ import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
 import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
-import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2 } from 'lucide-react';
+import { ThemeSelector } from '@/components/theme/ThemeSelector';
+import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MobileNavigation from '@/components/MobileNavigation';
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -15,8 +16,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
+import { useThemeStore } from '@/lib/stores/theme-store';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance';
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -30,7 +32,16 @@ const Settings = () => {
     error: wakeWordError 
   } = useHeyMally();
   const { subscription } = useSubscription();
+  const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
+  
+  const getThemeLabel = () => {
+    switch (theme) {
+      case 'light': return 'Light mode';
+      case 'dark': return 'Dark mode';
+      case 'system': return 'System default';
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -189,6 +200,13 @@ const Settings = () => {
               label="Focus Time"
               sublabel="Set your productive hours"
               onClick={() => setActiveSection('focus')}
+            />
+
+            <MenuItem
+              icon={Palette}
+              label="Appearance"
+              sublabel={getThemeLabel()}
+              onClick={() => setActiveSection('appearance')}
             />
 
             <MenuItem
@@ -351,6 +369,54 @@ const Settings = () => {
               <p className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                 Keep the app tab open
+              </p>
+            </div>
+          </div>
+        </div>
+        <MobileNavigation />
+      </div>
+    );
+  }
+
+  // Appearance Section
+  if (activeSection === 'appearance') {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <div className="px-4 pt-6 max-w-lg mx-auto">
+          <BackButton title="Appearance" />
+
+          {/* Theme Selector Card */}
+          <div className="p-6 rounded-3xl bg-gradient-to-br from-primary/10 via-purple-600/5 to-transparent border border-primary/20 mb-6">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
+                <Palette className="h-7 w-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Theme</p>
+                <p className="text-sm text-muted-foreground">
+                  Choose how Malleabite looks
+                </p>
+              </div>
+            </div>
+            
+            <ThemeSelector showLabel={false} size="lg" />
+          </div>
+
+          {/* Theme Info */}
+          <div className="p-4 rounded-2xl bg-white/5 dark:bg-white/5 border border-white/10 dark:border-white/10">
+            <p className="text-xs font-medium text-muted-foreground mb-3">About Themes</p>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                <strong className="text-foreground">Light</strong> - Clean and bright for daytime use
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                <strong className="text-foreground">Dark</strong> - Easier on the eyes at night
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                <strong className="text-foreground">System</strong> - Matches your device settings
               </p>
             </div>
           </div>

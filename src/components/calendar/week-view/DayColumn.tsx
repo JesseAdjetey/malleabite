@@ -38,11 +38,11 @@ const DayColumn: React.FC<DayColumnProps> = ({
   const hourHeight = 80; // The height in pixels of each hour cell
 
   return (
-    <div className="relative border-r border-white/10">
+    <div className="relative border-r border-gray-200 dark:border-white/10">
       {getHours.map((hour, i) => (
         <div
           key={i}
-          className="relative flex h-20 cursor-pointer border-t border-white/10 hover:bg-white/5"
+          className="relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 hover:bg-gray-100/50 dark:hover:bg-white/5"
           onClick={() => onTimeSlotClick(currentDate, hour)}
           onDragOver={onDragOver}
           onDrop={(e) => onDrop(e, currentDate, hour)}
@@ -58,7 +58,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
         return (
           <div 
             key={event.id} 
-            className="absolute inset-x-0.5 sm:inset-x-1 z-10 border-2 border-red-500"
+            className="absolute inset-x-0.5 sm:inset-x-1 z-10"
             style={{ 
               top: `${topPosition}px`,
               height: `${eventHeight}px`

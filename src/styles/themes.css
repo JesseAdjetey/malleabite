@@ -1,6 +1,17 @@
 
 /* Calendar Event Colors */
 :root {
+  --event-red: 354 76% 55%;
+  --event-green: 142 69% 45%;
+  --event-blue: 221 83% 55%;
+  --event-purple: 261 54% 55%;
+  --event-teal: 174 59% 45%;
+  --event-orange: 24 89% 55%;
+  --event-pink: 330 84% 65%;
+}
+
+/* Dark mode event colors (lighter for visibility) */
+.dark {
   --event-red: 354 76% 75%;
   --event-green: 142 69% 58%;
   --event-blue: 221 83% 75%;
@@ -8,54 +19,44 @@
   --event-teal: 174 59% 65%;
   --event-orange: 24 89% 74%;
   --event-pink: 330 84% 85%;
-  
-  /* Dark mode specific styles */
-  --foreground: 213 31% 91%;
-  --muted-foreground: 215 20% 65%;
-  --border: 240 3% 25%;
-  --input: 215 27% 18%;
-  
-  --background: 240 21% 14%;
-  --primary: 261 54% 61%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 262 83% 58%; 
-  --secondary-foreground: 210 40% 98%;
-  --muted: 215 27% 16%;
-  --accent: 261 54% 61%;
-  --accent-foreground: 210 40% 98%;
-  --ring: 261 54% 61%;
-  
-  /* Glass card styles */
-  --glass-bg: rgba(26, 22, 37, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
-.dark-mode {
-  color: white;
-}
-
-/* Glass card */
+/* Glass card - Light mode */
 .glass-card {
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.15);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-radius: 10px;
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.08);
 }
 
-.glass-input {
-  background: rgba(255, 255, 255, 0.05);
+/* Glass card - Dark mode */
+.dark .glass-card {
+  background: rgba(26, 22, 37, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Glass input - Light mode */
+.glass-input {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
   padding: 8px 12px;
-  color: white;
+  color: inherit;
   transition: all 0.2s ease;
+}
+
+/* Glass input - Dark mode */
+.dark .glass-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
 }
 
 .glass-input:focus {
   outline: none;
-  border-color: rgba(155, 135, 245, 0.5);
-  box-shadow: 0 0 0 2px rgba(155, 135, 245, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
 }

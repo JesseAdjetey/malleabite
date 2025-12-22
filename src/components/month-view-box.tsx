@@ -85,7 +85,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   }, [day, onEventDrop]);
 
   if (!day) {
-    return <div className="h-full border-r border-t border-white/10 bg-secondary/30"></div>;
+    return <div className="h-full border-r border-t border-gray-200 dark:border-white/10 bg-gray-100/50 dark:bg-secondary/30"></div>;
   }
 
   const isFirstDayOfMonth = day.date() === 1;
@@ -172,8 +172,8 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
     <div 
       ref={boxRef}
       className={cn(
-        "group relative flex flex-col border-r border-t border-white/10 gradient-border cursor-glow month-view-box min-h-[80px] md:min-h-[100px]",
-        "transition-all hover:bg-white/5 touch-manipulation",
+        "group relative flex flex-col border-r border-t border-gray-200 dark:border-white/10 gradient-border cursor-glow month-view-box min-h-[80px] md:min-h-[100px]",
+        "transition-all hover:bg-gray-100/50 dark:hover:bg-white/5 touch-manipulation",
         isToday && "bg-primary/10"
       )}
       onClick={(e) => {
@@ -187,13 +187,13 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       data-day={day.format('YYYY-MM-DD')}
     >
       {/* Day Header */}
-      <div className="flex flex-col items-center py-1 border-b border-white/10">
+      <div className="flex flex-col items-center py-1 border-b border-gray-100 dark:border-white/10">
         {rowIndex === 0 && (
-          <h4 className="text-[10px] md:text-xs text-muted-foreground hidden sm:block">{day.format("ddd").toUpperCase()}</h4>
+          <h4 className="text-[10px] md:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{day.format("ddd").toUpperCase()}</h4>
         )}
         <h4 
           className={cn(
-            "text-center text-xs md:text-sm", 
+            "text-center text-xs md:text-sm text-gray-700 dark:text-gray-200", 
             isToday ? "h-6 w-6 md:h-7 md:w-7 flex items-center justify-center rounded-full bg-primary text-white font-medium" : ""
           )}
         >
@@ -236,7 +236,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         ))}
         
         {hasMoreEvents && (
-          <div className="text-[10px] md:text-xs text-center bg-white/10 rounded p-1 min-h-[44px] flex items-center justify-center touch-manipulation">
+          <div className="text-[10px] md:text-xs text-center bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded p-1 min-h-[44px] flex items-center justify-center touch-manipulation">
             +{events.length - 3} more
           </div>
         )}

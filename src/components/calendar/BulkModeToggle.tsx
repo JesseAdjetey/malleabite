@@ -58,7 +58,9 @@ const BulkModeToggle: React.FC<BulkModeToggleProps> = ({
           onClick={onToggle}
           className={cn(
             "relative transition-all",
-            isBulkMode && "bg-primary hover:bg-primary/90"
+            isBulkMode 
+              ? "bg-primary hover:bg-primary/90 text-white" 
+              : "text-gray-700 dark:text-white border-gray-300 dark:border-white/20 hover:bg-gray-100 dark:hover:bg-white/10"
           )}
         >
           {isBulkMode ? (

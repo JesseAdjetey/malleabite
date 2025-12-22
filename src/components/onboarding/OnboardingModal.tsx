@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Bot, Bell, Users, Mic, CheckCircle2, 
-  ArrowRight, ArrowLeft, Rocket, X, PartyPopper 
+  ArrowRight, ArrowLeft, Rocket, X, PartyPopper, Palette 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext.unified';
+import { ThemeSelector } from '@/components/theme/ThemeSelector';
 import confetti from 'canvas-confetti';
 
 interface OnboardingStep {
@@ -81,6 +82,20 @@ export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModal
           <p className="text-muted-foreground">
             Malleabite is your AI-powered productivity companion. 
             We'll help you manage your time smarter, not harder.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: 'theme',
+      title: 'Choose Your Look',
+      description: 'Pick a theme that suits your style.',
+      icon: <Palette className="h-8 w-8" />,
+      content: (
+        <div className="py-4">
+          <ThemeSelector showLabel={false} size="lg" />
+          <p className="text-sm text-muted-foreground text-center mt-4">
+            You can change this anytime in Settings
           </p>
         </div>
       ),

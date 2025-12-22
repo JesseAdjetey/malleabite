@@ -46,7 +46,7 @@ const SavedModulesManager: React.FC<SavedModulesManagerProps> = ({ pageIndex }) 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button 
-          className="w-full mb-4" 
+          className="w-full mb-4 bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/20" 
           variant="outline"
         >
           Manage Modules

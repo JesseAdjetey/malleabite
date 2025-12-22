@@ -177,12 +177,12 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
             onChange={(e) => setNewItemText(e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, focusedQuadrant)}
             placeholder="Add new item..."
-            className="h-8 text-xs bg-white/10 border-white/10"
+            className="h-8 text-xs bg-white dark:bg-white/10 border-gray-200 dark:border-white/10 text-gray-800 dark:text-white"
           />
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2 bg-white/10 border-white/10"
+            className="h-8 px-2 bg-white dark:bg-white/10 border-gray-200 dark:border-white/10 text-gray-700 dark:text-white"
             onClick={() => handleAddNewItem(focusedQuadrant)}
           >
             <Plus size={14} />
@@ -202,7 +202,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               <div className="text-xs opacity-50 text-center pt-2">No items in this quadrant</div>
             ) : (
               quadrantItems.map(item => (
-                <div key={item.id} className="bg-white/10 text-xs p-2 rounded mb-1 flex justify-between">
+                <div key={item.id} className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white">
                   <span>{item.text}</span>
                   <button
                     onClick={() => handleRemoveItem(item.id)}
@@ -264,7 +264,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                 quadrantItems.slice(0, 3).map(item => (
                   <div
                     key={item.id}
-                    className="bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing"
+                    className="bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing text-gray-800 dark:text-white"
                     draggable={true}
                     onDragStart={(e) => {
                       e.dataTransfer.setData('application/json', JSON.stringify({

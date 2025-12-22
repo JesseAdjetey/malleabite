@@ -120,7 +120,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   return (
-    <div className="glass mx-2 mt-2 rounded-xl p-2 md:p-3 flex items-center justify-between border light-mode:border-gray-400 dark-mode:border-white/10 overflow-x-auto">
+    <div className="glass mx-2 mt-2 rounded-xl p-2 md:p-3 flex items-center justify-between border border-gray-300 dark:border-white/10 overflow-x-auto">
       {/* Left Side - Logo and Navigation */}
       <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
         {/* Logo with spinning animation - Hidden on mobile */}
@@ -137,7 +137,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             variant="outline"
             size="sm"
             onClick={() => navigate('/')}
-            className="h-8 md:h-9 text-xs md:text-sm light-mode:bg-white/95 light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
+            className="h-8 md:h-9 text-xs md:text-sm bg-white/95 text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
           >
             <Home className="h-4 w-4 mr-1" />
           </Button>
@@ -146,7 +146,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           variant="outline"
           size="sm"
           onClick={handleTodayClick}
-          className="h-8 md:h-9 text-xs md:text-sm light-mode:bg-white/95 light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-white/20"
+          className="h-8 md:h-9 text-xs md:text-sm bg-white/95 text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
         >
           <span className="hidden sm:inline">Today</span>
           <span className="sm:hidden">Now</span>
@@ -156,21 +156,21 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         <div className="flex items-center gap-0.5 md:gap-1">
           <button
             onClick={handlePrevClick}
-            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
+            className="p-1 rounded-full text-gray-700 hover:bg-gray-200 dark:text-white dark:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
             aria-label="Previous"
           >
             <ChevronLeft size={isMobile ? 20 : 18} />
           </button>
           <button
             onClick={handleNextClick}
-            className="p-1 rounded-full light-mode:hover:bg-gray-200 dark-mode:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
+            className="p-1 rounded-full text-gray-700 hover:bg-gray-200 dark:text-white dark:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
             aria-label="Next"
           >
             <ChevronRight size={isMobile ? 20 : 18} />
           </button>
         </div>
 
-        <h1 className="text-sm md:text-base font-semibold ml-1 md:ml-2 whitespace-nowrap truncate">{formatDate()}</h1>
+        <h1 className="text-sm md:text-base font-semibold ml-1 md:ml-2 whitespace-nowrap truncate text-gray-800 dark:text-white">{formatDate()}</h1>
       </div>
 
       {/* Right Side - View Selector and Settings */}
@@ -184,7 +184,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               onClick={() => setView(view)}
               className={`h-8 text-xs md:text-sm px-2 md:px-3 touch-manipulation min-h-[44px] md:min-h-0 ${selectedView === view
                 ? "bg-primary text-white"
-                : "light-mode:bg-white light-mode:text-gray-800 light-mode:border-gray-400 dark-mode:bg-white/10 dark-mode:border-white/10 dark-mode:hover:bg-purple/20"
+                : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
                 }`}
             >
               <span className="hidden sm:inline">{view}</span>
@@ -212,7 +212,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 md:h-9 px-2"
+                  className="h-8 md:h-9 px-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white/10"
                 >
                   <Wrench className="h-4 w-4 mr-1" />
                   <span className="text-xs md:text-sm">Tools</span>

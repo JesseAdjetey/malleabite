@@ -2,14 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light Mode (default) */
 :root {
+  --primary: 261 54% 51%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 262 83% 58%;
+  --secondary-foreground: 0 0% 100%;
+
+  --background: 0 0% 100%;
+  --foreground: 240 10% 10%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 10%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 10%;
+
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 5% 45%;
+
+  --accent: 261 54% 95%;
+  --accent-foreground: 261 54% 40%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 240 5% 84%;
+  --input: 240 5% 90%;
+  --ring: 261 54% 51%;
+
+  --radius: 0.75rem;
+
+  /* Background start color for gradient */
+  --background-start: #f8f7ff;
+  --background-end: #ede9fe;
+  
+  /* Glass effects for light mode */
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(139, 92, 246, 0.15);
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.08);
+}
+
+/* Dark Mode */
+.dark {
   --primary: 261 54% 61%;
   --primary-foreground: 210 40% 98%;
 
   --secondary: 262 83% 58%;
   --secondary-foreground: 210 40% 98%;
 
-  --background: 240 21% 14%;
+  --background: 240 21% 11%;
   --foreground: 213 31% 91%;
 
   --card: 240 21% 14%;
@@ -21,8 +64,8 @@
   --muted: 215 27% 16%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 261 54% 61%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 261 54% 20%;
+  --accent-foreground: 261 54% 80%;
 
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
@@ -31,10 +74,14 @@
   --input: 215 27% 18%;
   --ring: 261 54% 61%;
 
-  --radius: 0.75rem;
-
   /* Background start color for gradient */
   --background-start: #1a1625;
+  --background-end: #0f0a1a;
+  
+  /* Glass effects for dark mode */
+  --glass-bg: rgba(26, 22, 37, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
 }
 
 html {

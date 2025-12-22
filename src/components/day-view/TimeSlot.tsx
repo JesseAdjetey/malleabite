@@ -208,7 +208,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
 
   return (
     <div
-      className="relative flex h-20 border-t border-white/10 hover:bg-white/5 gradient-border cursor-glow"
+      className="relative flex h-20 border-t border-gray-200 dark:border-white/10 hover:bg-gray-100/50 dark:hover:bg-white/5 gradient-border cursor-glow"
       onClick={() => onTimeSlotClick(hour)}
       onDragOver={handleDragOver}
       onDrop={handleDrop}

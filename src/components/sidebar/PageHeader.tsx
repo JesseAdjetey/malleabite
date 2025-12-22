@@ -35,11 +35,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   };
 
   return (
-    <div className="p-3 flex items-center justify-between border-b light-mode:border-gray-400 dark-mode:border-white/10 light-mode:bg-gray-100 dark-mode:bg-black/30">
+    <div className="p-3 flex items-center justify-between border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/30">
       <button
         onClick={onPrevPage}
         disabled={!canGoToPrevPage}
-        className="p-1 rounded-full hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
+        className="p-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         <ChevronLeft size={16} />
       </button>
@@ -51,22 +51,22 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="glass-input text-lg font-semibold dark:bg-black/20 light:bg-white border-b border-purple-400 px-2 py-1 outline-none"
+              className="glass-input text-lg font-semibold bg-white dark:bg-black/20 text-gray-800 dark:text-white border-b border-purple-400 px-2 py-1 outline-none"
               autoFocus
             />
             <button
               onClick={handleSaveTitle}
               className="p-1 ml-1 rounded-full hover:bg-purple-500/20"
             >
-              <Check size={16} className="text-purple-300" />
+              <Check size={16} className="text-purple-600 dark:text-purple-300" />
             </button>
           </div>
         ) : (
           <div className="flex items-center">
-            <h1 className="text-lg font-semibold light-mode:text-purple-800 dark-mode:text-purple-200">{title}</h1>
+            <h1 className="text-lg font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
             <button
               onClick={handleEditTitle}
-              className="p-1 ml-1 rounded-full hover:bg-purple-500/20"
+              className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20"
             >
               <Edit2 size={14} />
             </button>
@@ -77,7 +77,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <button
         onClick={onNextPage}
         disabled={!canGoToNextPage}
-        className="p-1 rounded-full hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
+        className="p-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
       >
         <ChevronRight size={16} />
       </button>

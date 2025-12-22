@@ -183,7 +183,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           activeTodos.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2 bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer hover:bg-white/10 transition-colors"
+              className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
               draggable={true}
               onDragStart={(e) => handleDragStart(e, item)}
               onDragEnd={handleDragEnd}
@@ -199,7 +199,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
                 )}
               </div>
               <span
-                className={cn("text-sm flex-1", {
+                className={cn("text-sm flex-1 text-gray-800 dark:text-white", {
                   "line-through opacity-50": item.completed,
                 })}
               >

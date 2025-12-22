@@ -168,9 +168,9 @@ const MonthView = () => {
   return (
     <>
       <div className="glass mx-2 my-2 rounded-xl overflow-hidden">
-        <div className="grid grid-cols-7 text-center py-2 bg-secondary/50 border-b border-white/10">
+        <div className="grid grid-cols-7 text-center py-2 bg-secondary/50 border-b border-gray-200 dark:border-white/10">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <div key={day} className="text-xs md:text-sm font-medium">
+            <div key={day} className="text-xs md:text-sm font-medium text-gray-700 dark:text-gray-200">
               <span className="hidden sm:inline">{day}</span>
               <span className="sm:hidden">{day.charAt(0)}</span>
             </div>

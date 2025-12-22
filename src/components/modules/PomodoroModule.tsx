@@ -201,7 +201,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 
           {/* Timer display */}
           <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold">{formatTime(timeLeft)}</span>
+            <span className="text-2xl font-bold text-gray-800 dark:text-white">{formatTime(timeLeft)}</span>
             <span className={`text-xs ${timerMode === 'focus' ? 'text-primary' : 'text-green-500'}`}>
               {timerMode === 'focus' ? 'Focus' : 'Break'}
             </span>
@@ -233,13 +233,13 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         </div>
 
         {/* Sessions completed */}
-        <div className="w-full text-center mb-3 text-sm">
+        <div className="w-full text-center mb-3 text-sm text-gray-700 dark:text-gray-300">
           <span>Cycles: {cycles}</span>
         </div>
 
         {/* Focus target progress */}
         <div className="w-full mb-4">
-          <div className="flex justify-between text-xs mb-1">
+          <div className="flex justify-between text-xs mb-1 text-gray-700 dark:text-gray-300">
             <span>Focus Target</span>
             <span>{completedFocusTime}/{focusTarget} min</span>
           </div>
@@ -253,17 +253,17 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 
         {/* Settings panel */}
         {showSettings && (
-          <div className="w-full p-3 bg-black/10 rounded-md mb-2">
-            <h4 className="text-sm font-medium mb-3">Timer Settings</h4>
+          <div className="w-full p-3 bg-gray-100 dark:bg-white/10 rounded-md mb-2 border border-gray-200 dark:border-white/10">
+            <h4 className="text-sm font-medium mb-3 text-gray-800 dark:text-white">Timer Settings</h4>
 
             {/* Focus time slider */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs flex items-center gap-1">
+                <label className="text-xs flex items-center gap-1 text-gray-700 dark:text-gray-300">
                   <Clock size={14} />
                   Focus Time
                 </label>
-                <span className="text-xs">{focusTime} min</span>
+                <span className="text-xs text-gray-700 dark:text-gray-300">{focusTime} min</span>
               </div>
               <Slider
                 min={1}
@@ -277,11 +277,11 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
             {/* Break time slider */}
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs flex items-center gap-1">
+                <label className="text-xs flex items-center gap-1 text-gray-700 dark:text-gray-300">
                   <Clock size={14} />
                   Break Time
                 </label>
-                <span className="text-xs">{breakTime} min</span>
+                <span className="text-xs text-gray-700 dark:text-gray-300">{breakTime} min</span>
               </div>
               <Slider
                 min={1}
@@ -295,7 +295,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
             {/* Focus target input */}
             <div className="mb-2">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs flex items-center gap-1">
+                <label className="text-xs flex items-center gap-1 text-gray-700 dark:text-gray-300">
                   <Target size={14} />
                   Focus Target (minutes)
                 </label>

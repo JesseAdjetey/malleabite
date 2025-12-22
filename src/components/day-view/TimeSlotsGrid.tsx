@@ -31,12 +31,12 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
   return (
     <div className="grid grid-cols-[auto_1fr] px-4 py-2">
       {/* Time labels */}
-      <div className="flex flex-col text-right pr-4 border-r border-white/10">
+      <div className="flex flex-col text-right pr-4 border-r border-gray-200 dark:border-white/10">
         {getHours.map((hour, index) => (
           <div key={index} className="h-20 flex items-center">
             <span
               className={`text-sm font-medium ${
-                isCurrentHour(hour) ? "text-primary" : "text-secondary-foreground"
+                isCurrentHour(hour) ? "text-primary" : "text-gray-600 dark:text-gray-300"
               }`}
             >
               {hour.format("h A")}

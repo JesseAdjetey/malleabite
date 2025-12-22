@@ -83,16 +83,16 @@ const SideBar = () => {
 
   if (loading) {
     return (
-      <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20 items-center justify-center">
+      <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-white/50 dark:bg-black/20 items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-black/20">
+    <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-white/50 dark:bg-black/20">
       {/* New Page Creator - at top */}
-      <div className="p-3 border-b border-white/10">
+      <div className="p-3 border-b border-gray-200 dark:border-white/10">
         <NewPageCreator onCreatePage={handleCreateNewPage} />
       </div>
 

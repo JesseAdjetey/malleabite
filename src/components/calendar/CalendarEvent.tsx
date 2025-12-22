@@ -54,15 +54,20 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   // Whether this is a recurring event
   const isRecurring = Boolean(event.isRecurring || event.recurrenceParentId);
 
+  // Determine if color is a hex value or a class name
+  const isHexColor = color?.startsWith('#') || color?.startsWith('rgb');
+  const bgStyle = isHexColor ? { backgroundColor: color } : undefined;
+  const bgClass = isHexColor ? 'bg-purple-500' : color; // Fallback for hex colors
+
   return (
     <div
       className={cn(
         "calendar-event group h-full rounded-sm sm:rounded overflow-hidden",
-        color,
+        bgClass,
         !isLocked && "cursor-move",
         isDragging && "opacity-70"
       )}
-      style={{ height: '100%', minHeight: '100%' }}
+      style={{ height: '100%', minHeight: '100%', ...bgStyle }}
       onClick={(e) => handleClick(e, onClick)}
       draggable={!isLocked}
       onDragStart={handleDragStart}

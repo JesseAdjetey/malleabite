@@ -5,11 +5,13 @@
     @apply backdrop-blur-md;
   }
   
-  .light-mode .glass {
-    @apply bg-white/90 border-gray-400 border shadow-sm;
+  /* Light mode glass - use :root:not(.dark) for better default */
+  :root:not(.dark) .glass,
+  .light .glass {
+    @apply bg-white/90 border-gray-200 border shadow-sm;
   }
   
-  .dark-mode .glass {
+  .dark .glass {
     @apply bg-black/25 border-white/10 shadow-md;
   }
   
@@ -17,11 +19,12 @@
     @apply glass border-r;
   }
   
-  .light-mode .glass-sidebar {
-    @apply border-gray-400 bg-white/95;
+  :root:not(.dark) .glass-sidebar,
+  .light .glass-sidebar {
+    @apply border-gray-200 bg-white/95;
   }
   
-  .dark-mode .glass-sidebar {
+  .dark .glass-sidebar {
     @apply border-white/10;
   }
   
@@ -29,11 +32,12 @@
     @apply glass rounded-xl border shadow-md;
   }
   
-  .light-mode .glass-card {
-    @apply border-gray-400 shadow-sm bg-white/95;
+  :root:not(.dark) .glass-card,
+  .light .glass-card {
+    @apply border-gray-200 shadow-sm bg-white/95;
   }
   
-  .dark-mode .glass-card {
+  .dark .glass-card {
     @apply border-white/20;
   }
   
@@ -41,11 +45,12 @@
     @apply border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary;
   }
   
-  .light-mode .glass-input {
-    @apply bg-white/95 border-gray-400;
+  :root:not(.dark) .glass-input,
+  .light .glass-input {
+    @apply bg-white/95 border-gray-200;
   }
   
-  .dark-mode .glass-input {
+  .dark .glass-input {
     @apply bg-white/10 border-white/20;
   }
   
@@ -54,11 +59,13 @@
   }
   
   .calendar-event {
-    @apply relative p-2 rounded-md cursor-pointer text-xs hover:brightness-110 transition-all h-full overflow-hidden;
+    @apply relative p-2 rounded-md cursor-pointer text-xs hover:brightness-110 transition-all h-full overflow-hidden text-white shadow-sm;
   }
   
-  .light-mode .calendar-event {
-    @apply text-white;
+  /* Light mode: add more shadow for depth */
+  :root:not(.dark) .calendar-event,
+  .light .calendar-event {
+    @apply shadow-md;
   }
   
   .event-lock {
@@ -69,32 +76,32 @@
     @apply glass-card mb-4 shadow-lg;
   }
   
-  /* Calendar event colors */
+  /* Calendar event colors - more vibrant for both modes */
   .event-red {
-    @apply bg-gradient-to-br from-rose-400 to-rose-500;
+    @apply bg-gradient-to-br from-rose-500 to-rose-600;
   }
   
   .event-green {
-    @apply bg-gradient-to-br from-green-400 to-green-500;
+    @apply bg-gradient-to-br from-emerald-500 to-emerald-600;
   }
   
   .event-blue {
-    @apply bg-gradient-to-br from-blue-400 to-blue-500;
+    @apply bg-gradient-to-br from-blue-500 to-blue-600;
   }
   
   .event-purple {
-    @apply bg-gradient-to-br from-purple-400 to-purple-500;
+    @apply bg-gradient-to-br from-purple-500 to-purple-600;
   }
   
   .event-teal {
-    @apply bg-gradient-to-br from-teal-400 to-teal-500;
+    @apply bg-gradient-to-br from-teal-500 to-teal-600;
   }
   
   .event-orange {
-    @apply bg-gradient-to-br from-orange-400 to-orange-500;
+    @apply bg-gradient-to-br from-orange-500 to-orange-600;
   }
   
   .event-pink {
-    @apply bg-gradient-to-br from-pink-400 to-pink-500;
+    @apply bg-gradient-to-br from-pink-500 to-pink-600;
   }
 }

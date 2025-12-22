@@ -98,7 +98,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
             receivedInvites.map(invite => (
               <div 
                 key={invite.id}
-                className="flex items-center gap-2 bg-white/5 p-2 rounded-lg"
+                className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg"
               >
                 <Avatar className="h-6 w-6 flex-shrink-0">
                   <AvatarImage src="" />
@@ -156,7 +156,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
             sentInvites.map(invite => (
               <div 
                 key={invite.id}
-                className="flex items-center gap-2 bg-white/5 p-2 rounded-lg"
+                className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg"
               >
                 <Avatar className="h-6 w-6 flex-shrink-0">
                   <AvatarImage src="" />

@@ -138,35 +138,35 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
             reminders.map(reminder => (
               <div 
                 key={reminder.id}
-                className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${reminder.is_active ? 'bg-white/5' : 'bg-white/3 opacity-60'}`}
+                className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${reminder.is_active ? 'bg-gray-100 dark:bg-white/5' : 'bg-gray-50 dark:bg-white/3 opacity-60'}`}
               >
                 <div 
-                  className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${reminder.is_active ? 'bg-primary' : 'bg-secondary'}`}
+                  className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${reminder.is_active ? 'bg-primary' : 'bg-gray-300 dark:bg-secondary'}`}
                   onClick={() => handleToggleActive(reminder)}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start">
-                    <h4 className={`font-medium text-sm truncate ${!reminder.is_active && 'line-through opacity-70'}`}>
+                    <h4 className={`font-medium text-sm truncate text-gray-800 dark:text-white ${!reminder.is_active && 'line-through opacity-70'}`}>
                       {reminder.title}
                     </h4>
                     <div className="flex gap-1 ml-1">
                       <button 
                         onClick={() => handleTestSound(reminder.sound_id || 'default')}
-                        className="text-primary hover:text-primary/70 p-1"
+                        className="text-gray-500 dark:text-gray-400 hover:text-primary p-1"
                         title="Test sound"
                       >
                         <Play size={12} />
                       </button>
                       <button 
                         onClick={() => openEditDialog(reminder)}
-                        className="text-primary hover:text-primary/70 p-1"
+                        className="text-gray-500 dark:text-gray-400 hover:text-primary p-1"
                         title="Edit reminder"
                       >
                         <Edit2 size={12} />
                       </button>
                       <button 
                         onClick={() => handleDelete(reminder)}
-                        className="text-destructive/70 hover:text-destructive p-1"
+                        className="text-red-400 hover:text-red-600 p-1"
                         title="Delete reminder"
                       >
                         <Trash2 size={12} />
@@ -194,12 +194,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                     {(reminder.time_before_event_minutes || reminder.time_after_event_minutes) && (
                       <div className="flex items-center gap-2 text-xs">
                         {reminder.time_before_event_minutes && (
-                          <span className="bg-white/10 px-1.5 py-0.5 rounded-sm">
+                          <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
                             {reminder.time_before_event_minutes}m before
                           </span>
                         )}
                         {reminder.time_after_event_minutes && (
-                          <span className="bg-white/10 px-1.5 py-0.5 rounded-sm">
+                          <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
                             {reminder.time_after_event_minutes}m after
                           </span>
                         )}

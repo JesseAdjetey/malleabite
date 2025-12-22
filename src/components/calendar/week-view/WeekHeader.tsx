@@ -10,7 +10,7 @@ interface WeekHeaderProps {
 
 const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
   return (
-    <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr] place-items-center px-4 py-2 bg-secondary/50 border-b border-white/10">
+    <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr] place-items-center px-4 py-2 bg-secondary/50 border-b border-gray-200 dark:border-white/10">
       <div className="w-16 text-muted-foreground text-sm font-medium">GMT</div>
 
       {getWeekDays(userSelectedDate).map(({ currentDate, today }, index) => (

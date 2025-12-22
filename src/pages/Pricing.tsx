@@ -65,23 +65,23 @@ export default function Pricing() {
       </div>
 
       {/* Hero Section */}
-      <div className="container max-w-6xl mx-auto px-4 py-12 md:py-16">
-        <div className="text-center mb-12">
-          <Badge variant="secondary" className="mb-4">
+      <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-12 md:py-16">
+        <div className="text-center mb-8 sm:mb-12">
+          <Badge variant="secondary" className="mb-3 sm:mb-4">
             <Tag className="mr-1 h-3 w-3" />
             Pricing
           </Badge>
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4">
             Choose Your Perfect Plan
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto px-2">
             Start free, upgrade when you need more. No credit card required.
           </p>
         </div>
 
         {/* Billing Toggle */}
-        <div className="flex items-center justify-center gap-4 mb-12">
-          <Label htmlFor="billing-toggle" className={billingInterval === 'monthly' ? 'font-semibold' : ''}>
+        <div className="flex items-center justify-center gap-2 sm:gap-4 mb-8 sm:mb-12">
+          <Label htmlFor="billing-toggle" className={`text-sm sm:text-base ${billingInterval === 'monthly' ? 'font-semibold' : ''}`}>
             Monthly
           </Label>
           <Switch
@@ -89,20 +89,20 @@ export default function Pricing() {
             checked={billingInterval === 'yearly'}
             onCheckedChange={(checked) => setBillingInterval(checked ? 'yearly' : 'monthly')}
           />
-          <div className="flex items-center gap-2">
-            <Label htmlFor="billing-toggle" className={billingInterval === 'yearly' ? 'font-semibold' : ''}>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Label htmlFor="billing-toggle" className={`text-sm sm:text-base ${billingInterval === 'yearly' ? 'font-semibold' : ''}`}>
               Yearly
             </Label>
             <Badge variant="default" className="text-xs">
-              Save 17%
+              -17%
             </Badge>
           </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-12 md:px-4">
           {/* Free Plan */}
-          <Card className="relative">
+          <Card className="relative order-2 md:order-1">
             <CardHeader>
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="h-5 w-5 text-muted-foreground" />
@@ -151,17 +151,17 @@ export default function Pricing() {
           </Card>
 
           {/* Pro Plan - Featured */}
-          <Card className="relative border-primary shadow-lg scale-105 md:scale-110">
-            <div className="absolute -top-4 left-0 right-0 flex justify-center">
-              <Badge className="px-4 py-1">Most Popular</Badge>
+          <Card className="relative border-primary shadow-lg md:scale-105 order-1 md:order-2">
+            <div className="absolute -top-3 left-0 right-0 flex justify-center">
+              <Badge className="px-3 py-0.5 text-xs sm:px-4 sm:py-1 sm:text-sm">Most Popular</Badge>
             </div>
-            <CardHeader>
+            <CardHeader className="pt-6">
               <div className="flex items-center gap-2 mb-2">
                 <Crown className="h-5 w-5 text-yellow-500" />
                 <CardTitle>Pro</CardTitle>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold">
+                <span className="text-3xl sm:text-4xl font-bold">
                   ${billingInterval === 'monthly' ? '9.99' : '8.33'}
                 </span>
                 <span className="text-muted-foreground">/month</span>
@@ -218,7 +218,7 @@ export default function Pricing() {
           </Card>
 
           {/* Teams Plan */}
-          <Card className="relative">
+          <Card className="relative order-3">
             <CardHeader>
               <div className="flex items-center gap-2 mb-2">
                 <Users className="h-5 w-5 text-blue-500" />
@@ -279,32 +279,32 @@ export default function Pricing() {
         </div>
 
         {/* FAQ Section */}
-        <div className="max-w-3xl mx-auto mt-16">
-          <h2 className="text-2xl font-bold text-center mb-8">
+        <div className="max-w-3xl mx-auto mt-8 sm:mt-16 px-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-center mb-6 sm:mb-8">
             Frequently Asked Questions
           </h2>
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div>
-              <h3 className="font-semibold mb-2">Can I change plans anytime?</h3>
-              <p className="text-muted-foreground">
+              <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">Can I change plans anytime?</h3>
+              <p className="text-muted-foreground text-sm sm:text-base">
                 Yes! You can upgrade, downgrade, or cancel your subscription at any time. Changes take effect at the end of your current billing period.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold mb-2">What payment methods do you accept?</h3>
-              <p className="text-muted-foreground">
+              <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">What payment methods do you accept?</h3>
+              <p className="text-muted-foreground text-sm sm:text-base">
                 We accept all major credit cards (Visa, Mastercard, American Express) and debit cards through our secure payment processor, Stripe.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold mb-2">Is there a money-back guarantee?</h3>
-              <p className="text-muted-foreground">
+              <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">Is there a money-back guarantee?</h3>
+              <p className="text-muted-foreground text-sm sm:text-base">
                 Yes! We offer a 30-day money-back guarantee on annual plans. If you're not satisfied, we'll refund your payment, no questions asked.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold mb-2">What happens to my data if I downgrade?</h3>
-              <p className="text-muted-foreground">
+              <h3 className="font-semibold text-sm sm:text-base mb-1 sm:mb-2">What happens to my data if I downgrade?</h3>
+              <p className="text-muted-foreground text-sm sm:text-base">
                 Your data is never deleted. If you downgrade to Free, you'll keep all your existing data but won't be able to create new items beyond the free tier limits.
               </p>
             </div>

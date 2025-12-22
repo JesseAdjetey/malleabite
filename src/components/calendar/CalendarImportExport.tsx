@@ -97,56 +97,52 @@ export function CalendarImportExport() {
       {/* Import/Export Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Import Card */}
-        <Card className="p-6">
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-blue-500/10">
+        <Card className="p-5">
+          <div className="flex flex-col items-center text-center">
+            <div className="p-3 rounded-lg bg-blue-500/10 mb-3">
               <Upload className="h-6 w-6 text-blue-500" />
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold mb-1">Import Calendar</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Import events from Google Calendar, Outlook, or any .ics file
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".ics"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                className="w-full"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                {importing ? 'Processing...' : 'Select .ics File'}
-              </Button>
-            </div>
+            <h3 className="font-semibold mb-1">Import Calendar</h3>
+            <p className="text-sm text-muted-foreground mb-4 min-h-[40px]">
+              Import events from Google Calendar, Outlook, or any .ics file
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".ics"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="w-full"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {importing ? 'Processing...' : 'Select .ics File'}
+            </Button>
           </div>
         </Card>
 
         {/* Export Card */}
-        <Card className="p-6">
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-purple-500/10">
+        <Card className="p-5">
+          <div className="flex flex-col items-center text-center">
+            <div className="p-3 rounded-lg bg-purple-500/10 mb-3">
               <Download className="h-6 w-6 text-purple-500" />
             </div>
-            <div className="flex-1">
-              <h3 className="font-semibold mb-1">Export Calendar</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Download your calendar as .ics file for use in other apps
-              </p>
-              <Button
-                onClick={handleExport}
-                disabled={events.length === 0}
-                variant="outline"
-                className="w-full"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export {events.length} Events
-              </Button>
-            </div>
+            <h3 className="font-semibold mb-1">Export Calendar</h3>
+            <p className="text-sm text-muted-foreground mb-4 min-h-[40px]">
+              Download your calendar as .ics file for use in other apps
+            </p>
+            <Button
+              onClick={handleExport}
+              disabled={events.length === 0}
+              variant="outline"
+              className="w-full"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export {events.length} Events
+            </Button>
           </div>
         </Card>
       </div>

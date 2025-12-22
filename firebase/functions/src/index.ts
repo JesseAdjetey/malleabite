@@ -3,6 +3,13 @@ import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Export Stripe webhook handlers
+export {
+  stripeWebhook,
+  createCheckoutSession,
+  createPortalSession,
+} from './stripe-webhooks';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AnimatedLogo from '@/components/auth/AnimatedLogo';
-import { Check, ChevronRight, Star, Award, Gift, Trophy, Timer, Calendar, BrainCircuit, Sparkles, Mail } from 'lucide-react';
+import { Check, ChevronRight, Star, Award, Gift, Trophy, Timer, Calendar, BrainCircuit, Compass, Mail } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { authSchema, signUpSchema, sanitizeInput } from '@/lib/validation';
 import { logger } from '@/lib/logger';
@@ -14,7 +14,7 @@ import { ZodError } from 'zod';
 
 const ACHIEVEMENTS = [
   { id: 'first_visit', title: 'First Visit', icon: Star, description: 'Welcome to Malleabite!' },
-  { id: 'explorer', title: 'Explorer', icon: Sparkles, description: 'Clicked on all interactive elements' },
+  { id: 'explorer', title: 'Explorer', icon: Compass, description: 'Clicked on all interactive elements' },
   { id: 'curious', title: 'Curious Mind', icon: BrainCircuit, description: 'Read about our features' }
 ];
 

@@ -1,0 +1,1228 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest --run --no-coverage
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.8 [39m[90mc:/Users/anagb/malleabite[39m
+
+ [32m✓[39m src/test/minimal.test.ts [2m([22m[2m2 tests[22m[2m)[22m[90m 12[2mms[22m[39m
+[90mstderr[2m | src/lib/usage-tracker.test.ts[2m > [22m[2mUsage Tracker[2m > [22m[2mtrackEventCreation[2m > [22m[2mshould track event creation
+[22m[39mError tracking event creation: Error: [vitest] No "serverTimestamp" export is defined on the "firebase/firestore" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+    at VitestMocker.createError [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4mvitest[24m/dist/chunks/execute.2pr0rHgK.js:321:19[90m)[39m
+    at Object.get [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4mvitest[24m/dist/chunks/execute.2pr0rHgK.js:389:22[90m)[39m
+    at Module.trackEventCreation [90m(c:\Users\anagb\malleabite\[39msrc\lib\usage-tracker.ts:74:22[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at [90mc:\Users\anagb\malleabite\[39msrc\lib\usage-tracker.test.ts:38:7
+    at [90mfile:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:533:5
+    at runTest [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1056:11[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m {
+  codeFrame: [32m'vi\x1B[33m.\x1B[39m\x1B[34mmock\x1B[39m(\x1B[35mimport\x1B[39m(\x1B[32m"firebase/firestore"\x1B[39m)\x1B[33m,\x1B[39m \x1B[35masync\x1B[39m (importOriginal) \x1B[33m=>\x1B[39m {\n'[39m +
+    [32m'  \x1B[35mconst\x1B[39m actual \x1B[33m=\x1B[39m \x1B[35mawait\x1B[39m \x1B[34mimportOriginal\x1B[39m()\n'[39m +
+    [32m'  \x1B[35mreturn\x1B[39m {\n'[39m +
+    [32m'    \x1B[33m...\x1B[39mactual\x1B[33m,\x1B[39m\n'[39m +
+    [32m'    \x1B[90m// your mocked methods\x1B[39m\n'[39m +
+    [32m'  }\n'[39m +
+    [32m'})'[39m
+}
+
+[90mstderr[2m | src/lib/usage-tracker.test.ts[2m > [22m[2mUsage Tracker[2m > [22m[2mtrackAIRequest[2m > [22m[2mshould track AI request
+[22m[39mError tracking AI request: Error: [vitest] No "serverTimestamp" export is defined on the "firebase/firestore" mock. Did you forget to return it from "vi.mock"?
+If you need to partially mock a module, you can use "importOriginal" helper inside:
+
+    at VitestMocker.createError [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4mvitest[24m/dist/chunks/execute.2pr0rHgK.js:321:19[90m)[39m
+    at Object.get [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4mvitest[24m/dist/chunks/execute.2pr0rHgK.js:389:22[90m)[39m
+    at Module.trackAIRequest [90m(c:\Users\anagb\malleabite\[39msrc\lib\usage-tracker.ts:102:22[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at [90mc:\Users\anagb\malleabite\[39msrc\lib\usage-tracker.test.ts:46:7
+    at [90mfile:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:533:5
+    at runTest [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1056:11[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m
+    at runSuite [90m(file:///c:/Users/anagb/malleabite/[39mnode_modules/[4m@vitest[24m/runner/dist/index.js:1205:15[90m)[39m {
+  codeFrame: [32m'vi\x1B[33m.\x1B[39m\x1B[34mmock\x1B[39m(\x1B[35mimport\x1B[39m(\x1B[32m"firebase/firestore"\x1B[39m)\x1B[33m,\x1B[39m \x1B[35masync\x1B[39m (importOriginal) \x1B[33m=>\x1B[39m {\n'[39m +
+    [32m'  \x1B[35mconst\x1B[39m actual \x1B[33m=\x1B[39m \x1B[35mawait\x1B[39m \x1B[34mimportOriginal\x1B[39m()\n'[39m +
+    [32m'  \x1B[35mreturn\x1B[39m {\n'[39m +
+    [32m'    \x1B[33m...\x1B[39mactual\x1B[33m,\x1B[39m\n'[39m +
+    [32m'    \x1B[90m// your mocked methods\x1B[39m\n'[39m +
+    [32m'  }\n'[39m +
+    [32m'})'[39m
+}
+
+ [32m✓[39m src/lib/usage-tracker.test.ts [2m([22m[2m3 tests[22m[2m)[22m[90m 180[2mms[22m[39m
+ [31m❯[39m src/lib/subscription-limits.test.ts [2m([22m[2m12 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[90m 190[2mms[22m[39m
+[31m   [31m×[31m Subscription Limits[2m > [22mgetLimitsForPlan[2m > [22mshould return PRO plan limits[90m 67[2mms[22m[31m[39m
+[31m     → expected 1000 to be 500 // Object.is equality[39m
+[31m   [31m×[31m Subscription Limits[2m > [22mgetFeatureAccess[2m > [22mshould block inactive subscriptions[90m 31[2mms[22m[31m[39m
+[31m     → expected true to be false // Object.is equality[39m
+ [31m❯[39m src/lib/offline-sync.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m4 skipped[39m[2m)[22m[90m 104[2mms[22m[39m
+[31m   [31m×[31m Offline Sync[2m > [22mshould use getAll() instead of IDBKeyRange for boolean queries[90m 84[2mms[22m[31m[39m
+[31m     → Cannot set properties of undefined (setting 'onerror')[39m
+ [31m❯[39m src/components/calendar/mobile/MobileEventForm.test.tsx [2m([22m[2m6 tests[22m[2m | [22m[31m3 failed[39m[2m)[22m[33m 7106[2mms[22m[39m
+[31m   [31m×[31m MobileEventForm[2m > [22mshould render with minimum touch targets (44px)[33m 2549[2mms[22m[31m[39m
+[31m     → expected NaN to be greater than or equal to 44[39m
+   [33m[2m✓[22m[39m MobileEventForm[2m > [22mshould display category selector [33m476[2mms[22m[39m
+   [33m[2m✓[22m[39m MobileEventForm[2m > [22mshould have all-day toggle [33m1717[2mms[22m[39m
+[31m   [31m×[31m MobileEventForm[2m > [22mshould call onSave with event data[33m 840[2mms[22m[31m[39m
+[31m     → Unable to find an element with the placeholder text of: /event title/i
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mdata-scroll-locked[31m=[32m"1"[31m
+  [33mstyle[31m=[32m"pointer-events: none;"[31m
+[36m>[31m
+  [36m<span[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+    [33mdata-radix-focus-guard[31m=[32m""[31m
+    [33mstyle[31m=[32m"outline: none; opacity: 0; position: fixed; pointer-events: none;"[31m
+    [33mtabindex[31m=[32m"0"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mclass[31m=[32m"fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+    [33mdata-state[31m=[32m"open"[31m
+    [33mstyle[31m=[32m"pointer-events: auto;"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-describedby[31m=[32m"radix-:rt:"[31m
+    [33maria-labelledby[31m=[32m"radix-:rs:"[31m
+    [33mclass[31m=[32m"fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500 inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom h-[90vh] rounded-t-xl"[31m
+    [33mdata-state[31m=[32m"open"[31m
+    [33mid[31m=[32m"radix-:rr:"[31m
+    [33mrole[31m=[32m"dialog"[31m
+    [33mstyle[31m=[32m"pointer-events: auto;"[31m
+    [33mtabindex[31m=[32m"-1"[31m
+  [36m>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"flex flex-col space-y-2 text-center sm:text-left pb-4"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"font-semibold text-foreground text-xl"[31m
+          [33mid[31m=[32m"radix-:rs:"[31m
+        [36m>[31m
+          [0mNew Event[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-x h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"M18 6 6 18"[31m
+            [36m/>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m6 6 12 12"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<p[31m
+        [33mclass[31m=[32m"text-sm text-muted-foreground"[31m
+        [33mid[31m=[32m"radix-:rt:"[31m
+      [36m>[31m
+        [0mCreate a new calendar event[0m
+      [36m</p>[31m
+    [36m</div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"flex-1 overflow-y-auto pb-20"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"space-y-6 pt-4"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"space-y-2"[31m
+        [36m>[31m
+          [36m<label[31m
+            [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-base font-semibold"[31m
+            [33mfor[31m=[32m"title"[31m
+          [36m>[31m
+            [0mEvent Title *[0m
+          [36m</label>[31m
+          [36m<input[31m
+            [33mclass[31m=[32m"flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-12 text-base"[31m
+            [33mid[31m=[32m"title"[31m
+            [33mplaceholder[31m=[32m"What's the event?"[31m
+            [33mvalue[31m=[32m""[31m
+          [36m/>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"space-y-4"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-2 mb-2"[31m
+          [36m>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-calendar h-5 w-5 text-muted-foreground"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M8 2v4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M16 2v4"[31m
+              [36m/>[31m
+              [36m<rect[31m
+                [33mheight[31m=[32m"18"[31m
+                [33mrx[31m=[32m"2"[31m
+                [33mwidth[31m=[32m"18"[31m
+                [33mx[31m=[32m"3"[31m
+                [33my[31m=[32m"4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M3 10h18"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<label[31m
+              [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-base font-semibold"[31m
+            [36m>[31m
+              [0mDate & Time[0m
+            [36m</label>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-2"[31m
+          [36m>[31m
+            [36m<label[31m
+              [33mclass[31m=[32m"font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-sm"[31m
+              [33mfor[31m=[32m"start-date"[31m
+            [36m>[31m
+              [0mStart[0m
+            [36m</label>[31m
+     ...[39m
+[31m   [31m×[31m MobileEventForm[2m > [22mshould show time pickers when not all-day[33m 625[2mms[22m[31m[39m
+[31m     → Unable to find a label with the text of: /start time/i
+
+Ignored nodes: comments, script, style
+[36m<body[31m
+  [33mdata-scroll-locked[31m=[32m"1"[31m
+  [33mstyle[31m=[32m"pointer-events: none;"[31m
+[36m>[31m
+  [36m<span[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+    [33mdata-radix-focus-guard[31m=[32m""[31m
+    [33mstyle[31m=[32m"outline: none; opacity: 0; position: fixed; pointer-events: none;"[31m
+    [33mtabindex[31m=[32m"0"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-hidden[31m=[32m"true"[31m
+    [33mclass[31m=[32m"fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"[31m
+    [33mdata-aria-hidden[31m=[32m"true"[31m
+    [33mdata-state[31m=[32m"open"[31m
+    [33mstyle[31m=[32m"pointer-events: auto;"[31m
+  [36m/>[31m
+  [36m<div[31m
+    [33maria-describedby[31m=[32m"radix-:r16:"[31m
+    [33maria-labelledby[31m=[32m"radix-:r15:"[31m
+    [33mclass[31m=[32m"fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500 inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom h-[90vh] rounded-t-xl"[31m
+    [33mdata-state[31m=[32m"open"[31m
+    [33mid[31m=[32m"radix-:r14:"[31m
+    [33mrole[31m=[32m"dialog"[31m
+    [33mstyle[31m=[32m"pointer-events: auto;"[31m
+    [33mtabindex[31m=[32m"-1"[31m
+  [36m>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"flex flex-col space-y-2 text-center sm:text-left pb-4"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between"[31m
+      [36m>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"font-semibold text-foreground text-xl"[31m
+          [33mid[31m=[32m"radix-:r15:"[31m
+        [36m>[31m
+          [0mNew Event[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-x h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"M18 6 6 18"[31m
+            [36m/>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m6 6 12 12"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<p[31m
+        [33mclass[31m=[32m"text-sm text-muted-foreground"[31m
+        [33mid[31m=[32m"radix-:r16:"[31m
+      [36m>[31m
+        [0mCreate a new calendar event[0m
+      [36m</p>[31m
+    [36m</div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"flex-1 overflow-y-auto pb-20"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"space-y-6 pt-4"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"space-y-2"[31m
+        [36m>[31m
+          [36m<label[31m
+            [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-base font-semibold"[31m
+            [33mfor[31m=[32m"title"[31m
+          [36m>[31m
+            [0mEvent Title *[0m
+          [36m</label>[31m
+          [36m<input[31m
+            [33mclass[31m=[32m"flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm h-12 text-base"[31m
+            [33mid[31m=[32m"title"[31m
+            [33mplaceholder[31m=[32m"What's the event?"[31m
+            [33mvalue[31m=[32m""[31m
+          [36m/>[31m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"space-y-4"[31m
+        [36m>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"flex items-center gap-2 mb-2"[31m
+          [36m>[31m
+            [36m<svg[31m
+              [33mclass[31m=[32m"lucide lucide-calendar h-5 w-5 text-muted-foreground"[31m
+              [33mfill[31m=[32m"none"[31m
+              [33mheight[31m=[32m"24"[31m
+              [33mstroke[31m=[32m"currentColor"[31m
+              [33mstroke-linecap[31m=[32m"round"[31m
+              [33mstroke-linejoin[31m=[32m"round"[31m
+              [33mstroke-width[31m=[32m"2"[31m
+              [33mviewBox[31m=[32m"0 0 24 24"[31m
+              [33mwidth[31m=[32m"24"[31m
+              [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+            [36m>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M8 2v4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M16 2v4"[31m
+              [36m/>[31m
+              [36m<rect[31m
+                [33mheight[31m=[32m"18"[31m
+                [33mrx[31m=[32m"2"[31m
+                [33mwidth[31m=[32m"18"[31m
+                [33mx[31m=[32m"3"[31m
+                [33my[31m=[32m"4"[31m
+              [36m/>[31m
+              [36m<path[31m
+                [33md[31m=[32m"M3 10h18"[31m
+              [36m/>[31m
+            [36m</svg>[31m
+            [36m<label[31m
+              [33mclass[31m=[32m"peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-base font-semibold"[31m
+            [36m>[31m
+              [0mDate & Time[0m
+            [36m</label>[31m
+          [36m</div>[31m
+          [36m<div[31m
+            [33mclass[31m=[32m"space-y-2"[31m
+          [36m>[31m
+            [36m<label[31m
+              [33mclass[31m=[32m"font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-sm"[31m
+              [33mfor[31m=[32m"start-date"[31m
+            [36m>[31m
+              [0mStart[0m
+            [36m</label>[31m
+...[39m
+   [33m[2m✓[22m[39m MobileEventForm[2m > [22mshould hide time pickers when all-day is toggled [33m890[2mms[22m[39m
+ [31m❯[39m src/components/calendar/mobile/MobileMonthView.test.tsx [2m([22m[2m4 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[33m 10604[2mms[22m[39m
+[31m   [31m×[31m MobileMonthView[2m > [22mshould render month grid with 60px minimum cells[33m 962[2mms[22m[31m[39m
+[31m     → Unable to find an element by: [data-testid="/calendar-date/"]
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"h-full flex flex-col bg-background"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between p-4 border-b"[31m
+      [36m>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-left h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m15 18-6-6 6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"text-lg font-semibold"[31m
+        [36m>[31m
+          [0mJanuary 2025[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-right h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m9 18 6-6-6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"grid grid-cols-7 border-b"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mM[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mW[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mF[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex-1 overflow-hidden"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"grid grid-cols-7 h-full"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m1[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m2[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m3[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+            ...[39m
+[31m   [31m×[31m MobileMonthView[2m > [22mshould display event dots on dates with events[90m 110[2mms[22m[31m[39m
+[31m     → Unable to find an element by: [data-testid="event-dot"]
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"h-full flex flex-col bg-background"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between p-4 border-b"[31m
+      [36m>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-left h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m15 18-6-6 6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"text-lg font-semibold"[31m
+        [36m>[31m
+          [0mJanuary 2025[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-right h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m9 18 6-6-6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"grid grid-cols-7 border-b"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mM[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mW[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mF[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex-1 overflow-hidden"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"grid grid-cols-7 h-full"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m1[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m2[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m3[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+            ...[39m
+[31m   [31m×[31m MobileMonthView[2m > [22mshould call onDateSelect when date is tapped[90m 94[2mms[22m[31m[39m
+[31m     → Unable to find an element by: [data-testid="/calendar-date/"]
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"h-full flex flex-col bg-background"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between p-4 border-b"[31m
+      [36m>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-left h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m15 18-6-6 6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"text-lg font-semibold"[31m
+        [36m>[31m
+          [0mJanuary 2025[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-right h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m9 18 6-6-6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"grid grid-cols-7 border-b"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mM[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mW[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mF[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex-1 overflow-hidden"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"grid grid-cols-7 h-full"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m1[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m2[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m3[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+            ...[39m
+[31m   [31m×[31m MobileMonthView[2m > [22mshould show floating action button[33m 9432[2mms[22m[31m[39m
+[31m     → Unable to find an accessible element with the role "button" and name `/add/i`
+
+Here are the accessible roles:
+
+  button:
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+  [36m/>[31m
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+  [36m/>[31m
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+    [33mdisabled[31m=[32m""[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+    [33mdisabled[31m=[32m""[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+    [33mdisabled[31m=[32m""[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "1":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "2":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "3":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "4":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "5":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "6":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "7":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "8":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "9":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "10":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "11":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "12":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "13":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "14":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "15":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "16":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "17":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "18":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "19":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "20":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "21":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "22":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "23":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "24":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "25":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "26":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "27":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "28":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "29":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "30":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "31":
+  [36m<button[31m
+    [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+    [33mstyle[31m=[32m"min-height: 60px;"[31m
+  [36m/>[31m
+
+  Name "":
+  [36m<button[31m
+    [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 fixed bottom-20 right-4 h-14 w-14 rounded-full shadow-lg"[31m
+  [36m/>[31m
+
+  --------------------------------------------------
+  heading:
+
+  Name "January 2025":
+  [36m<h2[31m
+    [33mclass[31m=[32m"text-lg font-semibold"[31m
+  [36m/>[31m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[31m
+  [36m<div>[31m
+    [36m<div[31m
+      [33mclass[31m=[32m"h-full flex flex-col bg-background"[31m
+    [36m>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex items-center justify-between p-4 border-b"[31m
+      [36m>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-left h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m15 18-6-6 6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+        [36m<h2[31m
+          [33mclass[31m=[32m"text-lg font-semibold"[31m
+        [36m>[31m
+          [0mJanuary 2025[0m
+        [36m</h2>[31m
+        [36m<button[31m
+          [33mclass[31m=[32m"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-10 w-10"[31m
+        [36m>[31m
+          [36m<svg[31m
+            [33mclass[31m=[32m"lucide lucide-chevron-right h-5 w-5"[31m
+            [33mfill[31m=[32m"none"[31m
+            [33mheight[31m=[32m"24"[31m
+            [33mstroke[31m=[32m"currentColor"[31m
+            [33mstroke-linecap[31m=[32m"round"[31m
+            [33mstroke-linejoin[31m=[32m"round"[31m
+            [33mstroke-width[31m=[32m"2"[31m
+            [33mviewBox[31m=[32m"0 0 24 24"[31m
+            [33mwidth[31m=[32m"24"[31m
+            [33mxmlns[31m=[32m"http://www.w3.org/2000/svg"[31m
+          [36m>[31m
+            [36m<path[31m
+              [33md[31m=[32m"m9 18 6-6-6-6"[31m
+            [36m/>[31m
+          [36m</svg>[31m
+        [36m</button>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"grid grid-cols-7 border-b"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mM[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mW[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mT[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mF[0m
+        [36m</div>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"text-center py-2 text-xs font-semibold text-muted-foreground"[31m
+        [36m>[31m
+          [0mS[0m
+        [36m</div>[31m
+      [36m</div>[31m
+      [36m<div[31m
+        [33mclass[31m=[32m"flex-1 overflow-hidden"[31m
+      [36m>[31m
+        [36m<div[31m
+          [33mclass[31m=[32m"grid grid-cols-7 h-full"[31m
+        [36m>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50 bg-muted/20 cursor-default"[31m
+            [33mdisabled[31m=[32m""[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m/>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m1[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m2[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+              [33mclass[31m=[32m"text-sm font-medium mb-1"[31m
+            [36m>[31m
+              [0m3[0m
+            [36m</div>[31m
+          [36m</button>[31m
+          [36m<button[31m
+            [33mclass[31m=[32m"relative border-r border-b min-h-[60px] p-1 transition-colors active:bg-muted/50"[31m
+            [33mstyle[31m=[32m"min-height: 60px;"[31m
+          [36m>[31m
+            [36m<div[31m
+            ...[39m
+Terminate batch job (Y/N)? Terminate batch job (Y/N)? 
+^C

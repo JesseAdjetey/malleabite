@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Sparkles, FileText, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Wrench, FileText, Zap, Crown, BarChart3 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,7 @@ import BulkModeToggle from '../calendar/BulkModeToggle';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSubscription } from '@/hooks/use-subscription';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -41,6 +43,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     bulkDuplicate,
     deselectAll
   } = useBulkSelection();
+  
+  const { subscription } = useSubscription();
+  const isPro = subscription?.isPro ?? false;
 
   const handleToggleBulkMode = () => {
     if (isBulkMode) {
@@ -199,9 +204,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             onDuplicate={bulkDuplicate}
             onDeselectAll={deselectAll}
           />}
-          {!isMobile && <AnalyticsNav />}
           
-          {/* Tools Dropdown - Groups Templates, Quick Schedule, and Patterns */}
+          {/* Tools Dropdown - Groups Templates, Quick Schedule, Patterns, and Analytics */}
           {!isMobile && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -210,7 +214,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   size="sm"
                   className="h-8 md:h-9 px-2"
                 >
-                  <Sparkles className="h-4 w-4 mr-1" />
+                  <Wrench className="h-4 w-4 mr-1" />
                   <span className="text-xs md:text-sm">Tools</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -227,8 +231,32 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   <MoreHorizontal className="h-4 w-4 mr-2" />
                   Patterns
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/analytics')}>
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+          )}
+          
+          {/* Upgrade Button or Pro Badge */}
+          {!isMobile && (
+            isPro ? (
+              <Badge className="bg-purple-600 text-white text-xs">
+                <Crown className="h-3 w-3 mr-1" />
+                PRO
+              </Badge>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => navigate('/pricing')}
+                className="h-8 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white text-xs"
+              >
+                <Crown className="h-3 w-3 mr-1" />
+                Upgrade
+              </Button>
+            )
           )}
           
           {!isMobile && <SettingsNav />}

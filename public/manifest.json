@@ -3,6 +3,7 @@
     "short_name": "Malleabite",
     "description": "Intelligent Productivity Platform - Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0a0a0a",
     "theme_color": "#8b5cf6",
@@ -49,6 +50,35 @@
                     "sizes": "192x192"
                 }
             ]
+        },
+        {
+            "name": "Quick Schedule",
+            "short_name": "Quick",
+            "description": "Quick event scheduling",
+            "url": "/quick-schedule",
+            "icons": [
+                {
+                    "src": "/assets/logo.png",
+                    "sizes": "192x192"
+                }
+            ]
+        },
+        {
+            "name": "Templates",
+            "short_name": "Templates",
+            "description": "Event templates",
+            "url": "/templates",
+            "icons": [
+                {
+                    "src": "/assets/logo.png",
+                    "sizes": "192x192"
+                }
+            ]
         }
-    ]
+    ],
+    "serviceworker": {
+        "src": "/sw.js",
+        "scope": "/",
+        "update_via_cache": "none"
+    }
 }

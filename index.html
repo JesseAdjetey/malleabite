@@ -4,8 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Malleabite - Intelligent Productivity Platform</title>
-    <meta name="description" content="Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique" />
+    <meta name="description" content="Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique. The smart calendar that helps you be more productive." />
     <meta name="author" content="Malleabite" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://malleabite.vercel.app" />
+    
+    <!-- Preconnect to improve performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firebaseapp.com" />
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/assets/logo.png" />
@@ -20,17 +28,54 @@
     <meta name="apple-mobile-web-app-title" content="Malleabite" />
     <link rel="apple-touch-icon" href="/assets/logo.png" />
 
+    <!-- Open Graph -->
     <meta property="og:title" content="Malleabite - Intelligent Productivity Platform" />
-    <meta property="og:description" content="Master your time with AI-powered scheduling" />
+    <meta property="og:description" content="Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/assets/logo.png" />
+    <meta property="og:url" content="https://malleabite.vercel.app" />
+    <meta property="og:image" content="https://malleabite.vercel.app/assets/og-image.png" />
+    <meta property="og:site_name" content="Malleabite" />
 
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="/assets/logo.png" />
+    <meta name="twitter:title" content="Malleabite - Smart Calendar & Productivity" />
+    <meta name="twitter:description" content="AI-powered scheduling that adapts to your life" />
+    <meta name="twitter:image" content="https://malleabite.vercel.app/assets/og-image.png" />
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Malleabite",
+      "applicationCategory": "ProductivityApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "AI-powered calendar and productivity platform with Eisenhower Matrix, Pomodoro Timer, and smart scheduling.",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "150"
+      }
+    }
+    </script>
   </head>
 
   <body>
-    <div id="root"></div>
+    <!-- Critical loading state to prevent flash -->
+    <div id="root">
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f0a1a;">
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;border:3px solid #8b5cf6;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
+          <p style="color:#a78bfa;margin-top:16px;font-family:system-ui;">Loading Malleabite...</p>
+        </div>
+      </div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

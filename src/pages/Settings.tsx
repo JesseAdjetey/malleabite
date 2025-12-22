@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 import UserProfile from '@/components/UserProfile';
 import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
 import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
-import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft } from 'lucide-react';
+import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
+import { SlackNotifications } from '@/components/integrations/SlackNotifications';
+import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MobileNavigation from '@/components/MobileNavigation';
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -12,8 +14,9 @@ import { useHeyMally } from '@/contexts/HeyMallyContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { useSubscription } from '@/hooks/use-subscription';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations';
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -26,6 +29,8 @@ const Settings = () => {
     toggleWakeWord,
     error: wakeWordError 
   } = useHeyMally();
+  const { subscription } = useSubscription();
+  const isPro = subscription?.isPro ?? false;
 
   const handleSignOut = async () => {
     try {
@@ -140,6 +145,39 @@ const Settings = () => {
             <ChevronRight className="h-5 w-5 text-muted-foreground" />
           </button>
 
+          {/* Subscription Card */}
+          <button
+            onClick={() => navigate(isPro ? '/billing' : '/pricing')}
+            className={cn(
+              "w-full flex items-center gap-4 p-4 mb-6 rounded-2xl border transition-all active:scale-[0.98]",
+              isPro 
+                ? "bg-gradient-to-r from-purple-600/20 to-violet-600/20 border-purple-500/30"
+                : "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30"
+            )}
+          >
+            <div className={cn(
+              "w-14 h-14 rounded-xl flex items-center justify-center",
+              isPro ? "bg-purple-600" : "bg-gradient-to-br from-amber-500 to-orange-500"
+            )}>
+              <Crown className="h-7 w-7 text-white" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-semibold text-lg">
+                {isPro ? 'Pro Plan' : 'Free Plan'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {isPro ? 'Manage billing & subscription' : 'Upgrade for unlimited features'}
+              </p>
+            </div>
+            {isPro ? (
+              <CreditCard className="h-5 w-5 text-purple-400" />
+            ) : (
+              <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                UPGRADE
+              </span>
+            )}
+          </button>
+
           {/* Settings Groups */}
           <div className="space-y-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">
@@ -171,6 +209,13 @@ const Settings = () => {
               label="Import & Export"
               sublabel="Backup or restore your data"
               onClick={() => setActiveSection('import')}
+            />
+
+            <MenuItem
+              icon={Plug2}
+              label="Integrations"
+              sublabel="Google Calendar, Slack & more"
+              onClick={() => setActiveSection('integrations')}
             />
           </div>
 
@@ -322,6 +367,27 @@ const Settings = () => {
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Import & Export" />
           <CalendarImportExport />
+        </div>
+        <MobileNavigation />
+      </div>
+    );
+  }
+
+  // Integrations Section
+  if (activeSection === 'integrations') {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <div className="px-4 pt-6 max-w-lg mx-auto">
+          <BackButton title="Integrations" />
+          
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Connect your favorite services to sync events and get notifications.
+            </p>
+            
+            <GoogleCalendarSync />
+            <SlackNotifications />
+          </div>
         </div>
         <MobileNavigation />
       </div>

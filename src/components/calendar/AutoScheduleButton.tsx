@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Clock, Calendar, TrendingUp, CheckCircle2, X } from 'lucide-react';
+import { Wand2, Clock, Calendar, TrendingUp, CheckCircle2, X } from 'lucide-react';
 import { optimizeSchedule, TaskToSchedule } from '@/lib/algorithms/schedule-optimizer';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import dayjs from 'dayjs';
@@ -99,14 +99,14 @@ export function AutoScheduleButton({ task, onSchedule }: AutoScheduleButtonProps
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <Sparkles className="h-4 w-4" />
+          <Wand2 className="h-4 w-4" />
           Auto-Schedule
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-500" />
+            <Wand2 className="h-5 w-5 text-purple-500" />
             AI-Powered Scheduling
           </DialogTitle>
           <DialogDescription>
@@ -224,7 +224,7 @@ export function AutoScheduleButton({ task, onSchedule }: AutoScheduleButtonProps
                 disabled={loading}
                 className="flex-1 bg-purple-500 hover:bg-purple-600"
               >
-                <Sparkles className="h-4 w-4 mr-2" />
+                <Wand2 className="h-4 w-4 mr-2" />
                 {loading ? 'Scheduling...' : 'Schedule at Best Time'}
               </Button>
               <Button variant="outline" onClick={() => setOpen(false)}>

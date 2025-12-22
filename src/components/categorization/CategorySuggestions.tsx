@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, Check } from 'lucide-react';
+import { Wand2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { classifyEvent, getCategoryColor, getCategoryIcon, type CategorySuggestion, type EventCategory } from '@/lib/algorithms/event-classifier';
@@ -52,7 +52,7 @@ export function CategorySuggestions({
   return (
     <div className="p-3 rounded-lg bg-black/30 backdrop-blur-sm border border-purple-500/30">
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="h-4 w-4 text-purple-400" />
+        <Wand2 className="h-4 w-4 text-purple-400" />
         <span className="text-sm font-medium text-white">Smart Category Suggestions</span>
       </div>
 

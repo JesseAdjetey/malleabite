@@ -9,7 +9,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Loader2,
-  Sparkles,
+  MessageSquare,
   Brain,
   Mic,
   Volume2,
@@ -946,7 +946,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         <div className="flex items-center space-x-2">
           <Brain className="h-5 w-5" />
           <span className="font-semibold">Mally AI</span>
-          <Sparkles className="h-4 w-4 animate-pulse" />
+          <MessageSquare className="h-4 w-4 animate-pulse" />
         </div>
         <div className="flex items-center space-x-1">
           <button

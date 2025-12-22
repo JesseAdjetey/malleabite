@@ -1,6 +1,6 @@
 // Templates Page - Mobile-First Design
 import { useState } from 'react';
-import { Plus, Search, Star, Clock, Trash2, Edit, Calendar, ChevronRight, ChevronLeft, Sparkles, X } from 'lucide-react';
+import { Plus, Search, Star, Clock, Trash2, Edit, Calendar, ChevronRight, ChevronLeft, LayoutTemplate, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -251,14 +251,14 @@ export default function Templates() {
           {isLoading ? (
             <div className="text-center py-12">
               <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-3 animate-pulse">
-                <Sparkles className="h-6 w-6 text-primary" />
+                <LayoutTemplate className="h-6 w-6 text-primary" />
               </div>
               <p className="text-sm text-muted-foreground">Loading templates...</p>
             </div>
           ) : filteredBySearch.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="h-8 w-8 text-muted-foreground" />
+                <LayoutTemplate className="h-8 w-8 text-muted-foreground" />
               </div>
               <p className="font-medium mb-1">No templates yet</p>
               <p className="text-sm text-muted-foreground mb-6">

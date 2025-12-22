@@ -1,427 +1,376 @@
-# 🎉 All Features Complete - Quick Reference
-
-## ✅ Implementation Status: 100% COMPLETE
-
-All requested features have been fully implemented with UI integration:
+# ⚡ Malleabite - Quick Reference Card
+**Print this and keep it visible while coding**
 
 ---
 
-## 📦 What Was Built
-
-### 1. ✅ Recurring Events (Google Calendar-Style)
-- **Component**: `RecurrenceRuleEditor.tsx` - Full UI for creating/editing recurrence rules
-- **Utilities**: `recurring-events.ts` - Generation, conflict detection, formatting
-- **Types**: Enhanced `CalendarEventType` with recurring fields
-- **AI Support**: AI can now create recurring events via natural language
-
-**Example AI Commands:**
-- "Create a meeting every Monday at 2pm"
-- "Schedule weekly team sync for the next 3 months"
-- "Add daily standup at 9am"
-
----
-
-### 2. ✅ AI Access to All Functions
-- **Alarms**: AI can create, update, delete, and link alarms
-- **Events**: Full CRUD operations with recurring support
-- **Todos**: Create, complete, delete todo items
-- **Eisenhower Matrix**: Manage priority items
-- **Cloud Function**: Updated with comprehensive action types
-
-**Example AI Commands:**
-- "Set an alarm for 6am tomorrow"
-- "Create alarm 30 minutes before my dentist appointment"
-- "Add a reminder for my project deadline"
-
----
-
-### 3. ✅ Polymorphic Todo Lists
-- **Status**: Already fully implemented in your codebase
-- **Hook**: `use-todo-lists.ts` (369 lines)
-- **Component**: `TodoModuleEnhanced.tsx` with list dropdown
-- **Features**: Multiple named lists, CRUD operations, default list management
-
----
-
-### 4. ✅ Multi-Page Sidebar System
-- **Component**: `PageSwitcher.tsx` - Dropdown for page management
-- **Hook**: `use-sidebar-pages.ts` - Firebase-backed page operations
-- **Features**: Create, edit, delete pages; custom icons; module organization
-- **Integration**: Added to main sidebar component
-
-**Features:**
-- Multiple named pages (e.g., "Work", "Personal", "Projects")
-- 9 icon options
-- Cannot delete default page
-- Real-time Firebase sync
-
----
-
-## 📂 New Files Created
+## 📍 WHERE ARE WE?
 
 ```
-src/
-├── components/
-│   ├── calendar/
-│   │   └── RecurrenceRuleEditor.tsx         ✨ NEW (366 lines)
-│   └── sidebar/
-│       └── PageSwitcher.tsx                 ✨ NEW (361 lines)
-├── hooks/
-│   ├── use-alarms.ts                        ✅ EXISTS (183 lines)
-│   └── use-sidebar-pages.ts                ✅ EXISTS (200 lines)
-└── lib/
-    └── utils/
-        └── recurring-events.ts              ✨ NEW (315 lines)
-
-docs/
-├── FEATURE_IMPLEMENTATION_SUMMARY.md        ✨ NEW
-└── UI_INTEGRATION_COMPLETE.md               ✨ NEW
-```
-
-**Total New Code**: ~1,200+ lines
-
----
-
-## 🔧 Files Modified
-
-```
-src/
-├── components/
-│   ├── calendar/
-│   │   └── CalendarEvent.tsx                ✏️  UPDATED (recurring indicator)
-│   ├── sidebar/
-│   │   └── sideBar.tsx                      ✏️  UPDATED (PageSwitcher integration)
-│   └── ai/
-│       └── MallyAI.firebase.tsx             ✏️  UPDATED (alarm actions)
-├── lib/
-│   └── stores/
-│       └── types.ts                         ✏️  UPDATED (RecurrenceRule, enhanced types)
-└── firebase/
-    └── functions/
-        └── src/
-            └── index.ts                     ✏️  UPDATED (AI prompt + alarm context)
+Progress: ████████████░░░░░░░░░░░░ 52%
+Status:   IN DEVELOPMENT - Production Track
+Target:   Real SaaS Product (Not a prototype!)
 ```
 
 ---
 
-## 🎯 How to Test Everything
+## 🎯 TODAY'S PRIORITY (Check Daily)
 
-### 1. Test Recurring Events:
-```bash
-# Start your dev server
-npm run dev
+Current Phase: **Phase 1 - Critical Blockers**  
+Current Week: **Week 1 - Security & Environment**
 
-# Create an event with recurrence:
-1. Click "New Event" in calendar
-2. Enable "Repeat Event" toggle
-3. Select frequency (Weekly)
-4. Choose days (Mon, Wed, Fri)
-5. Set end condition (Never / On Date / After N times)
-6. Save event
+**This Week's Goal:**  
+🔐 Make app secure and deployable
 
-# Via AI:
-"Create a weekly team meeting every Monday at 10am"
-"Schedule daily standup at 9am for the next 30 days"
+---
+
+## 🚨 CRITICAL BLOCKERS (Fix First!)
+
+1. ❌ **API Keys Exposed** → `src/integrations/firebase/config.ts`
+2. ❌ **Gemini API Missing** → `firebase/functions/index.js`
+3. ❌ **No Payment System** → Blocks monetization
+4. ❌ **No Usage Limits** → Free tier unlimited
+5. ❌ **No Privacy Policy** → Blocks worldwide launch
+
+---
+
+## 📊 TRACKING DOCS (Update After Each Feature!)
+
 ```
-
-### 2. Test AI Alarm Control:
-```bash
-# Open Mally AI chat and try:
-"Set an alarm for 6am tomorrow"
-"Create a weekday alarm at 7am"
-"Remind me 30 minutes before my dentist appointment"
-"Set alarm for my project deadline"
-"Delete my morning alarm"
-"Change my 7am alarm to 6:30am"
-```
-
-### 3. Test Multi-Page Sidebar:
-```bash
-# In the sidebar:
-1. Click the page dropdown at the top
-2. Click "New Page"
-3. Enter name: "Work"
-4. Choose briefcase icon
-5. Create page
-6. Switch between pages using dropdown
-7. Edit page by hovering and clicking edit icon
-8. Try deleting a non-default page
-```
-
-### 4. Test Todo Lists (Already Working):
-```bash
-# In sidebar:
-1. Find Todo module
-2. Click list dropdown
-3. Create "New List"
-4. Add items to specific lists
-5. Switch between lists
+📁 MASTER_ROADMAP.md               ← Start here
+📁 FEATURE_IMPLEMENTATION_TRACKING.md  ← Daily updates
+📁 SUBSCRIPTION_FEATURE_PARITY.md      ← Weeks 3-6
+📁 MOBILE_FIRST_GUIDE.md               ← Weeks 6-8
+📁 PRODUCTION_READINESS_REPORT.md      ← Pre-launch
 ```
 
 ---
 
-## 🚀 Deployment Steps
+## 🎨 DEVELOPMENT RULES
 
-### 1. Install Dependencies (if needed):
-```bash
-npm install
-```
+### ✅ ALWAYS
+- Mobile-first design (60% of users!)
+- Test on real mobile device
+- Use environment variables
+- Update tracking docs
+- Write clear commit messages
+- Check TypeScript errors
+- Minimum 44px touch targets
 
-### 2. Deploy Cloud Function:
-```bash
-cd firebase/functions
-npm run build
-firebase deploy --only functions
-```
-
-### 3. Update Firestore Security Rules:
-```javascript
-// Add to firestore.rules:
-match /alarms/{alarmId} {
-  allow read, write: if request.auth != null && 
-    request.resource.data.userId == request.auth.uid;
-}
-
-match /sidebar_pages/{pageId} {
-  allow read, write: if request.auth != null && 
-    request.resource.data.userId == request.auth.uid;
-}
-```
-
-```bash
-firebase deploy --only firestore:rules
-```
-
-### 4. Create Firestore Indexes:
-```bash
-# Firebase will prompt you for missing indexes
-# Or create manually in Firebase Console:
-# - alarms: userId (ASC) + enabled (ASC) + time (ASC)
-# - sidebar_pages: userId (ASC) + createdAt (ASC)
-```
-
-### 5. Test in Production:
-```bash
-npm run build
-firebase deploy --only hosting
-```
+### ❌ NEVER
+- Hardcode API keys
+- Skip mobile testing
+- Ignore TypeScript errors
+- Make up placeholder values
+- Ship without testing
+- Forget to update docs
+- Use inline styles
 
 ---
 
-## 📊 Feature Comparison
+## 🏗️ CODE PATTERNS
 
-| Feature | Before | After |
-|---------|--------|-------|
-| **Recurring Events** | ❌ Not available | ✅ Full Google Calendar-style support |
-| **AI Alarm Control** | ❌ Not available | ✅ Create, update, delete, link via AI |
-| **Todo Lists** | ✅ Already polymorphic | ✅ No changes needed |
-| **Multi-Page Sidebar** | ⚠️  Basic Zustand only | ✅ Firebase-backed with UI |
-| **Recurring Indicators** | ❌ Not shown | ✅ Visual repeat icon |
-| **AI Capabilities** | ⚠️  Events + Todos only | ✅ Events + Todos + Alarms + Recurring |
+### New Feature Checklist
+```
+1. [ ] Create mobile version first
+2. [ ] Add desktop enhancements
+3. [ ] Write TypeScript interfaces
+4. [ ] Add error boundaries
+5. [ ] Test on iPhone/Android
+6. [ ] Update tracking doc
+7. [ ] Commit with clear message
+```
 
----
-
-## 🎨 UI Components Built
-
-### RecurrenceRuleEditor
-- Toggle switch for enabling recurrence
-- 4 frequency buttons (Daily, Weekly, Monthly, Yearly)
-- Interval input (every 1, 2, 3... days/weeks/etc.)
-- Day selector for weekly (7 circular buttons)
-- Day of month input for monthly
-- Month and day selectors for yearly
-- 3 end condition options (Never, On Date, After N occurrences)
-- Live preview showing formatted rule
-- Fully styled with dark mode support
-
-### PageSwitcher
-- Dropdown button showing active page with icon
-- List of all pages with hover actions
-- Edit and delete buttons (hidden until hover)
-- Default page indicator
-- New Page dialog with name input and icon selector
-- 9 icon options in grid layout
-- Edit Page dialog (same as New Page)
-- Smooth transitions and animations
-
-### CalendarEvent (Enhanced)
-- Recurring event indicator (Repeat icon in top-right)
-- Integrates with existing lock/drag/todo indicators
-- Semi-transparent background for icon
-- Minimal visual impact
-
----
-
-## 💡 Usage Examples
-
-### Creating Recurring Events in Code:
-```typescript
-import { RecurrenceRuleEditor } from '@/components/calendar/RecurrenceRuleEditor';
-
-const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule>();
-
-<RecurrenceRuleEditor
-  value={recurrenceRule}
-  onChange={setRecurrenceRule}
-  startDate={new Date()}
-/>
-
-// When saving:
-const event = {
-  title: "Team Meeting",
-  startsAt: "2025-01-06T10:00:00Z",
-  endsAt: "2025-01-06T11:00:00Z",
-  isRecurring: true,
-  recurrenceRule: {
-    frequency: "weekly",
-    daysOfWeek: [1], // Monday
-    interval: 1
+### Component Structure
+```tsx
+// Mobile-first pattern
+export function MyComponent() {
+  const isMobile = useIsMobile();
+  
+  // Mobile version (default)
+  if (isMobile) {
+    return <MobileView />;
   }
-};
+  
+  // Desktop enhancement
+  return <DesktopView />;
+}
 ```
 
-### Using Alarm Hook:
-```typescript
-import { useAlarms } from '@/hooks/use-alarms';
+### Subscription Check Pattern
+```tsx
+const { tier, hasFeatureAccess } = useSubscription();
 
-const { addAlarm, linkToEvent } = useAlarms();
+if (!hasFeatureAccess('premium-feature')) {
+  return <UpgradePrompt />;
+}
 
-// Create standalone alarm
-await addAlarm("Morning Workout", "2025-01-06T06:00:00Z");
-
-// Create and link to event
-const result = await addAlarm("Meeting Reminder", "2025-01-06T09:30:00Z", {
-  linkedEventId: eventId
-});
-```
-
-### Using Sidebar Pages:
-```typescript
-import { useSidebarPages } from '@/hooks/use-sidebar-pages';
-
-const { createPage, addModule, activePage } = useSidebarPages();
-
-// Create new page
-const { pageId } = await createPage("Work", "briefcase");
-
-// Add module to page
-await addModule(pageId, {
-  type: 'todo',
-  size: 'medium',
-  order: 0,
-  isCollapsed: false
-});
+return <PremiumFeature />;
 ```
 
 ---
 
-## 🔍 Code Quality
+## 🎯 CURRENT SPRINT (Week 1)
 
-### Type Safety:
-- ✅ All components fully typed with TypeScript
-- ✅ Proper interfaces for all data structures
-- ✅ No `any` types in public APIs
-
-### Error Handling:
-- ✅ User-friendly error messages via toast
-- ✅ Console logging for debugging
-- ✅ Graceful fallbacks for Firebase errors
-
-### Performance:
-- ✅ Efficient Firestore queries with indexes
-- ✅ Virtual recurring instances (not stored)
-- ✅ Real-time listeners with proper cleanup
-
-### Accessibility:
-- ✅ Keyboard navigation support
-- ✅ ARIA labels where appropriate
-- ✅ Focus management in dialogs
+### Day-by-Day Plan
+```
+Mon: Create .env, move Firebase keys
+Tue: Move remaining API keys, rotate credentials
+Wed: Configure Gemini API key
+Thu: Harden Firestore rules
+Fri: Enable Firebase App Check
+Sat: Test all security measures
+Sun: Review & document
+```
 
 ---
 
-## 📈 What's Next (Optional Enhancements)
+## 📱 MOBILE REQUIREMENTS
 
-### Short Term:
-1. Add recurring event exception handling UI
-2. Implement alarm sound preview
-3. Add drag-and-drop module reordering per page
-4. Create recurring event templates
+### Screen Sizes to Support
+```
+iPhone SE:     375 x 667px  (4.7")
+iPhone 13:     390 x 844px  (6.1")
+iPhone 14 Pro: 393 x 852px  (6.1")
+Pixel 6:       412 x 915px  (6.4")
+Galaxy S22:    360 x 800px  (6.1")
+```
 
-### Long Term:
-1. Alarm effectiveness analytics
-2. Smart page layout suggestions via AI
-3. Bulk edit for recurring series
-4. Advanced conflict resolution
+### Breakpoints
+```css
+Mobile:  < 768px  (default)
+Tablet:  768px - 1023px
+Desktop: ≥ 1024px
+```
 
----
-
-## 🎓 Learning Resources
-
-### Recurrence Patterns:
-- iCalendar RFC 5545 (industry standard)
-- Google Calendar API documentation
-- RRULE specification
-
-### Firebase Best Practices:
-- [Firestore Data Modeling](https://firebase.google.com/docs/firestore/manage-data/structure-data)
-- [Security Rules Guide](https://firebase.google.com/docs/rules)
-- [Cloud Functions Patterns](https://firebase.google.com/docs/functions)
+### Touch Targets
+```
+Minimum: 44x44px (iOS) / 48x48px (Android)
+Ideal:   56x56px
+Padding: 8-12px minimum
+```
 
 ---
 
-## 🐛 Known Issues / Edge Cases
+## 🔐 SECURITY CHECKLIST (Week 1)
 
-### Recurring Events:
-- Monthly recurrence on day 31 may skip February (expected behavior)
-- Yearly events on Feb 29 handled gracefully (skips non-leap years)
-- Timezone considerations for all-day recurring events
-
-### Alarms:
-- Browser notifications require user permission
-- Background alarm triggering depends on app being open
-- Snooze state not persisted across sessions (intentional)
-
-### Sidebar Pages:
-- Module reordering across pages not yet implemented
-- Page limit not enforced (consider adding if needed)
+```
+[ ] All API keys in .env
+[ ] .env in .gitignore
+[ ] Firebase keys rotated
+[ ] Firestore rules hardened
+[ ] App Check enabled
+[ ] No console.log with sensitive data
+[ ] Input sanitization active
+[ ] HTTPS only
+```
 
 ---
 
-## ✅ Acceptance Criteria - All Met
+## 💰 MONETIZATION TIERS (Weeks 3-5)
 
-- [x] Set up recurring events (Google Calendar style)
-- [x] AI has access to all functions (calendar, todos, alarms, linking)
-- [x] Polymorphic todo lists (already implemented)
-- [x] Multi-page sidebar system working
-- [x] Focus on todo lists and alarms
-- [x] Full UI integration
-- [x] Firebase persistence
-- [x] Type-safe implementation
-- [x] Comprehensive documentation
+```
+FREE ($0/mo):
+  ✓ 50 events/month
+  ✓ 3 modules max
+  ✓ 10 AI requests/month
+  ✗ No analytics
+  ✗ No recurring events
+  ✗ No Eisenhower Matrix
 
----
+PRO ($9.99/mo):
+  ✓ Unlimited everything
+  ✓ All features
+  ✓ Priority support
 
-## 🎉 Summary
-
-**Total Implementation:**
-- 6 major features
-- 4 new components
-- 3 new utilities/hooks  
-- 6 file modifications
-- 1,200+ lines of new code
-- Full TypeScript support
-- Complete Firebase integration
-- Comprehensive documentation
-
-**Ready for Production!** 🚀
-
-All features are tested, documented, and ready to deploy. The codebase is maintainable, scalable, and follows best practices.
+TEAMS ($7/user/mo):
+  ✓ Everything in Pro
+  ✓ Team workspaces
+  ✓ Shared calendars
+  ✓ Admin controls
+```
 
 ---
 
-**For detailed integration instructions, see:**
-- `docs/UI_INTEGRATION_COMPLETE.md` - Full integration guide
-- `docs/FEATURE_IMPLEMENTATION_SUMMARY.md` - Technical details
-- Individual component files - Inline code comments
+## 🧪 TESTING REQUIREMENTS
 
-**Questions?** Review the troubleshooting sections in the documentation or examine the well-commented source code.
+### Before Commit
+```
+[ ] Runs without errors
+[ ] Mobile responsive
+[ ] TypeScript passes
+[ ] No hardcoded secrets
+```
+
+### Before Merge
+```
+[ ] Works on mobile
+[ ] Works on desktop
+[ ] Tests written (if applicable)
+[ ] Docs updated
+```
+
+### Before Deploy
+```
+[ ] All tests pass
+[ ] Lighthouse 90+
+[ ] Mobile device tested
+[ ] Security scan passes
+```
+
+---
+
+## 📈 SUCCESS METRICS
+
+### Week 1 (Security)
+```
+Target: All API keys secured
+Target: Firestore rules hardened
+Target: Zero security vulnerabilities
+```
+
+### Week 5 (Monetization)
+```
+Target: Stripe integration working
+Target: Free tier limits enforced
+Target: First test subscription completed
+```
+
+### Week 10 (Launch)
+```
+Target: 50 beta users
+Target: First paying customer
+Target: 99.9% uptime
+```
+
+---
+
+## 🆘 WHEN STUCK
+
+1. Check `FEATURE_IMPLEMENTATION_TRACKING.md`
+2. Review existing code patterns
+3. Test on mobile device
+4. Ask AI assistant
+5. Take a 15-minute break
+6. Come back fresh
+
+---
+
+## 🎯 DAILY ROUTINE
+
+### Morning (30 min)
+```
+1. Review MASTER_ROADMAP.md
+2. Check today's tasks
+3. Review critical blockers
+4. Set 3-5 goals for today
+```
+
+### During Day
+```
+- Code in 90-minute sprints
+- Test on mobile every hour
+- Commit after each feature
+- Update tracking docs
+```
+
+### Evening (15 min)
+```
+1. Update completion percentages
+2. Document blockers
+3. Commit all changes
+4. Plan tomorrow
+```
+
+---
+
+## 🎨 DESIGN TOKENS
+
+### Colors
+```css
+Primary:    #8b5cf6 (purple)
+Secondary:  #3b82f6 (blue)
+Success:    #10b981 (green)
+Error:      #ef4444 (red)
+Warning:    #f59e0b (yellow)
+Background: #0a0a0a (dark)
+```
+
+### Spacing (Tailwind)
+```
+xs:  0.25rem (4px)
+sm:  0.5rem  (8px)
+md:  1rem    (16px)
+lg:  1.5rem  (24px)
+xl:  2rem    (32px)
+```
+
+### Typography
+```
+xs:   0.75rem  (12px)
+sm:   0.875rem (14px)
+base: 1rem     (16px)
+lg:   1.125rem (18px)
+xl:   1.25rem  (20px)
+```
+
+---
+
+## 🚀 LAUNCH TIMELINE
+
+```
+Week 1-2:  Security & Legal      [CURRENT]
+Week 3-5:  Subscription System
+Week 6-7:  Mobile Polish
+Week 8-9:  Production Ready
+Week 10:   Beta Launch
+Week 11-12: Advanced Features
+Week 13:   PUBLIC LAUNCH 🎉
+```
+
+---
+
+## 💪 MOTIVATION
+
+```
+"We're building a REAL product
+ for REAL people
+ who will pay REAL money."
+
+Current:  52% Complete
+Target:   March 13, 2026
+Revenue:  $0 → $15K MRR (Month 6)
+
+Every line of code matters.
+Every user interaction matters.
+Every security decision matters.
+
+Let's ship it! 🚀
+```
+
+---
+
+## 📞 QUICK CONTACTS
+
+```
+Firebase Console: https://console.firebase.google.com
+Stripe Dashboard:  https://dashboard.stripe.com
+GitHub Repo:       [Your repo URL]
+Tracking Docs:     ./MASTER_ROADMAP.md
+AI Assistant:      Always available!
+```
+
+---
+
+**Last Updated:** December 20, 2025  
+**Print Date:** _____________  
+**Current Phase:** Phase 1 - Week 1
+
+---
+
+## ✨ REMEMBER
+
+```
+Mobile First  |  Security First  |  Users First
+```
+
+**You've got this! 💪**

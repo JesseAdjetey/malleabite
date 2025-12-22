@@ -5,7 +5,7 @@ import { CalendarEventType } from '@/lib/stores/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Sparkles, X, Brain, Mic } from 'lucide-react';
+import { Bot, X, Brain, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 // Try to import HeyMally context, but don't fail if not available
@@ -163,7 +163,7 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
               >
                 <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 p-4 flex items-center justify-between">
                   <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
-                    <Sparkles className="text-white" size={20} />
+                    <Bot className="text-white" size={20} />
                     Mally AI Assistant
                   </h2>
                   <Button

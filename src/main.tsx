@@ -1,6 +1,18 @@
+import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import "./index.css"
+import { registerServiceWorker } from './lib/sw-registration';
+import { initSentry } from './lib/sentry';
+
+// Register service worker for PWA functionality
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    registerServiceWorker().catch((error) => {
+      console.error('Service worker registration failed:', error);
+    });
+  });
+}
 
 // Error boundary for initialization errors
 try {
@@ -10,7 +22,14 @@ try {
     throw new Error("Root element not found");
   }
 
-  createRoot(rootElement).render(<App />);
+  // Initialize Sentry after React is ready
+  initSentry();
+
+  createRoot(rootElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 } catch (error) {
   console.error("Failed to initialize app:", error);
   

@@ -9,15 +9,25 @@ import { HeyMallyProvider } from '@/contexts/HeyMallyContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import EventDataProvider from '@/contexts/EventDataProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { ConsentBanner } from '@/components/legal/ConsentBanner';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
+import { OnboardingWrapper } from '@/components/onboarding/OnboardingModal';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
 const Settings = lazy(() => import('@/pages/Settings'));
-const Analytics = lazy(() => import('@/pages/Analytics'));
+const AnalyticsPage = lazy(() => import('@/pages/Analytics'));
 const Templates = lazy(() => import('@/pages/Templates'));
 const QuickSchedulePage = lazy(() => import('@/pages/QuickSchedule'));
 const PatternsPage = lazy(() => import('@/pages/Patterns'));
 const Auth = lazy(() => import('@/pages/Auth'));
+const PrivacyPolicy = lazy(() => import('@/pages/legal/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/pages/legal/TermsOfService'));
+const Pricing = lazy(() => import('@/pages/Pricing'));
+const Billing = lazy(() => import('@/pages/Billing'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -42,12 +52,19 @@ const AppRoutes = () => {
           <Route path="/" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
           <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
           <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
           <Route path="/quick-schedule" element={<ProtectedRoute><QuickSchedulePage /></ProtectedRoute>} />
           <Route path="/patterns" element={<ProtectedRoute><PatternsPage /></ProtectedRoute>} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+          <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+          <Route path="/legal/terms" element={<TermsOfService />} />
         </Routes>
       </Suspense>
+      {!isAuthPage && <ConsentBanner />}
+      {!isAuthPage && <InstallPrompt />}
+      {!isAuthPage && <FeedbackWidget />}
       <Toaster />
     </ThemeProvider>
   );
@@ -61,12 +78,16 @@ function App() {
           <ToastProvider>
             <Router>
               <EventDataProvider>
-                <AppRoutes />
+                <OnboardingWrapper>
+                  <AppRoutes />
+                </OnboardingWrapper>
               </EventDataProvider>
             </Router>
           </ToastProvider>
         </HeyMallyProvider>
       </AuthProvider>
+      <Analytics />
+      <SpeedInsights />
     </ErrorBoundary>
   );
 }

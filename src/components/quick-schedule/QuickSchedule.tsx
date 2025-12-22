@@ -1,6 +1,6 @@
 // QuickSchedule Component - Mobile-First Design
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Zap, Trash2, ChevronLeft, ChevronRight, Sparkles, Check } from 'lucide-react';
+import { Calendar, Clock, Plus, Zap, Trash2, ChevronLeft, ChevronRight, LayoutTemplate, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useTemplates } from '@/hooks/use-templates';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
@@ -205,7 +205,7 @@ export function QuickSchedule() {
           {displayTemplates.length === 0 ? (
             <div className="p-6 rounded-2xl bg-gradient-to-br from-primary/10 via-purple-600/5 to-transparent border border-primary/20 text-center">
               <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="h-7 w-7 text-primary" />
+                <LayoutTemplate className="h-7 w-7 text-primary" />
               </div>
               <h3 className="font-semibold mb-1">Create Your First Template</h3>
               <p className="text-xs text-muted-foreground mb-4">

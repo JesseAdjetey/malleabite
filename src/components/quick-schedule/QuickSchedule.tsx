@@ -1,6 +1,6 @@
 // QuickSchedule Component - Mobile-First Design
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Plus, Zap, Trash2, ChevronLeft, ChevronRight, LayoutTemplate, Check } from 'lucide-react';
+import { Calendar, Clock, Plus, Zap, Trash2, ChevronLeft, ChevronRight, LayoutTemplate, Check, Sparkles, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useTemplates } from '@/hooks/use-templates';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
@@ -154,7 +154,7 @@ export function QuickSchedule() {
             </button>
             <div>
               <h1 className="text-2xl font-bold">Quick Schedule</h1>
-              <p className="text-sm text-muted-foreground">Batch schedule events</p>
+              <p className="text-sm text-muted-foreground">Add multiple events at once</p>
             </div>
           </div>
         </div>
@@ -192,6 +192,47 @@ export function QuickSchedule() {
             Today
           </button>
         </div>
+
+        {/* How it works - Explainer Section */}
+        {quickEvents.length === 0 && (
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 border border-primary/20">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-sm mb-1">How Quick Schedule Works</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Add multiple events to a queue, pick times for each, then schedule them all at once! Perfect for planning your entire day in seconds.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-primary">1</span>
+                  </div>
+                  <span className="text-muted-foreground">Add events</span>
+                </div>
+                <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-primary">2</span>
+                  </div>
+                  <span className="text-muted-foreground">Choose times</span>
+                </div>
+                <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-primary">3</span>
+                  </div>
+                  <span className="text-muted-foreground">Schedule all!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Templates Section */}
         <div className="space-y-3">

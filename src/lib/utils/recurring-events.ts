@@ -240,6 +240,27 @@ export function parseRecurrenceDescription(description: string): RecurrenceRule 
     return { frequency: 'daily', interval: 1 };
   }
   
+  // Weekday patterns (Mon-Fri)
+  if (lower.includes('weekday') || lower.includes('monday to friday') || 
+      lower.includes('mon-fri') || lower.includes('mon - fri') ||
+      lower.includes('every weekday')) {
+    return { 
+      frequency: 'weekly', 
+      interval: 1,
+      daysOfWeek: [1, 2, 3, 4, 5] // Monday through Friday
+    };
+  }
+  
+  // Weekend patterns (Sat-Sun)
+  if (lower.includes('weekend') || lower.includes('saturday and sunday') ||
+      lower.includes('sat and sun')) {
+    return { 
+      frequency: 'weekly', 
+      interval: 1,
+      daysOfWeek: [0, 6] // Saturday and Sunday
+    };
+  }
+  
   // Weekly patterns
   if (lower.includes('every week') || lower.includes('weekly')) {
     const daysOfWeek = extractDaysOfWeek(lower);
@@ -251,7 +272,7 @@ export function parseRecurrenceDescription(description: string): RecurrenceRule 
   }
   
   // Biweekly
-  if (lower.includes('every 2 weeks') || lower.includes('biweekly')) {
+  if (lower.includes('every 2 weeks') || lower.includes('biweekly') || lower.includes('bi-weekly')) {
     return { frequency: 'weekly', interval: 2 };
   }
   
@@ -275,20 +296,32 @@ function extractDaysOfWeek(text: string): number[] {
   const dayMap: Record<string, number> = {
     'sunday': 0, 'sun': 0,
     'monday': 1, 'mon': 1,
-    'tuesday': 2, 'tue': 2,
+    'tuesday': 2, 'tue': 2, 'tues': 2,
     'wednesday': 3, 'wed': 3,
-    'thursday': 4, 'thu': 4,
+    'thursday': 4, 'thu': 4, 'thur': 4, 'thurs': 4,
     'friday': 5, 'fri': 5,
     'saturday': 6, 'sat': 6
   };
   
-  const days: number[] = [];
+  const days: Set<number> = new Set();
+  
+  // Handle "weekday" specifically
+  if (text.includes('weekday')) {
+    return [1, 2, 3, 4, 5];
+  }
+  
+  // Handle "weekend" specifically
+  if (text.includes('weekend')) {
+    return [0, 6];
+  }
   
   for (const [key, value] of Object.entries(dayMap)) {
-    if (text.includes(key)) {
-      days.push(value);
+    // Use word boundaries to avoid false matches
+    const regex = new RegExp(`\\b${key}\\b`, 'i');
+    if (regex.test(text)) {
+      days.add(value);
     }
   }
   
-  return days;
+  return Array.from(days).sort((a, b) => a - b);
 }

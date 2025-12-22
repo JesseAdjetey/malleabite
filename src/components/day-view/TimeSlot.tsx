@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 import dayjs from "dayjs";
 import CalendarEvent from "../calendar/CalendarEvent";
 import SelectableCalendarEvent from "../calendar/SelectableCalendarEvent";
@@ -36,10 +36,15 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
   const { openEventSummary, toggleEventLock } = useEventStore();
   const { updateEvent } = useCalendarEvents();
   const { showTodoCalendarDialog } = useTodoCalendarIntegration();
+  
+  // State for drag-over visual feedback
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [showLockIn, setShowLockIn] = useState(false);
 
   // Handle dropping an event onto a time slot
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
     console.log("Drop event received in TimeSlot:", hour.format("HH:mm"));
     
     try {
@@ -56,6 +61,10 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       // Handle todo item drag
       if (data.source === 'todo-module') {
         console.log("Todo item detected");
+        
+        // Show lock-in animation
+        setShowLockIn(true);
+        setTimeout(() => setShowLockIn(false), 600);
         
         // If we have the showTodoCalendarDialog function, use it
         if (showTodoCalendarDialog) {
@@ -85,8 +94,13 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       // Don't process if the event is locked
       if (data.isLocked) {
         console.log("Event is locked, ignoring drop");
+        toast.error("Event is locked and cannot be moved");
         return;
       }
+      
+      // Show lock-in animation
+      setShowLockIn(true);
+      setTimeout(() => setShowLockIn(false), 600);
       
       // Calculate precise drop position to snap to 30-minute intervals
       const rect = e.currentTarget.getBoundingClientRect();
@@ -102,11 +116,22 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       const newStartTime = `${baseHour.toString().padStart(2, '0')}:${snappedMinutes.toString().padStart(2, '0')}`;
       
       // Calculate new end time by preserving duration
-      const oldStartParts = data.timeStart.split(':').map(Number);
-      const oldEndParts = data.timeEnd.split(':').map(Number);
-      const oldStartMinutes = oldStartParts[0] * 60 + oldStartParts[1];
-      const oldEndMinutes = oldEndParts[0] * 60 + oldEndParts[1];
-      const durationMinutes = oldEndMinutes - oldStartMinutes;
+      let durationMinutes = 60; // Default 1 hour
+      
+      if (data.timeStart && data.timeEnd) {
+        const oldStartParts = data.timeStart.split(':').map(Number);
+        const oldEndParts = data.timeEnd.split(':').map(Number);
+        const oldStartMinutes = oldStartParts[0] * 60 + (oldStartParts[1] || 0);
+        const oldEndMinutes = oldEndParts[0] * 60 + (oldEndParts[1] || 0);
+        durationMinutes = oldEndMinutes - oldStartMinutes;
+        if (durationMinutes <= 0) durationMinutes = 60;
+      } else if (data.startsAt && data.endsAt) {
+        // Calculate from ISO timestamps
+        const startMs = new Date(data.startsAt).getTime();
+        const endMs = new Date(data.endsAt).getTime();
+        durationMinutes = Math.round((endMs - startMs) / 60000);
+        if (durationMinutes <= 0) durationMinutes = 60;
+      }
       
       // Calculate new end time
       const newStartMinutes = baseHour * 60 + snappedMinutes;
@@ -118,16 +143,17 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       const newEndTime = `${newEndHours.toString().padStart(2, '0')}:${newEndMinutes2.toString().padStart(2, '0')}`;
       
       // Get description without time part
-      const descriptionParts = data.description.split('|');
-      const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+      const descriptionParts = (data.description || '').split('|');
+      const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.title || '');
       
-      // Get the current date in YYYY-MM-DD format
-      const currentDate = dayjs().format('YYYY-MM-DD');
+      // Get the current date in YYYY-MM-DD format (or from the event's date)
+      const currentDate = data.date || dayjs().format('YYYY-MM-DD');
       
       // Create the updated event with ISO timestamps
       const updatedEvent = {
         ...data,
         description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        date: currentDate,
         startsAt: dayjs(`${currentDate}T${newStartTime}`).toISOString(),
         endsAt: dayjs(`${currentDate}T${newEndTime}`).toISOString()
       };
@@ -137,8 +163,11 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       // Update the event in the database
       updateEvent(updatedEvent);
       
-      // Show success message
-      toast.success("Event moved to " + newStartTime);
+      // Show success message with visual feedback
+      toast.success(`Event moved to ${newStartTime}`, {
+        icon: "✅",
+        duration: 2000
+      });
       
     } catch (error) {
       console.error("Error handling drop:", error);
@@ -195,8 +224,15 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    console.log("Drag over event in TimeSlot", hour.format("HH:mm"));
     e.dataTransfer.dropEffect = 'move';
+    if (!isDragOver) {
+      setIsDragOver(true);
+    }
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
   };
 
   // Get events for this specific hour slot
@@ -208,12 +244,38 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
 
   return (
     <div
-      className="relative flex h-20 border-t border-gray-200 dark:border-white/10 hover:bg-gray-100/50 dark:hover:bg-white/5 gradient-border cursor-glow"
+      className={cn(
+        "relative flex h-20 border-t border-gray-200 dark:border-white/10 hover:bg-gray-100/50 dark:hover:bg-white/5 gradient-border cursor-glow transition-all duration-200",
+        isDragOver && "bg-primary/10 dark:bg-primary/20 border-primary/50 ring-2 ring-primary/30 ring-inset",
+        showLockIn && "animate-pulse bg-green-500/20 dark:bg-green-500/30"
+      )}
       onClick={() => onTimeSlotClick(hour)}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       data-hour={hour.format('HH:mm')}
     >
+      {/* Lock-in animation overlay */}
+      {showLockIn && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="w-10 h-10 rounded-full bg-green-500/40 animate-ping" />
+          <div className="absolute w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+      )}
+      
+      {/* Drag over indicator */}
+      {isDragOver && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded">
+            Drop here - {hour.format('h:mm A')}
+          </div>
+        </div>
+      )}
+      
       {/* Events for this hour */}
       {hourEvents.map(event => (
         <div 

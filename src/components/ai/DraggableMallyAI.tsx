@@ -80,15 +80,20 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
   const handleDragEnd = (e: any, info: any) => {
     setIsDragging(false);
     
-    // Update position in localStorage
+    // Calculate the new position
     const newX = Math.min(Math.max(position.x + info.offset.x, 20), window.innerWidth - 100);
     const newY = Math.min(Math.max(position.y + info.offset.y, 20), window.innerHeight - 100);
-    setPosition({ x: newX, y: newY });
+    
+    // Only update position if we actually moved
+    if (Math.abs(info.offset.x) > 2 || Math.abs(info.offset.y) > 2) {
+      setPosition({ x: newX, y: newY });
+    }
     
     // If the drag distance was significant, mark as dragged to prevent dialog opening
-    if (Math.abs(info.offset.x) > 5 || Math.abs(info.offset.y) > 5) {
+    if (Math.abs(info.offset.x) > 10 || Math.abs(info.offset.y) > 10) {
       setWasDragged(true);
-      setTimeout(() => setWasDragged(false), 300);
+      // Reset after a short delay to allow clicking again
+      setTimeout(() => setWasDragged(false), 200);
     }
   };
 
@@ -96,15 +101,20 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
   const handleMobileDragEnd = (e: any, info: any) => {
     setIsDragging(false);
     
-    // Update position
+    // Calculate the new position
     const newX = Math.min(Math.max(position.x + info.offset.x, 10), window.innerWidth - 70);
     const newY = Math.min(Math.max(position.y + info.offset.y, 10), window.innerHeight - 150);
-    setPosition({ x: newX, y: newY });
+    
+    // Only update position if we actually moved
+    if (Math.abs(info.offset.x) > 2 || Math.abs(info.offset.y) > 2) {
+      setPosition({ x: newX, y: newY });
+    }
     
     // If the drag distance was significant, mark as dragged to prevent opening
-    if (Math.abs(info.offset.x) > 5 || Math.abs(info.offset.y) > 5) {
+    if (Math.abs(info.offset.x) > 10 || Math.abs(info.offset.y) > 10) {
       setWasDragged(true);
-      setTimeout(() => setWasDragged(false), 300);
+      // Reset after a short delay to allow clicking again
+      setTimeout(() => setWasDragged(false), 200);
     }
   };
 
@@ -116,13 +126,23 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
         <motion.button
           drag
           dragMomentum={false}
-          dragElastic={0}
+          dragElastic={0.1}
+          dragConstraints={{
+            left: 10,
+            right: window.innerWidth - 70,
+            top: 10,
+            bottom: window.innerHeight - 150
+          }}
           onDragStart={() => setIsDragging(true)}
           onDragEnd={handleMobileDragEnd}
-          onClick={() => !wasDragged && setIsMobileOpen(true)}
+          onTap={() => {
+            if (!wasDragged && !isDragging) {
+              setIsMobileOpen(true);
+            }
+          }}
           style={{ x: position.x, y: position.y }}
-          className="fixed top-0 left-0 z-40 h-14 w-14 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg flex items-center justify-center text-white cursor-grab active:cursor-grabbing touch-none"
-          whileTap={{ scale: 0.95 }}
+          className="fixed top-0 left-0 z-40 h-14 w-14 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg flex items-center justify-center text-white touch-none select-none"
+          whileTap={{ scale: isDragging ? 1.1 : 0.95 }}
           initial={{ scale: 0 }}
           animate={{ scale: isDragging ? 1.1 : 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -196,7 +216,13 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
       ref={containerRef}
       drag
       dragMomentum={false}
-      dragElastic={0}
+      dragElastic={0.1}
+      dragConstraints={{
+        left: 20,
+        right: window.innerWidth - 100,
+        top: 20,
+        bottom: window.innerHeight - 100
+      }}
       onDragStart={() => setIsDragging(true)}
       onDragEnd={handleDragEnd}
       initial={false}
@@ -206,14 +232,14 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
         scale: isDragging ? 1.05 : 1,
         opacity: isDragging ? 0.9 : 1
       }}
-      className="fixed z-50 cursor-grab active:cursor-grabbing"
+      className="fixed z-50 cursor-grab active:cursor-grabbing select-none"
       whileDrag={{ scale: 1.05, opacity: 0.9 }}
       whileHover={{ scale: 1.02 }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <MallyAI 
         onScheduleEvent={onScheduleEvent} 
-        preventOpenOnClick={wasDragged}
+        preventOpenOnClick={wasDragged || isDragging}
       />
     </motion.div>
   );

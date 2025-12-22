@@ -221,7 +221,34 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           
           // Check for recurring properties
           const isRecurring = data.isRecurring === true;
-          const recurrenceRule = data.recurrenceRule;
+          let recurrenceRule = data.recurrenceRule;
+          
+          // Parse natural language frequency patterns if recurrence rule exists
+          if (isRecurring && recurrenceRule) {
+            // Handle weekday pattern (Mon-Fri)
+            if (recurrenceRule.frequency === 'weekly' && 
+                (!recurrenceRule.daysOfWeek || recurrenceRule.daysOfWeek.length === 0)) {
+              // Check if user asked for weekdays
+              const messageText = (data._originalMessage || '').toLowerCase();
+              if (messageText.includes('weekday') || 
+                  messageText.includes('monday to friday') ||
+                  messageText.includes('mon-fri') ||
+                  messageText.includes('mon - fri') ||
+                  messageText.includes('every weekday')) {
+                // Set daysOfWeek to Mon-Fri (1-5)
+                recurrenceRule = {
+                  ...recurrenceRule,
+                  daysOfWeek: [1, 2, 3, 4, 5]
+                };
+                logger.info('MallyAI', 'Setting weekday pattern for recurring event', { daysOfWeek: [1, 2, 3, 4, 5] });
+              }
+            }
+            
+            // Ensure daysOfWeek is an array of numbers
+            if (recurrenceRule.daysOfWeek && typeof recurrenceRule.daysOfWeek === 'string') {
+              recurrenceRule.daysOfWeek = recurrenceRule.daysOfWeek.split(',').map((d: string) => parseInt(d.trim(), 10));
+            }
+          }
           
           logger.info('MallyAI', 'Creating event with recurring settings', {
             isRecurring,

@@ -1,7 +1,17 @@
 
 import React, { ReactNode, useState } from 'react';
-import { Minus, Edit, Check, Eye, EyeOff } from 'lucide-react';
+import { Minus, Edit, Check, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ModuleContainerProps {
   title: string;
@@ -24,6 +34,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const handleEditClick = () => {
     setEditTitle(title);
@@ -93,7 +104,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           )}
           {onRemove && (
             <button 
-              onClick={onRemove}
+              onClick={() => setShowDeleteDialog(true)}
               className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-600 dark:text-white"
               aria-label="Remove module"
             >
@@ -103,6 +114,33 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
         </div>
       </div>
       {!isMinimized && <div className="module-content">{children}</div>}
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="bg-background border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete Module
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the "{title}" module? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setShowDeleteDialog(false);
+                if (onRemove) onRemove();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Yes, Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

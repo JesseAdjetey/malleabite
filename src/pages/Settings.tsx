@@ -125,7 +125,7 @@ const Settings = () => {
   // Main Settings Menu
   if (activeSection === 'main') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
           {/* Header */}
           <div className="flex items-center gap-3 mb-6">
@@ -259,7 +259,7 @@ const Settings = () => {
   // Profile Section
   if (activeSection === 'profile') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Profile" />
           <UserProfile />
@@ -272,7 +272,7 @@ const Settings = () => {
   // Focus Time Section
   if (activeSection === 'focus') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Focus Time" />
           <FocusTimeBlocks />
@@ -285,7 +285,7 @@ const Settings = () => {
   // Voice Control Section
   if (activeSection === 'voice') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Voice Control" />
 
@@ -381,7 +381,7 @@ const Settings = () => {
   // Appearance Section
   if (activeSection === 'appearance') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Appearance" />
 
@@ -429,7 +429,7 @@ const Settings = () => {
   // Import/Export Section
   if (activeSection === 'import') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Import & Export" />
           <CalendarImportExport />
@@ -442,7 +442,7 @@ const Settings = () => {
   // Integrations Section
   if (activeSection === 'integrations') {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Integrations" />
           

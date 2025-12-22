@@ -1,19 +1,28 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import EventForm from "@/components/calendar/EventForm";
-import { useState } from "react";
-import { useEventStore } from "@/lib/store";
-import { nanoid } from "@/lib/utils";
+import { useState, useMemo } from "react";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import dayjs from "dayjs";
 
 const AddEventButton = () => {
-  const { addEvent: storeAddEvent } = useEventStore();
   const { addEvent: dbAddEvent } = useCalendarEvents();
   const [open, setOpen] = useState(false);
+
+  // Calculate the initial time: today's date with the next hour
+  const initialTime = useMemo(() => {
+    const now = dayjs();
+    // Get the next hour (if it's 2:30, next hour is 3:00)
+    const nextHour = now.add(1, 'hour').startOf('hour');
+    
+    return {
+      date: now.toDate(),
+      startTime: nextHour.format("HH:00"),
+    };
+  }, [open]); // Recalculate when dialog opens
 
   const handleSaveEvent = async (event: CalendarEventType) => {
     // Generate a random color for the event
@@ -32,7 +41,7 @@ const AddEventButton = () => {
     // Create the event with a temporary ID (will be replaced by DB)
     const newEvent = {
       ...event,
-      id: nanoid(),
+      id: event.id || crypto.randomUUID(),
       color: event.color || randomColor,
     };
     
@@ -65,30 +74,24 @@ const AddEventButton = () => {
   };
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button 
-          size="icon" 
-          className="h-14 w-14 rounded-full fixed bottom-20 right-8 z-50 shadow-lg bg-primary hover:bg-primary/90"
-          aria-label="Add event"
-        >
-          <Plus className="h-6 w-6" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="sm:max-w-md md:max-w-lg border-white/10 bg-background/95 backdrop-blur-xl overflow-y-auto pb-16">
-        <EventForm 
-          open={true}
-          onSave={handleSaveEvent} 
-          onCancel={() => setOpen(false)}
-          onUseAI={() => {
-            toast({
-              title: "Mally AI",
-              description: "AI event planning is coming soon!",
-            });
-          }}
-        />
-      </SheetContent>
-    </Sheet>
+    <>
+      <Button 
+        size="icon" 
+        className="h-14 w-14 rounded-full fixed bottom-20 right-8 z-50 shadow-lg bg-primary hover:bg-primary/90"
+        aria-label="Add event"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
+      
+      {/* Use the same EventForm dialog as time slot click */}
+      <EventForm 
+        open={open}
+        onClose={() => setOpen(false)}
+        initialTime={initialTime}
+        onSave={handleSaveEvent}
+      />
+    </>
   );
 };
 

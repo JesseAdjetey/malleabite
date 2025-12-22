@@ -138,10 +138,10 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
             reminders.map(reminder => (
               <div 
                 key={reminder.id}
-                className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${reminder.is_active ? 'bg-gray-100 dark:bg-white/5' : 'bg-gray-50 dark:bg-white/3 opacity-60'}`}
+                className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${reminder.is_active ? 'bg-purple-100/50 dark:bg-purple-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
               >
                 <div 
-                  className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${reminder.is_active ? 'bg-primary' : 'bg-gray-300 dark:bg-secondary'}`}
+                  className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${reminder.is_active ? 'bg-primary' : 'bg-gray-400 dark:bg-secondary'}`}
                   onClick={() => handleToggleActive(reminder)}
                 />
                 <div className="flex-1 min-w-0">
@@ -152,24 +152,24 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                     <div className="flex gap-1 ml-1">
                       <button 
                         onClick={() => handleTestSound(reminder.sound_id || 'default')}
-                        className="text-gray-500 dark:text-gray-400 hover:text-primary p-1"
+                        className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
                         title="Test sound"
                       >
-                        <Play size={12} />
+                        <Play size={14} />
                       </button>
                       <button 
                         onClick={() => openEditDialog(reminder)}
-                        className="text-gray-500 dark:text-gray-400 hover:text-primary p-1"
+                        className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
                         title="Edit reminder"
                       >
-                        <Edit2 size={12} />
+                        <Edit2 size={14} />
                       </button>
                       <button 
                         onClick={() => handleDelete(reminder)}
-                        className="text-red-400 hover:text-red-600 p-1"
+                        className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
                         title="Delete reminder"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>

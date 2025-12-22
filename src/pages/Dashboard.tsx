@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
-import { useSubscription } from '@/hooks/use-subscription';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { 
   Calendar, 
   Plus, 
@@ -15,13 +12,11 @@ import {
   CheckCircle2, 
   Zap,
   BarChart3,
-  Bot,
+  Sparkles,
   ArrowRight,
   Target,
   Activity,
-  LogOut,
-  Crown,
-  CreditCard
+  LogOut
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import MobileNavigation from '@/components/MobileNavigation';
@@ -32,7 +27,6 @@ const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { events } = useCalendarEvents();
-  const { subscription, plan, loading: subscriptionLoading } = useSubscription();
   const isMobile = useIsMobile();
   const [greeting, setGreeting] = useState('');
 
@@ -60,18 +54,6 @@ const Dashboard = () => {
     dayjs(event.date).isBefore(dayjs(), 'day')
   ).length;
 
-  // Subscription info
-  const isPro = subscription?.isPro ?? false;
-  const planName = isPro ? 'Pro' : 'Free';
-  const eventsLimitRaw = plan?.limits?.eventsPerMonth ?? 50;
-  const aiLimitRaw = plan?.limits?.aiRequestsPerMonth ?? 10;
-  const eventsLimit: number = eventsLimitRaw;
-  const aiLimit: number = aiLimitRaw;
-  const eventsUsed = events.length;
-  const aiUsed = 0; // TODO: Track AI usage
-  const eventsPercentage = eventsLimit === -1 ? 0 : Math.min((eventsUsed / eventsLimit) * 100, 100);
-  const aiPercentage = aiLimit === -1 ? 0 : Math.min((aiUsed / aiLimit) * 100, 100);
-
   const quickActions = [
     {
       icon: Plus,
@@ -81,7 +63,7 @@ const Dashboard = () => {
       action: () => navigate('/calendar')
     },
     {
-      icon: Bot,
+      icon: Sparkles,
       label: 'AI Schedule',
       description: 'Let Mally help',
       color: 'from-indigo-600 to-indigo-700',
@@ -208,28 +190,6 @@ const Dashboard = () => {
             
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-2 md:gap-3">
-              {/* Upgrade Button - Show for free users */}
-              {!isPro && !subscriptionLoading && (
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                  <Button
-                    onClick={() => navigate('/pricing')}
-                    size="sm"
-                    className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white rounded-xl"
-                  >
-                    <Crown className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">Upgrade</span>
-                  </Button>
-                </motion.div>
-              )}
-              
-              {/* Pro Badge */}
-              {isPro && (
-                <Badge className="bg-purple-600 text-white">
-                  <Crown className="h-3 w-3 mr-1" />
-                  PRO
-                </Badge>
-              )}
-              
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button
                   onClick={() => navigate('/settings')}
@@ -281,82 +241,6 @@ const Dashboard = () => {
               </Card>
             ))}
           </div>
-        </motion.div>
-
-        {/* Subscription Status & Usage Banner */}
-        <motion.div variants={itemVariants}>
-          <Card className={`glass-card border ${isPro ? 'border-purple-500/50 bg-gradient-to-r from-purple-900/20 to-violet-900/20' : 'border-amber-500/30 bg-gradient-to-r from-amber-900/10 to-orange-900/10'}`}>
-            <CardContent className="p-4 md:p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                {/* Plan Status */}
-                <div className="flex items-center gap-3">
-                  <div className={`rounded-xl p-3 ${isPro ? 'bg-purple-500/20' : 'bg-amber-500/20'}`}>
-                    {isPro ? (
-                      <Crown className="h-6 w-6 text-purple-400" />
-                    ) : (
-                      <Zap className="h-6 w-6 text-amber-400" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-lg">{planName} Plan</h3>
-                      <Badge variant={isPro ? 'default' : 'secondary'} className={isPro ? 'bg-purple-600' : ''}>
-                        {isPro ? 'Active' : 'Limited'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {isPro ? 'Unlimited access to all features' : 'Upgrade to unlock unlimited events & AI'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Usage Stats - Only show for Free users */}
-                {!isPro && (
-                  <div className="flex-1 max-w-md space-y-3">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-muted-foreground">Events</span>
-                        <span className={eventsPercentage > 80 ? 'text-amber-400' : 'text-foreground'}>
-                          {eventsUsed} / {eventsLimit}
-                        </span>
-                      </div>
-                      <Progress value={eventsPercentage} className={`h-2 ${eventsPercentage > 80 ? '[&>div]:bg-amber-500' : ''}`} />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-muted-foreground">AI Requests</span>
-                        <span className={aiPercentage > 80 ? 'text-amber-400' : 'text-foreground'}>
-                          {aiUsed} / {aiLimit}
-                        </span>
-                      </div>
-                      <Progress value={aiPercentage} className={`h-2 ${aiPercentage > 80 ? '[&>div]:bg-amber-500' : ''}`} />
-                    </div>
-                  </div>
-                )}
-
-                {/* CTA Buttons */}
-                <div className="flex gap-2">
-                  {!isPro && (
-                    <Button
-                      onClick={() => navigate('/pricing')}
-                      className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700"
-                    >
-                      <Crown className="mr-2 h-4 w-4" />
-                      Upgrade to Pro
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate('/billing')}
-                    className="border-white/20"
-                  >
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    {isPro ? 'Manage Billing' : 'View Plans'}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </motion.div>
 
         {/* Quick Actions */}

@@ -13,7 +13,7 @@ const SettingsNav = () => {
           <Button 
             variant="ghost" 
             size="icon"
-            className="rounded-full h-9 w-9 cursor-glow gradient-border"
+            className="rounded-full h-9 w-9 cursor-glow gradient-border text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white/10"
             asChild
           >
             <Link to="/settings">

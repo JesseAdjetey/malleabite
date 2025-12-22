@@ -10,9 +10,12 @@ interface HeyMallyContextType {
   isListening: boolean;
   isSupported: boolean;
   isMallyOpen: boolean;
+  isPaused: boolean;
   enableWakeWord: () => void;
   disableWakeWord: () => void;
   toggleWakeWord: () => void;
+  pauseWakeWord: () => void;
+  resumeWakeWord: () => void;
   openMally: () => void;
   closeMally: () => void;
   error: string | null;
@@ -28,6 +31,29 @@ export function useHeyMally() {
   return context;
 }
 
+// Safe version that returns no-op functions if not in provider
+export function useHeyMallySafe() {
+  const context = useContext(HeyMallyContext);
+  if (!context) {
+    return {
+      isWakeWordEnabled: false,
+      isListening: false,
+      isSupported: false,
+      isMallyOpen: false,
+      isPaused: false,
+      enableWakeWord: () => {},
+      disableWakeWord: () => {},
+      toggleWakeWord: () => {},
+      pauseWakeWord: () => {},
+      resumeWakeWord: () => {},
+      openMally: () => {},
+      closeMally: () => {},
+      error: null,
+    };
+  }
+  return context;
+}
+
 interface HeyMallyProviderProps {
   children: React.ReactNode;
 }
@@ -39,6 +65,7 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     return saved === 'true';
   });
   const [isMallyOpen, setIsMallyOpen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const { user } = useAuth();
 
   // Handle wake word detection
@@ -72,14 +99,14 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     enabled: isWakeWordEnabled && !!user,
   });
 
-  // Start/stop listening based on enabled state
+  // Start/stop listening based on enabled state and paused state
   useEffect(() => {
-    if (isWakeWordEnabled && user && isSupported) {
+    if (isWakeWordEnabled && user && isSupported && !isPaused) {
       startListening();
     } else {
       stopListening();
     }
-  }, [isWakeWordEnabled, user, isSupported, startListening, stopListening]);
+  }, [isWakeWordEnabled, user, isSupported, isPaused, startListening, stopListening]);
 
   // Save preference to localStorage
   useEffect(() => {
@@ -114,6 +141,16 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     }
   }, [isWakeWordEnabled, enableWakeWord, disableWakeWord]);
 
+  // Pause wake word detection temporarily (when MallyAI is recording)
+  const pauseWakeWord = useCallback(() => {
+    setIsPaused(true);
+  }, []);
+
+  // Resume wake word detection
+  const resumeWakeWord = useCallback(() => {
+    setIsPaused(false);
+  }, []);
+
   const openMally = useCallback(() => {
     setIsMallyOpen(true);
   }, []);
@@ -127,9 +164,12 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     isListening,
     isSupported,
     isMallyOpen,
+    isPaused,
     enableWakeWord,
     disableWakeWord,
     toggleWakeWord,
+    pauseWakeWord,
+    resumeWakeWord,
     openMally,
     closeMally,
     error,

@@ -172,7 +172,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
     <div 
       ref={boxRef}
       className={cn(
-        "group relative flex flex-col border-r border-t border-gray-200 dark:border-white/10 gradient-border cursor-glow month-view-box min-h-[80px] md:min-h-[100px]",
+        "group relative flex flex-col border-r border-t border-gray-200 dark:border-white/10 gradient-border cursor-glow month-view-box min-h-[90px] md:min-h-[110px]",
         "transition-all hover:bg-gray-100/50 dark:hover:bg-white/5 touch-manipulation",
         isToday && "bg-primary/10"
       )}
@@ -187,7 +187,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       data-day={day.format('YYYY-MM-DD')}
     >
       {/* Day Header */}
-      <div className="flex flex-col items-center py-1 border-b border-gray-100 dark:border-white/10">
+      <div className="flex flex-col items-center py-0.5">
         {rowIndex === 0 && (
           <h4 className="text-[10px] md:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{day.format("ddd").toUpperCase()}</h4>
         )}
@@ -202,11 +202,11 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       </div>
       
       {/* Events */}
-      <div className="flex-1 p-0.5 md:p-1 overflow-hidden">
+      <div className="flex-1 px-0.5 md:px-1 pb-1 overflow-hidden space-y-1">
         {visibleEvents.map(event => (
           <div 
             key={event.id} 
-            className="mb-1 gradient-border calendar-event-wrapper min-h-[44px] flex items-center" 
+            className="gradient-border calendar-event-wrapper rounded-sm overflow-hidden" 
             onClick={(e) => {
               e.stopPropagation();
               if (!isBulkMode) {
@@ -220,6 +220,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
                 isBulkMode={isBulkMode}
                 isSelected={isSelected(event.id)}
                 onToggleSelection={onToggleSelection}
+                compact={true}
               />
             ) : (
               <CalendarEvent
@@ -230,13 +231,14 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
                 hasReminder={event.hasReminder}
                 hasTodo={event.isTodo}
                 participants={event.participants}
+                compact={true}
               />
             )}
           </div>
         ))}
         
         {hasMoreEvents && (
-          <div className="text-[10px] md:text-xs text-center bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded p-1 min-h-[44px] flex items-center justify-center touch-manipulation">
+          <div className="text-[10px] md:text-xs text-center bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded py-0.5 px-1 touch-manipulation">
             +{events.length - 3} more
           </div>
         )}

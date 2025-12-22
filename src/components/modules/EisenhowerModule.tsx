@@ -136,10 +136,10 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
     const config = quadrantConfig[focusedQuadrant];
     const quadrantItems = getQuadrantItems(focusedQuadrant);
-    const textColorClass = focusedQuadrant === 'urgent_important' ? 'text-red-400' :
-      focusedQuadrant === 'not_urgent_important' ? 'text-yellow-400' :
-        focusedQuadrant === 'urgent_not_important' ? 'text-blue-400' :
-          'text-green-400';
+    const textColorClass = focusedQuadrant === 'urgent_important' ? 'text-red-600 dark:text-red-400' :
+      focusedQuadrant === 'not_urgent_important' ? 'text-yellow-600 dark:text-yellow-400' :
+        focusedQuadrant === 'urgent_not_important' ? 'text-blue-600 dark:text-blue-400' :
+          'text-green-600 dark:text-green-400';
 
     return (
       <div className={`rounded-lg p-3 h-64 ${config.className}`}>
@@ -155,7 +155,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
           <h3 className={`text-sm font-medium ${textColorClass}`}>{config.title}</h3>
         </div>
 
-        <p className="text-xs mb-3 opacity-70">{config.description}</p>
+        <p className="text-xs mb-3 text-gray-600 dark:text-gray-300">{config.description}</p>
 
         {submitStatus && (
           <div className={cn(
@@ -199,14 +199,14 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
         ) : (
           <div className="overflow-y-auto max-h-[150px]">
             {quadrantItems.length === 0 ? (
-              <div className="text-xs opacity-50 text-center pt-2">No items in this quadrant</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">No items in this quadrant</div>
             ) : (
               quadrantItems.map(item => (
                 <div key={item.id} className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white">
                   <span>{item.text}</span>
                   <button
                     onClick={() => handleRemoveItem(item.id)}
-                    className="opacity-50 hover:opacity-100"
+                    className="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 font-bold"
                   >×</button>
                 </div>
               ))
@@ -250,16 +250,16 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               onDragOver={handleDragOver}
               onClick={() => setFocusedQuadrant(quadrantType)}
             >
-              <div className={`text-xs font-medium mb-1 ${quadrantType === 'urgent_important' ? 'text-red-400' :
-                  quadrantType === 'not_urgent_important' ? 'text-yellow-400' :
-                    quadrantType === 'urgent_not_important' ? 'text-blue-400' :
-                      'text-green-400'
+              <div className={`text-xs font-semibold mb-1 ${quadrantType === 'urgent_important' ? 'text-red-600 dark:text-red-400' :
+                  quadrantType === 'not_urgent_important' ? 'text-yellow-600 dark:text-yellow-400' :
+                    quadrantType === 'urgent_not_important' ? 'text-blue-600 dark:text-blue-400' :
+                      'text-green-600 dark:text-green-400'
                 }`}>
                 {config.title}
               </div>
 
               {quadrantItems.length === 0 ? (
-                <div className="text-xs opacity-50 text-center pt-2">Click to add items</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">Click to add items</div>
               ) : (
                 quadrantItems.slice(0, 3).map(item => (
                   <div
@@ -281,7 +281,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                         e.stopPropagation();
                         handleRemoveItem(item.id);
                       }}
-                      className="opacity-50 hover:opacity-100"
+                      className="text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 font-bold"
                     >
                       ×
                     </button>
@@ -290,7 +290,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               )}
 
               {quadrantItems.length > 3 && (
-                <div className="text-xs opacity-70 text-center">+{quadrantItems.length - 3} more</div>
+                <div className="text-xs text-gray-600 dark:text-gray-300 text-center">+{quadrantItems.length - 3} more</div>
               )}
             </div>
           );

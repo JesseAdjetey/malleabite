@@ -26,6 +26,7 @@ import { useAlarms } from "@/hooks/use-alarms";
 import { shouldUseFirebase, logMigrationStatus } from "@/lib/migration-flags";
 import { logger } from "@/lib/logger";
 import { errorHandler } from "@/lib/error-handler";
+import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
 import "../../styles/ai-animations.css";
 
 interface Message {
@@ -67,6 +68,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<any>(null); // SpeechRecognition instance
+  const [isWaitingForVoice, setIsWaitingForVoice] = useState(false); // Track if waiting for user voice input (Siri-style)
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +78,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
   const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo, alarms } = useAlarms();
+  
+  // Get pause/resume functions for wake word coordination
+  const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
 
   // Track pending action for confirmation
   const [pendingAction, setPendingAction] = useState<any>(null);
@@ -84,28 +89,117 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     logMigrationStatus('MallyAI', 'firebase');
   }, []);
 
-  // Listen for "Hey Mally" activation
+  // Ref to hold the latest toggleRecording function
+  const toggleRecordingRef = useRef<() => void>(() => {});
+  
+  // Ref to hold the latest handleSendMessage function for auto-submit
+  const handleSendMessageRef = useRef<(text: string) => void>(() => {});
+
+  // Listen for "Hey Mally" activation (Siri-style: single interaction)
   useEffect(() => {
-    const handleHeyMallyActivation = () => {
+    const handleHeyMallyActivation = (event: Event) => {
+      console.log('🎤 Hey Mally event received in MallyAI component!');
       logger.info('MallyAI', 'Hey Mally activation received');
       
-      // Open the assistant
-      setIsOpen(true);
+      // IMMEDIATE visual feedback - add a message to show Mally heard you
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        text: "I'm listening...",
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
       
-      // Start voice recording after a brief delay
+      // Open the assistant if not already open
+      setIsOpen(true);
+      setIsWaitingForVoice(true);
+      
+      // Play activation chime (immediate audio feedback like Siri)
+      try {
+        playActivationChimeImmediate();
+      } catch (e) {
+        console.log('Chime failed:', e);
+      }
+      
+      // Speak quick acknowledgment after chime
       setTimeout(() => {
-        if (!isRecording) {
-          toggleRecording();
+        try {
+          speakQuickAcknowledgmentImmediate();
+        } catch (e) {
+          console.log('Acknowledgment failed:', e);
         }
-      }, 500);
+      }, 250);
+      
+      // Start recording after acknowledgment
+      setTimeout(() => {
+        console.log('🎤 Starting voice recording...');
+        if (toggleRecordingRef.current) {
+          toggleRecordingRef.current();
+        } else {
+          console.error('toggleRecordingRef is not set!');
+        }
+      }, 800);
     };
 
+    console.log('🎤 Setting up Hey Mally event listener');
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     
     return () => {
       window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
     };
-  }, [isRecording]);
+  }, []);
+  
+  // Siri-style activation chime - IMMEDIATE version for event handler
+  const playActivationChimeImmediate = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Two-tone chime like Siri (rising pitch)
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+      oscillator.frequency.setValueAtTime(1047, audioContext.currentTime + 0.1); // C6
+      
+      gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.25);
+      
+      console.log('🔔 Activation chime played');
+    } catch (e) {
+      console.log('Could not play activation chime:', e);
+    }
+  };
+  
+  // Quick voice acknowledgment - IMMEDIATE version for event handler
+  const speakQuickAcknowledgmentImmediate = () => {
+    if (!window.speechSynthesis) {
+      console.log('Speech synthesis not available');
+      return;
+    }
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const acknowledgments = ["Yes?", "Mm-hmm?", "I'm here", "What's up?"];
+    const ack = acknowledgments[Math.floor(Math.random() * acknowledgments.length)];
+    
+    const utterance = new SpeechSynthesisUtterance(ack);
+    utterance.rate = 1.2; // Quick but clear
+    utterance.pitch = 1.05;
+    utterance.volume = 0.9;
+    utterance.lang = navigator.language || 'en-US';
+    
+    window.speechSynthesis.speak(utterance);
+    console.log('🗣️ Spoke acknowledgment:', ack);
+  };
+  
+  // Legacy functions (keep for compatibility)
+  const playActivationChime = playActivationChimeImmediate;
+  const speakQuickAcknowledgment = speakQuickAcknowledgmentImmediate;
 
   // Execute an action based on type
   const executeAction = async (action: any): Promise<boolean> => {
@@ -492,6 +586,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       console.log('Speech started');
     };
     
+    utterance.onend = () => {
+      console.log('Speech ended');
+      // Siri-style: don't auto-restart recording
+      // User needs to say "Hey Mally" again or click mic button
+    };
+    
     utterance.onerror = (event) => {
       console.error('Speech error:', event.error);
     };
@@ -517,6 +617,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   useEffect(() => {
     if (!isOpen) {
       window.speechSynthesis.cancel();
+      setIsWaitingForVoice(false);
     }
   }, [isOpen]);
 
@@ -556,7 +657,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         (mediaRecorder as any).stop();
         setIsRecording(false);
       }
+      // Resume wake word detection when done
+      resumeWakeWord();
     } else {
+      // Pause wake word detection while we use speech recognition
+      pauseWakeWord();
+      
       // Start speech recognition using Web Speech API
       try {
         // Check if browser supports speech recognition
@@ -564,24 +670,33 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         
         if (!SpeechRecognition) {
           toast.error("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+          resumeWakeWord(); // Resume on error
           return;
         }
 
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        // Use browser's language or default to English
+        recognition.lang = navigator.language || 'en-US';
 
         let finalTranscript = '';
+        let silenceTimeout: NodeJS.Timeout | null = null;
+        let hasReceivedSpeech = false;
 
         recognition.onstart = () => {
           setIsRecording(true);
-          toast.success("Listening... Speak now!");
           logger.info('MallyAI', 'Speech recognition started');
         };
 
         recognition.onresult = (event: any) => {
           let interimTranscript = '';
+          hasReceivedSpeech = true;
+          
+          // Clear any existing silence timeout
+          if (silenceTimeout) {
+            clearTimeout(silenceTimeout);
+          }
           
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
@@ -592,35 +707,77 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             }
           }
           
-          // Show interim results in input
+          // Show interim results in input for visual feedback
           setInputText(finalTranscript + interimTranscript);
+          
+          // Smart silence detection: if user stops speaking for 1.5 seconds, auto-submit
+          silenceTimeout = setTimeout(() => {
+            if (finalTranscript.trim() || interimTranscript.trim()) {
+              try {
+                recognition.stop();
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }, 1500);
         };
 
         recognition.onend = () => {
           setIsRecording(false);
           setMediaRecorder(null);
+          setIsWaitingForVoice(false);
+          
+          // Clear silence timeout
+          if (silenceTimeout) {
+            clearTimeout(silenceTimeout);
+          }
+          
+          // Resume wake word detection
+          resumeWakeWord();
+          
+          // Clear input field
+          setInputText('');
           
           if (finalTranscript.trim()) {
             logger.info('MallyAI', 'Speech recognition complete', { transcript: finalTranscript });
-            setInputText(finalTranscript.trim());
-            toast.success("Speech captured!");
+            // Auto-submit the captured speech for smooth conversation flow
+            handleSendMessageRef.current(finalTranscript.trim());
+          } else if (hasReceivedSpeech) {
+            // Had some speech but no final transcript
+            toast.info("Didn't quite catch that. Say 'Hey Mally' to try again.");
           } else {
-            toast.info("No speech detected. Try again.");
+            // No speech at all
+            toast.info("I'm listening... Say 'Hey Mally' when you're ready.");
           }
         };
 
         recognition.onerror = (event: any) => {
           setIsRecording(false);
           setMediaRecorder(null);
-          logger.error('MallyAI', 'Speech recognition error', { error: event.error });
+          
+          // Resume wake word detection on error
+          resumeWakeWord();
+          
+          // Handle expected/non-critical errors gracefully
+          if (event.error === 'aborted') {
+            // User or system stopped recognition, no need to log or show error
+            return;
+          }
           
           if (event.error === 'no-speech') {
             toast.info("No speech detected. Try again.");
-          } else if (event.error === 'not-allowed') {
-            toast.error("Microphone access denied. Please allow microphone access.");
-          } else {
-            toast.error(`Speech recognition error: ${event.error}`);
+            return;
           }
+          
+          if (event.error === 'not-allowed') {
+            logger.warn('MallyAI', 'Microphone access denied');
+            toast.error("Microphone access denied. Please allow microphone access.");
+            return;
+          }
+          
+          // Log only unexpected errors
+          logger.error('MallyAI', 'Speech recognition error', { error: event.error });
+          toast.error(`Speech recognition error: ${event.error}`);
         };
 
         // Store recognition instance for stopping
@@ -635,6 +792,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     }
   };
 
+  // Keep ref updated with latest toggleRecording function
+  useEffect(() => {
+    toggleRecordingRef.current = toggleRecording;
+  });
   // Send message and get AI response using Firebase Functions
   const handleSendMessage = async (messageText?: string) => {
     const textToSend = messageText || inputText.trim();
@@ -841,6 +1002,11 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     }
   };
 
+  // Keep ref updated with latest handleSendMessage function
+  useEffect(() => {
+    handleSendMessageRef.current = handleSendMessage;
+  });
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -887,6 +1053,22 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Siri-style Listening Indicator */}
+        {isRecording && (
+          <div className="flex items-center justify-center py-4 bg-gradient-to-t from-gray-900 to-transparent">
+            <div className="flex items-center space-x-2 px-4 py-2 bg-purple-600/20 rounded-full border border-purple-500/30">
+              <div className="flex space-x-1">
+                <div className="w-1 h-4 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                <div className="w-1 h-6 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                <div className="w-1 h-8 bg-purple-600 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                <div className="w-1 h-6 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                <div className="w-1 h-4 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+              </div>
+              <span className="text-purple-300 text-sm font-medium ml-2">Listening...</span>
+            </div>
+          </div>
+        )}
 
         {/* Input */}
         <div className="p-4 border-t border-gray-700 bg-gray-900 shrink-0">
@@ -1001,6 +1183,22 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Siri-style Listening Indicator */}
+      {isRecording && (
+        <div className="flex items-center justify-center py-4 bg-gradient-to-t from-gray-900 to-transparent">
+          <div className="flex items-center space-x-2 px-4 py-2 bg-purple-600/20 rounded-full border border-purple-500/30">
+            <div className="flex space-x-1">
+              <div className="w-1 h-4 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+              <div className="w-1 h-6 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+              <div className="w-1 h-8 bg-purple-600 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+              <div className="w-1 h-6 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+              <div className="w-1 h-4 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+            </div>
+            <span className="text-purple-300 text-sm font-medium ml-2">Listening...</span>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="p-4 border-t border-gray-700 bg-gray-900 rounded-b-lg shrink-0">

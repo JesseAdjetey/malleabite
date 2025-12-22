@@ -19,6 +19,7 @@ interface SelectableCalendarEventProps {
   isBulkMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: (eventId: string) => void;
+  compact?: boolean;
 }
 
 const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
@@ -34,6 +35,7 @@ const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
   isBulkMode = false,
   isSelected = false,
   onToggleSelection,
+  compact = false,
 }) => {
   const handleCheckboxChange = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -89,6 +91,7 @@ const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
           participants={participants}
           onClick={handleEventClick}
           onLockToggle={onLockToggle}
+          compact={compact}
         />
       </div>
     </div>

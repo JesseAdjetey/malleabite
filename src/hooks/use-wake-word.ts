@@ -19,22 +19,47 @@ interface UseWakeWordReturn {
   error: string | null;
 }
 
-// Wake word variations to detect
+// Wake word variations to detect (multi-language support)
 const DEFAULT_WAKE_WORDS = [
+  // English
   'hey mally',
   'hey mali',
   'hey molly',
   'hey malley',
-  'hey mally',
   'hi mally',
   'hi mali',
   'okay mally',
   'ok mally',
-  'a mally',
   'hey money', // Common misheard
   'hey melly',
   'mally',
   'mali',
+  // Spanish
+  'hola mally',
+  'oye mally',
+  'ey mally',
+  // French
+  'salut mally',
+  'hé mally',
+  // German
+  'hallo mally',
+  'hey malli',
+  // Portuguese
+  'oi mally',
+  'olá mally',
+  // Italian
+  'ciao mally',
+  'ehi mally',
+  // Japanese (romanized)
+  'ne mally',
+  // Korean (romanized)
+  'ya mally',
+  // Chinese (romanized)
+  'wei mally',
+  // Hindi (romanized)
+  'are mally',
+  // Arabic (romanized)
+  'ya mally',
 ];
 
 export function useWakeWord({
@@ -103,11 +128,15 @@ export function useWakeWord({
       // Configure for continuous wake word detection
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = 'en-US';
+      // Use browser's language or default to English for wake word detection
+      recognition.lang = navigator.language || 'en-US';
       recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
-        logger.info('WakeWord', 'Wake word detection started');
+        // Only log on initial start, not restarts (to reduce log spam)
+        if (!isListeningRef.current) {
+          logger.info('WakeWord', 'Wake word detection started');
+        }
         setIsListening(true);
         isListeningRef.current = true;
         setError(null);

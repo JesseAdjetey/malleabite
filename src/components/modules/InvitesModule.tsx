@@ -61,11 +61,11 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
         <Button 
           variant="outline" 
           size="sm" 
-          className="h-7" 
+          className="h-7 flex items-center justify-center" 
           onClick={refreshInvites}
           disabled={isRefreshing}
         >
-          {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" /> : <RefreshCw className="h-3.5 w-3.5 flex-shrink-0" />}
         </Button>
         
         <SendInviteDialog 

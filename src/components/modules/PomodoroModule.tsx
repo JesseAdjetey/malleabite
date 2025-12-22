@@ -212,23 +212,23 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         <div className="flex gap-3 mb-4">
           <Button
             onClick={toggleTimer}
-            className="bg-primary px-4 py-1 rounded-md hover:bg-primary/80 transition-colors"
+            className="bg-primary px-4 py-1 rounded-md hover:bg-primary/80 transition-colors flex items-center gap-2"
           >
-            {isActive ? <Pause size={16} /> : <Play size={16} />}
-            {isActive ? 'Pause' : 'Start'}
+            {isActive ? <Pause size={16} className="flex-shrink-0" /> : <Play size={16} className="flex-shrink-0" />}
+            <span>{isActive ? 'Pause' : 'Start'}</span>
           </Button>
           <Button
             onClick={resetTimer}
-            className="bg-secondary px-4 py-1 rounded-md hover:bg-secondary/80 transition-colors"
+            className="bg-secondary px-4 py-1 rounded-md hover:bg-secondary/80 transition-colors flex items-center gap-2 text-white"
           >
-            Reset
+            <span>Reset</span>
           </Button>
           <Button
             onClick={toggleSettings}
             variant="outline"
-            className="px-3 py-1"
+            className="px-3 py-1 flex items-center justify-center"
           >
-            <Settings size={16} />
+            <Settings size={16} className="flex-shrink-0" />
           </Button>
         </div>
 

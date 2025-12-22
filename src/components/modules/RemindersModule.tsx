@@ -226,12 +226,10 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
             setSelectedReminder(null);
             setIsDialogOpen(true);
           }}
-          className="bg-primary px-3 py-2 w-full rounded-md hover:bg-primary/80 transition-colors"
+          className="bg-primary px-3 py-2 w-full rounded-md hover:bg-primary/80 transition-colors flex items-center justify-center gap-2 text-white font-medium"
         >
-          <span className="flex items-center justify-center gap-1">
-            <Plus size={16} />
-            Add Reminder
-          </span>
+          <Plus size={16} className="flex-shrink-0" />
+          <span>Add Reminder</span>
         </button>
       </div>
 

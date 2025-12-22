@@ -42,7 +42,7 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: "1",
-    text: "Hello! I'm Mally, your intelligent scheduling assistant. I can help you create events, manage your calendar, and organize your time. What would you like me to help you with?",
+    text: "Hello! I'm Mally, your AI productivity assistant. I can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"",
     sender: "ai",
     timestamp: new Date(),
   },
@@ -868,16 +868,58 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           const actionData = pendingAction.data;
           let successMessage = "Done!";
           
-          if (actionType === 'create_event') {
-            const isRecurring = actionData.isRecurring;
-            const frequency = actionData.recurrenceRule?.frequency;
-            if (isRecurring && frequency) {
-              successMessage = `Great! I've set up your recurring '${actionData.title}' event (${frequency}). You're all set!`;
-            } else {
-              successMessage = `Done! I've created your '${actionData.title}' event. You're all set!`;
+          switch (actionType) {
+            case 'create_event': {
+              const isRecurring = actionData.isRecurring;
+              const frequency = actionData.recurrenceRule?.frequency;
+              if (isRecurring && frequency) {
+                successMessage = `Great! I've set up your recurring '${actionData.title}' event (${frequency}). You're all set!`;
+              } else {
+                successMessage = `Done! I've created your '${actionData.title}' event. You're all set!`;
+              }
+              break;
             }
-          } else if (actionType === 'create_todo') {
-            successMessage = `Added '${actionData.text}' to your todo list!`;
+            case 'create_todo':
+              successMessage = `Added '${actionData.text}' to your todo list!`;
+              break;
+            case 'complete_todo':
+              successMessage = `Marked todo as complete!`;
+              break;
+            case 'delete_todo':
+              successMessage = `Removed the todo from your list.`;
+              break;
+            case 'create_eisenhower':
+              successMessage = `Added '${actionData.text}' to your priority matrix!`;
+              break;
+            case 'update_eisenhower':
+              successMessage = `Moved item to ${actionData.quadrant?.replace(/_/g, ' ')}!`;
+              break;
+            case 'delete_eisenhower':
+              successMessage = `Removed item from priority matrix.`;
+              break;
+            case 'create_alarm': {
+              const linkedText = actionData.linkedEventId ? ' (linked to event)' : 
+                                actionData.linkedTodoId ? ' (linked to todo)' : '';
+              successMessage = `Alarm '${actionData.title}' created${linkedText}!`;
+              break;
+            }
+            case 'update_alarm':
+              successMessage = `Alarm updated!`;
+              break;
+            case 'delete_alarm':
+              successMessage = `Alarm deleted.`;
+              break;
+            case 'link_alarm':
+              successMessage = `Alarm linked successfully!`;
+              break;
+            case 'delete_event':
+              successMessage = `Event deleted from your calendar.`;
+              break;
+            case 'update_event':
+              successMessage = `Event updated!`;
+              break;
+            default:
+              successMessage = "Done!";
           }
           
           updateMessage(loadingMessageId, {
@@ -951,9 +993,17 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         // Check if this is a confirmation (user said yes to a previous suggestion)
         const isConfirmation = intent === 'confirmation';
         
-        // Check if this is a direct action that should execute immediately
-        const isDirectAction = ['delete_event', 'complete_todo', 'delete_todo', 
-           'update_eisenhower', 'delete_eisenhower', 'update_alarm', 'delete_alarm'].includes(action.type);
+        // Actions that should execute immediately without additional confirmation:
+        // - Delete/update actions (AI already confirmed intent)
+        // - Completion actions
+        // - Todo creation (simple, low-risk action)
+        // - Alarm creation (when clearly requested)
+        const isDirectAction = [
+          'delete_event', 'update_event',
+          'create_todo', 'complete_todo', 'delete_todo', 
+          'create_eisenhower', 'update_eisenhower', 'delete_eisenhower', 
+          'create_alarm', 'update_alarm', 'delete_alarm', 'link_alarm'
+        ].includes(action.type);
 
         if (isConfirmation || isDirectAction) {
           // Execute the action immediately
@@ -963,7 +1013,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             setPendingAction(null);
           }
         } else {
-          // Store as pending for user confirmation (creation actions)
+          // Store as pending for user confirmation (mainly event creation)
           logger.info('MallyAI', 'Storing pending action for confirmation', { action });
           setPendingAction(action);
         }

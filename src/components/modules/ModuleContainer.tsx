@@ -71,9 +71,9 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             />
             <button 
               onClick={handleSaveTitle}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all"
+              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all flex items-center justify-center"
             >
-              <Check size={16} className="text-primary" />
+              <Check size={16} className="text-primary flex-shrink-0" />
             </button>
           </div>
         ) : (
@@ -83,32 +83,32 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           {onTitleChange && !isMinimized && (
             <button 
               onClick={handleEditClick}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-600 dark:text-white"
+              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
               aria-label="Edit module title"
             >
-              <Edit size={16} />
+              <Edit size={16} className="flex-shrink-0" />
             </button>
           )}
           {onMinimize && (
             <button 
               onClick={onMinimize}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all"
+              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all flex items-center justify-center"
               aria-label={isMinimized ? "Show module" : "Hide module"}
             >
               {isMinimized ? (
-                <Eye size={16} className="text-primary" />
+                <Eye size={16} className="text-primary flex-shrink-0" />
               ) : (
-                <EyeOff size={16} className="text-gray-500 dark:text-muted-foreground" />
+                <EyeOff size={16} className="text-gray-700 dark:text-gray-300 flex-shrink-0" />
               )}
             </button>
           )}
           {onRemove && (
             <button 
               onClick={() => setShowDeleteDialog(true)}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-600 dark:text-white"
+              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
               aria-label="Remove module"
             >
-              <Minus size={16} />
+              <Minus size={16} className="flex-shrink-0" />
             </button>
           )}
         </div>

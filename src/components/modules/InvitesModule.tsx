@@ -61,7 +61,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
         <Button 
           variant="outline" 
           size="sm" 
-          className="h-7 flex items-center justify-center" 
+          className="h-7 flex items-center justify-center text-gray-700 dark:text-gray-300" 
           onClick={refreshInvites}
           disabled={isRefreshing}
         >
@@ -91,7 +91,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : receivedInvites.length === 0 ? (
-            <div className="text-center py-4 text-sm text-muted-foreground">
+            <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
               No invites received
             </div>
           ) : (
@@ -108,8 +108,8 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
                 </Avatar>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{invite.event?.title || 'Unnamed event'}</div>
-                  <div className="text-xs opacity-70 flex items-center gap-1">
+                  <div className="text-sm font-medium truncate text-gray-800 dark:text-white">{invite.event?.title || 'Unnamed event'}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
                     <Clock className="h-3 w-3" /> {formatTime(invite.event?.startsAt || invite.created_at)}
                   </div>
                 </div>
@@ -130,11 +130,11 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <div className="text-xs opacity-70 italic">
+                  <div className="text-xs italic">
                     {invite.status === 'accepted' ? (
-                      <span className="text-green-400">Accepted</span>
+                      <span className="text-green-600 dark:text-green-400">Accepted</span>
                     ) : (
-                      <span className="text-red-400">Declined</span>
+                      <span className="text-red-600 dark:text-red-400">Declined</span>
                     )}
                   </div>
                 )}
@@ -149,7 +149,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : sentInvites.length === 0 ? (
-            <div className="text-center py-4 text-sm text-muted-foreground">
+            <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
               No invites sent
             </div>
           ) : (
@@ -166,8 +166,8 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
                 </Avatar>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{invite.event?.title || 'Unnamed event'}</div>
-                  <div className="text-xs opacity-70 truncate">
+                  <div className="text-sm font-medium truncate text-gray-800 dark:text-white">{invite.event?.title || 'Unnamed event'}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
                     To: {invite.invitee_email}
                   </div>
                 </div>
@@ -247,8 +247,9 @@ const SendInviteDialog: React.FC<SendInviteDialogProps> = ({ isOpen, setIsOpen, 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" size="sm" className="h-7">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Invite
+        <Button variant="default" size="sm" className="h-7 flex items-center gap-1">
+          <Plus className="h-3.5 w-3.5 flex-shrink-0" /> 
+          <span>Invite</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -292,16 +293,16 @@ const SendInviteDialog: React.FC<SendInviteDialogProps> = ({ isOpen, setIsOpen, 
             />
           </div>
         </div>
-        <Button onClick={handleSend} className="w-full" disabled={isSending}>
+        <Button onClick={handleSend} className="w-full flex items-center justify-center gap-2" disabled={isSending}>
           {isSending ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Sending...
+              <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+              <span>Sending...</span>
             </>
           ) : (
             <>
-              <Send className="mr-2 h-4 w-4" />
-              Send Invite
+              <Send className="h-4 w-4 flex-shrink-0" />
+              <span>Send Invite</span>
             </>
           )}
         </Button>

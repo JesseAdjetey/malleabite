@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import ModuleContainer from './ModuleContainer';
-import { Play, Pause, Settings, Clock, Target } from 'lucide-react';
+import { Play, Pause, Settings, Clock, Target, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -221,12 +221,13 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
             onClick={resetTimer}
             className="bg-secondary px-4 py-1 rounded-md hover:bg-secondary/80 transition-colors flex items-center gap-2 text-white"
           >
+            <RotateCcw size={16} className="flex-shrink-0" />
             <span>Reset</span>
           </Button>
           <Button
             onClick={toggleSettings}
             variant="outline"
-            className="px-3 py-1 flex items-center justify-center"
+            className="px-3 py-1 flex items-center justify-center text-gray-700 dark:text-gray-300"
           >
             <Settings size={16} className="flex-shrink-0" />
           </Button>

@@ -174,18 +174,18 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                     </div>
                   </div>
                   
-                  <div className="text-xs opacity-70 mt-1 space-y-1">
+                  <div className="text-xs text-gray-700 dark:text-gray-300 mt-1 space-y-1">
                     {reminder.description && (
-                      <p className="truncate">{reminder.description}</p>
+                      <p className="truncate text-gray-600 dark:text-gray-400">{reminder.description}</p>
                     )}
                     
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                       <Clock size={12} />
                       <span>{formatReminderTime(reminder.reminder_time)}</span>
                     </div>
                     
                     {reminder.event && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                         <Calendar size={12} />
                         <span className="truncate">{reminder.event.title}</span>
                       </div>
@@ -206,7 +206,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                       </div>
                     )}
                     
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
                       <Volume2 size={12} />
                       <span>
                         {REMINDER_SOUNDS.find(s => s.id === reminder.sound_id)?.name || 'Default'}

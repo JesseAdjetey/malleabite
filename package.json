@@ -21,7 +21,11 @@
     "firebase:complete": "node scripts/firebase-migration-complete.js",
     "firebase:emulators": "firebase emulators:start",
     "firebase:deploy": "firebase deploy",
-    "firebase:functions:deploy": "firebase deploy --only functions"
+    "firebase:functions:deploy": "firebase deploy --only functions",
+    "mally:deploy": "cd firebase/functions && npm run build && cd ../.. && firebase deploy --only functions",
+    "mally:setup": "firebase functions:secrets:set GEMINI_API_KEY",
+    "mally:test": "node scripts/test-mally-api.js",
+    "mally:logs": "firebase functions:log --only processAIRequest"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

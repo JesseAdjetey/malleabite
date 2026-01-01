@@ -316,8 +316,16 @@ export const processAIRequest = onRequest(
         ? conversationHistory.map(m => `${m.role === 'user' ? 'User' : 'Mally'}: ${m.content}`).join('\n')
         : 'No previous conversation.';
 
-      // Generate AI response with Gemini
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      // Generate AI response with Gemini (using flash model for free tier efficiency)
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          temperature: 0.7,
+          topP: 0.9,
+          topK: 40,
+          maxOutputTokens: 1024, // Optimize for free tier
+        }
+      });
 
       const systemPrompt = `
 You are Mally, an intelligent and proactive productivity assistant for a calendar app called Malleabite.

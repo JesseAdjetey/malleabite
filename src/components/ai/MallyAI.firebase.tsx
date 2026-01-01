@@ -42,7 +42,7 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: "1",
-    text: "Hello! I'm Mally, your AI productivity assistant. I can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"",
+    text: "Hello! I'm Mally, your AI productivity assistant powered by Google Gemini. 🤖\n\nI can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"",
     sender: "ai",
     timestamp: new Date(),
   },

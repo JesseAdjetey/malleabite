@@ -180,7 +180,8 @@ const WeekView = () => {
         return;
       }
 
-      libHandleDrop(e, day, hour, updateEvent);
+      // Pass addEvent to handleDrop so it can handle recurring event instances
+      libHandleDrop(e, day, hour, updateEvent, addEvent);
     } catch (error) {
       console.error("Error handling drop:", error);
       toast.error("Failed to process drop event");

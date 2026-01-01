@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { getHours, isCurrentDay } from "@/lib/getTime";
 import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
@@ -36,16 +36,45 @@ const DayColumn: React.FC<DayColumnProps> = ({
   onToggleSelection = () => {},
 }) => {
   const hourHeight = 80; // The height in pixels of each hour cell
+  const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+
+  const handleDragEnter = (hourIndex: number) => {
+    setDragOverHour(hourIndex);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the column entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDragOverHour(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
+    setDragOverHour(null);
+    onDrop(e, day, hour);
+  };
 
   return (
-    <div className="relative border-r border-gray-200 dark:border-white/10">
+    <div 
+      className="relative border-r border-gray-200 dark:border-white/10"
+      onDragLeave={handleDragLeave}
+    >
       {getHours.map((hour, i) => (
         <div
           key={i}
-          className="relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 hover:bg-gray-100/50 dark:hover:bg-white/5"
+          className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${
+            dragOverHour === i 
+              ? 'bg-primary/20 dark:bg-primary/30 ring-2 ring-inset ring-primary/50 dark:ring-white/50 shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]' 
+              : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
+          }`}
           onClick={() => onTimeSlotClick(currentDate, hour)}
-          onDragOver={onDragOver}
-          onDrop={(e) => onDrop(e, currentDate, hour)}
+          onDragOver={(e) => {
+            onDragOver(e);
+            handleDragEnter(i);
+          }}
+          onDragEnter={() => handleDragEnter(i)}
+          onDrop={(e) => handleDrop(e, currentDate, hour)}
         />
       ))}
 

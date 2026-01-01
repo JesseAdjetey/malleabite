@@ -17,7 +17,8 @@ export const handleDrop = (
   hour: dayjs.Dayjs,
   updateEventFn: (event: CalendarEventType) => Promise<any>,
   addEventFn?: (event: CalendarEventType) => Promise<any>,
-  openEventForm?: (todoData: any, date: Date, timeStart: string) => void
+  openEventForm?: (todoData: any, date: Date, timeStart: string) => void,
+  addRecurrenceExceptionFn?: (parentId: string, exceptionDate: string) => Promise<any>
 ) => {
   e.preventDefault();
   
@@ -88,14 +89,58 @@ export const handleDrop = (
     const newEndTime = formatMinutesAsTime(newEndMinutes);
     
     // Get description without time part
-    const descriptionParts = data.description.split('|');
-    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+    const descriptionParts = data.description?.split('|') || [];
+    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : data.title || '';
     
-    // Create the updated event
+    // Check if this is a recurring event instance (has recurrenceParentId or synthetic ID with underscore)
+    const isRecurringInstance = data.recurrenceParentId || (data.id && data.id.includes('_'));
+    
+    if (isRecurringInstance && addEventFn) {
+      // For recurring instances, we need to:
+      // 1. Add an exception to the parent event for this date
+      // 2. Create a new standalone event at the new position
+      
+      const parentId = data.recurrenceParentId || data.id.split('_')[0];
+      const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
+      
+      // Create new standalone event at the new position
+      const newEvent: CalendarEventType = {
+        id: nanoid(),
+        title: data.title,
+        date: day.format('YYYY-MM-DD'),
+        description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        color: data.color || 'bg-purple-500/70',
+        startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+        endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+        isRecurring: false,
+        recurrenceParentId: parentId, // Keep reference to parent for tracking
+      };
+      
+      console.log("Creating standalone event from recurring instance:", newEvent);
+      
+      // Add the new event
+      addEventFn(newEvent).then(response => {
+        if (response.success) {
+          // If we have the function to add exceptions, use it
+          if (addRecurrenceExceptionFn) {
+            addRecurrenceExceptionFn(parentId, originalDate);
+          }
+          toast.success(`Moved this occurrence to ${day.format("MMM D")} at ${newStartTime}`);
+        } else {
+          toast.error("Failed to move event");
+        }
+      });
+      
+      return;
+    }
+    
+    // For regular events, create the updated event
     const updatedEvent = {
       ...data,
       date: day.format('YYYY-MM-DD'), // Set to the drop target day
-      description: `${newStartTime} - ${newEndTime} | ${descriptionText}`
+      description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+      startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+      endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
     };
     
     // Update the event in the store

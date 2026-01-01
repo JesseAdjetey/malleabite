@@ -85,6 +85,11 @@ export const getDragData = (event: any, isLocked: boolean = false, color: string
     hasAlarm: event.hasAlarm,
     hasReminder: event.hasReminder,
     color,
-    participants: event.participants
+    participants: event.participants,
+    // Include recurring event info for proper handling when dropping
+    isRecurring: event.isRecurring,
+    recurrenceParentId: event.recurrenceParentId,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
   };
 };

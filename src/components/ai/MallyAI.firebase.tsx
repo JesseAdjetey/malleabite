@@ -66,7 +66,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true); // Voice OFF by default - user can enable
   const [mediaRecorder, setMediaRecorder] = useState<any>(null); // SpeechRecognition instance
   const [isWaitingForVoice, setIsWaitingForVoice] = useState(false); // Track if waiting for user voice input (Siri-style)
 
@@ -855,73 +855,102 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       logger.info('MallyAI', 'User confirmed pending action', { pendingAction });
       
       const loadingMessageId = addMessage({
-        text: "Creating your event...",
+        text: pendingAction.type === 'batch' ? "Creating your events..." : "Creating your event...",
         sender: "ai",
         isLoading: true,
       });
 
       try {
-        const actionExecuted = await executeAction(pendingAction);
+        let actionExecuted = false;
+        let successMessage = "Done!";
         
-        if (actionExecuted) {
-          const actionType = pendingAction.type;
-          const actionData = pendingAction.data;
-          let successMessage = "Done!";
+        // Handle batch actions (multiple events at once)
+        if (pendingAction.type === 'batch' && pendingAction.actions) {
+          logger.info('MallyAI', 'Executing batch of confirmed actions', { count: pendingAction.actions.length });
+          let successCount = 0;
+          const eventTitles: string[] = [];
           
-          switch (actionType) {
-            case 'create_event': {
-              const isRecurring = actionData.isRecurring;
-              const frequency = actionData.recurrenceRule?.frequency;
-              if (isRecurring && frequency) {
-                successMessage = `Great! I've set up your recurring '${actionData.title}' event (${frequency}). You're all set!`;
-              } else {
-                successMessage = `Done! I've created your '${actionData.title}' event. You're all set!`;
+          for (const singleAction of pendingAction.actions) {
+            const success = await executeAction(singleAction);
+            if (success) {
+              successCount++;
+              if (singleAction.data?.title) {
+                eventTitles.push(singleAction.data.title);
               }
-              break;
             }
-            case 'create_todo':
-              successMessage = `Added '${actionData.text}' to your todo list!`;
-              break;
-            case 'complete_todo':
-              successMessage = `Marked todo as complete!`;
-              break;
-            case 'delete_todo':
-              successMessage = `Removed the todo from your list.`;
-              break;
-            case 'create_eisenhower':
-              successMessage = `Added '${actionData.text}' to your priority matrix!`;
-              break;
-            case 'update_eisenhower':
-              successMessage = `Moved item to ${actionData.quadrant?.replace(/_/g, ' ')}!`;
-              break;
-            case 'delete_eisenhower':
-              successMessage = `Removed item from priority matrix.`;
-              break;
-            case 'create_alarm': {
-              const linkedText = actionData.linkedEventId ? ' (linked to event)' : 
-                                actionData.linkedTodoId ? ' (linked to todo)' : '';
-              successMessage = `Alarm '${actionData.title}' created${linkedText}!`;
-              break;
-            }
-            case 'update_alarm':
-              successMessage = `Alarm updated!`;
-              break;
-            case 'delete_alarm':
-              successMessage = `Alarm deleted.`;
-              break;
-            case 'link_alarm':
-              successMessage = `Alarm linked successfully!`;
-              break;
-            case 'delete_event':
-              successMessage = `Event deleted from your calendar.`;
-              break;
-            case 'update_event':
-              successMessage = `Event updated!`;
-              break;
-            default:
-              successMessage = "Done!";
           }
           
+          actionExecuted = successCount > 0;
+          if (eventTitles.length > 0) {
+            successMessage = `Done! I've created ${successCount} events: ${eventTitles.join(', ')}. You're all set!`;
+          } else {
+            successMessage = `Done! I've created ${successCount} items for you.`;
+          }
+        } else {
+          // Handle single action (original logic)
+          actionExecuted = await executeAction(pendingAction);
+        
+          if (actionExecuted) {
+            const actionType = pendingAction.type;
+            const actionData = pendingAction.data;
+          
+            switch (actionType) {
+              case 'create_event': {
+                const isRecurring = actionData.isRecurring;
+                const frequency = actionData.recurrenceRule?.frequency;
+                if (isRecurring && frequency) {
+                  successMessage = `Great! I've set up your recurring '${actionData.title}' event (${frequency}). You're all set!`;
+                } else {
+                  successMessage = `Done! I've created your '${actionData.title}' event. You're all set!`;
+                }
+                break;
+              }
+              case 'create_todo':
+                successMessage = `Added '${actionData.text}' to your todo list!`;
+                break;
+              case 'complete_todo':
+                successMessage = `Marked todo as complete!`;
+                break;
+              case 'delete_todo':
+                successMessage = `Removed the todo from your list.`;
+                break;
+              case 'create_eisenhower':
+                successMessage = `Added '${actionData.text}' to your priority matrix!`;
+                break;
+              case 'update_eisenhower':
+                successMessage = `Moved item to ${actionData.quadrant?.replace(/_/g, ' ')}!`;
+                break;
+              case 'delete_eisenhower':
+                successMessage = `Removed item from priority matrix.`;
+                break;
+              case 'create_alarm': {
+                const linkedText = actionData.linkedEventId ? ' (linked to event)' : 
+                                  actionData.linkedTodoId ? ' (linked to todo)' : '';
+                successMessage = `Alarm '${actionData.title}' created${linkedText}!`;
+                break;
+              }
+              case 'update_alarm':
+                successMessage = `Alarm updated!`;
+                break;
+              case 'delete_alarm':
+                successMessage = `Alarm deleted.`;
+                break;
+              case 'link_alarm':
+                successMessage = `Alarm linked successfully!`;
+                break;
+              case 'delete_event':
+                successMessage = `Event deleted from your calendar.`;
+                break;
+              case 'update_event':
+                successMessage = `Event updated!`;
+                break;
+              default:
+                successMessage = "Done!";
+            }
+          }
+        }
+        
+        if (actionExecuted) {
           updateMessage(loadingMessageId, {
             text: successMessage,
             isLoading: false,
@@ -987,9 +1016,37 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       // Check if AI returned an action to execute
       const aiResponse = response as any;
       const action = aiResponse.action;
+      const actions = aiResponse.actions; // NEW: Handle multiple actions
       const intent = aiResponse.intent;
 
-      if (response.success && action) {
+      // NEW: Handle multiple actions array (for creating multiple events at once)
+      if (response.success && actions && Array.isArray(actions) && actions.length > 0) {
+        logger.info('MallyAI', 'Executing multiple actions', { count: actions.length, intent });
+        
+        // For multiple event creation, we might want user confirmation first
+        const isConfirmation = intent === 'confirmation';
+        const isMultipleEvents = intent === 'create_multiple_events';
+        
+        if (isConfirmation || isMultipleEvents) {
+          // Execute all actions in sequence
+          let successCount = 0;
+          for (const singleAction of actions) {
+            logger.info('MallyAI', 'Executing action from batch', { action: singleAction });
+            const success = await executeAction(singleAction);
+            if (success) successCount++;
+          }
+          actionExecuted = successCount > 0;
+          logger.info('MallyAI', 'Batch actions completed', { successCount, total: actions.length });
+          if (actionExecuted) {
+            setPendingAction(null);
+          }
+        } else {
+          // Store all actions as pending for confirmation
+          logger.info('MallyAI', 'Storing multiple pending actions for confirmation', { count: actions.length });
+          setPendingAction({ type: 'batch', actions });
+        }
+      } else if (response.success && action) {
+        // Handle single action (original logic)
         // Check if this is a confirmation (user said yes to a previous suggestion)
         const isConfirmation = intent === 'confirmation';
         

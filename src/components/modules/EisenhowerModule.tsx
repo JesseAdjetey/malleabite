@@ -36,6 +36,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   const [focusedQuadrant, setFocusedQuadrant] = useState<QuadrantType>(null);
   const [newItemText, setNewItemText] = useState('');
   const [submitStatus, setSubmitStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [dragOverQuadrant, setDragOverQuadrant] = useState<QuadrantType>(null);
   const { items, loading, error, addItem, removeItem, updateQuadrant, lastResponse } = useEisenhower();
   const { user } = useAuth();
 
@@ -84,6 +85,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, quadrant: EisenhowerItem['quadrant']) => {
     e.preventDefault();
+    setDragOverQuadrant(null);
 
     try {
       const data = e.dataTransfer.getData('application/json');
@@ -106,8 +108,17 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
     }
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, quadrant: EisenhowerItem['quadrant']) => {
     e.preventDefault();
+    setDragOverQuadrant(quadrant);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // Only clear if leaving the quadrant entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDragOverQuadrant(null);
+    }
   };
 
   const handleRemoveItem = async (id: string) => {
@@ -140,9 +151,18 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
       focusedQuadrant === 'not_urgent_important' ? 'text-yellow-600 dark:text-yellow-400' :
         focusedQuadrant === 'urgent_not_important' ? 'text-blue-600 dark:text-blue-400' :
           'text-green-600 dark:text-green-400';
+    const isDragOver = dragOverQuadrant === focusedQuadrant;
 
     return (
-      <div className={`rounded-lg p-3 h-64 ${config.className}`}>
+      <div 
+        className={cn(
+          `rounded-lg p-3 h-64 ${config.className} transition-all duration-150`,
+          isDragOver && 'ring-2 ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)]'
+        )}
+        onDrop={(e) => handleDrop(e, focusedQuadrant)}
+        onDragOver={(e) => handleDragOver(e, focusedQuadrant)}
+        onDragLeave={handleDragLeave}
+      >
         <div className="flex items-center mb-2">
           <Button
             variant="ghost"
@@ -241,13 +261,18 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
         {Object.entries(quadrantConfig).map(([quadrant, config]) => {
           const quadrantType = quadrant as EisenhowerItem['quadrant'];
           const quadrantItems = getQuadrantItems(quadrantType);
+          const isDragOver = dragOverQuadrant === quadrantType;
 
           return (
             <div
               key={quadrant}
-              className={`${config.className} rounded-lg p-2 overflow-y-auto relative`}
+              className={cn(
+                `${config.className} rounded-lg p-2 overflow-y-auto relative transition-all duration-150`,
+                isDragOver && 'ring-2 ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)] scale-[1.02]'
+              )}
               onDrop={(e) => handleDrop(e, quadrantType)}
-              onDragOver={handleDragOver}
+              onDragOver={(e) => handleDragOver(e, quadrantType)}
+              onDragLeave={handleDragLeave}
               onClick={() => setFocusedQuadrant(quadrantType)}
             >
               <div className={`text-xs font-semibold mb-1 ${quadrantType === 'urgent_important' ? 'text-red-600 dark:text-red-400' :

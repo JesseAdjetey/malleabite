@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import CalendarEvent from "./calendar/CalendarEvent";
@@ -35,6 +35,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   onToggleSelection = () => {},
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   useEffect(() => {
     const boxElement = boxRef.current;
@@ -98,6 +99,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   // Handle dropping an event onto this day
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
     
     try {
       // Parse the drag data
@@ -110,16 +112,16 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       const data = JSON.parse(dataString);
       console.log("Month view received drop data:", data);
       
-      // Handle todo item drag
-      if (data.source === 'todo-module') {
+      // Handle todo item or Eisenhower item drag
+      if (data.source === 'todo-module' || data.source === 'eisenhower') {
         if (openEventForm && day) {
-          // Open event form with todo data
+          // Open event form with todo/eisenhower data
           openEventForm(data, day);
           return;
         }
         
         if (addEvent && day) {
-          // Create a new calendar event from the todo item
+          // Create a new calendar event from the todo/eisenhower item
           const eventDate = day.format('YYYY-MM-DD');
           const startDateTime = day.hour(9); // 9:00 AM
           const endDateTime = day.hour(10); // 10:00 AM
@@ -166,6 +168,15 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the box entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setIsDragOver(false);
+    }
   };
   
   return (
@@ -173,8 +184,9 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       ref={boxRef}
       className={cn(
         "group relative flex flex-col border-r border-t border-gray-200 dark:border-white/10 gradient-border cursor-glow month-view-box min-h-[90px] md:min-h-[110px]",
-        "transition-all hover:bg-gray-100/50 dark:hover:bg-white/5 touch-manipulation",
-        isToday && "bg-primary/10"
+        "transition-all duration-150 hover:bg-gray-100/50 dark:hover:bg-white/5 touch-manipulation",
+        isToday && "bg-primary/10",
+        isDragOver && "ring-2 ring-inset ring-primary/50 dark:ring-white/50 bg-primary/20 dark:bg-primary/30 shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]"
       )}
       onClick={(e) => {
         // Only trigger day click if the click wasn't on an event
@@ -183,6 +195,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         }
       }}
       onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       data-day={day.format('YYYY-MM-DD')}
     >

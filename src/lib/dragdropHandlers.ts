@@ -21,6 +21,7 @@ export interface DragHandlerOptions {
 
 export const handleDragOver = (e: React.DragEvent) => {
   e.preventDefault();
+  e.stopPropagation();
   e.dataTransfer.dropEffect = 'move';
 };
 

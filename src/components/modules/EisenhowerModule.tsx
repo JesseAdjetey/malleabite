@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEisenhower, EisenhowerItem } from '@/hooks/use-eisenhower';
 import { useAuth } from '@/contexts/AuthContext.firebase';
+import { Loader2 } from 'lucide-react';
 
 interface QuadrantConfig {
   title: string;
@@ -210,9 +211,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-4">
+          <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="ml-2 text-xs">Loading items...</span>
           </div>
         ) : error ? (
           <div className="text-center text-xs text-red-400 p-2">Error: {error}</div>
@@ -240,9 +240,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   const renderMatrix = () => {
     if (loading) {
       return (
-        <div className="flex justify-center items-center h-64">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <span className="ml-2">Loading matrix...</span>
         </div>
       );
     }
@@ -289,15 +288,21 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                 quadrantItems.slice(0, 3).map(item => (
                   <div
                     key={item.id}
-                    className="bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing text-gray-800 dark:text-white"
-                    draggable={true}
+                    className="bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing select-none text-gray-800 dark:text-white"
+                    draggable="true"
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('application/json', JSON.stringify({
+                      e.stopPropagation();
+                      const data = {
                         id: item.id,
                         text: item.text,
                         source: 'eisenhower'
-                      }));
-                      e.dataTransfer.effectAllowed = 'copy';
+                      };
+                      console.log("🚀 EISENHOWER DRAG START:", data);
+                      const jsonString = JSON.stringify(data);
+                      e.dataTransfer.setData('application/json', jsonString);
+                      e.dataTransfer.setData('text/plain', jsonString);
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.dropEffect = 'move';
                     }}
                   >
                     <span>{item.text}</span>

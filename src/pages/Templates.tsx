@@ -14,6 +14,7 @@ import { TemplateForm } from '@/components/templates/TemplateForm';
 import type { EventTemplate } from '@/types/template';
 import MobileNavigation from '@/components/MobileNavigation';
 import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 const categories = [
   { id: 'all', label: 'All', emoji: '📋' },
@@ -249,11 +250,8 @@ export default function Templates() {
           )}
 
           {isLoading ? (
-            <div className="text-center py-12">
-              <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center mx-auto mb-3 animate-pulse">
-                <LayoutTemplate className="h-6 w-6 text-primary" />
-              </div>
-              <p className="text-sm text-muted-foreground">Loading templates...</p>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : filteredBySearch.length === 0 ? (
             <div className="text-center py-12">

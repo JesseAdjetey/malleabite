@@ -156,16 +156,34 @@ const WeekView = () => {
   };
 
   const handleDrop = (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("🎯 DROP EVENT FIRED on week-view");
+    console.log("🎯 Available data types:", e.dataTransfer.types);
     try {
-      const dataString = e.dataTransfer.getData('application/json');
+      let dataString = e.dataTransfer.getData('application/json');
+      console.log("🎯 DROP - application/json:", dataString);
+      
       if (!dataString) {
-        console.error("No data found in drag event");
+        dataString = e.dataTransfer.getData('text/plain');
+        console.log("🎯 DROP - text/plain fallback:", dataString);
+      }
+      
+      if (!dataString) {
+        dataString = e.dataTransfer.getData('text');
+        console.log("🎯 DROP - text fallback:", dataString);
+      }
+      
+      if (!dataString) {
+        console.error("❌ No data found in drag event");
         return;
       }
 
       const data = JSON.parse(dataString);
+      console.log("🎯 DROP - Parsed data:", data);
 
       if (data.source === 'todo-module' || data.source === 'eisenhower') {
+        console.log("✅ Todo/Eisenhower drop detected, showing dialog...");
         const rect = e.currentTarget.getBoundingClientRect();
         const relativeY = e.clientY - rect.top;
         const hourHeight = rect.height;
@@ -176,6 +194,7 @@ const WeekView = () => {
         const baseHour = hour.hour();
         const startTime = `${baseHour.toString().padStart(2, '0')}:${snappedMinutes.toString().padStart(2, '0')}`;
 
+        console.log("📅 Calling showTodoCalendarDialog with:", data, day.toDate(), startTime);
         showTodoCalendarDialog(data, day.toDate(), startTime);
         return;
       }
@@ -183,7 +202,7 @@ const WeekView = () => {
       // Pass addEvent to handleDrop so it can handle recurring event instances
       libHandleDrop(e, day, hour, updateEvent, addEvent);
     } catch (error) {
-      console.error("Error handling drop:", error);
+      console.error("❌ Error handling drop:", error);
       toast.error("Failed to process drop event");
     }
   };

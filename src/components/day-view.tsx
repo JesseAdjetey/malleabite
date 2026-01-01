@@ -14,6 +14,8 @@ import { toast } from "@/components/ui/use-toast";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
+import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
+import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -32,6 +34,14 @@ const DayView = () => {
     bulkReschedule,
     bulkDuplicate,
   } = useBulkSelection();
+  const {
+    isTodoCalendarDialogOpen,
+    currentTodoData,
+    showTodoCalendarDialog,
+    hideTodoCalendarDialog,
+    handleCreateBoth,
+    handleCreateCalendarOnly,
+  } = useTodoCalendarIntegration();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -174,6 +184,7 @@ const DayView = () => {
           onTimeSlotClick={handleTimeSlotClick}
           addEvent={handleAddEvent}
           openEventForm={openEventForm}
+          showTodoCalendarDialog={showTodoCalendarDialog}
           isBulkMode={isBulkMode}
           isSelected={isSelected}
           onToggleSelection={toggleSelection}
@@ -206,6 +217,17 @@ const DayView = () => {
 
       {/* Event Details Dialog */}
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
+
+      {/* Todo Calendar Integration Dialog */}
+      {currentTodoData && (
+        <TodoCalendarDialog
+          open={isTodoCalendarDialogOpen}
+          onClose={hideTodoCalendarDialog}
+          todoTitle={currentTodoData.text}
+          onCreateBoth={handleCreateBoth}
+          onCreateCalendarOnly={handleCreateCalendarOnly}
+        />
+      )}
     </>
   );
 };

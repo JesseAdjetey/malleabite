@@ -87,8 +87,8 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
         
         <TabsContent value="received" className="space-y-2 max-h-64 overflow-y-auto">
           {loading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
           ) : receivedInvites.length === 0 ? (
             <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
@@ -145,8 +145,8 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
         
         <TabsContent value="sent" className="space-y-2 max-h-64 overflow-y-auto">
           {loading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
           ) : sentInvites.length === 0 ? (
             <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">

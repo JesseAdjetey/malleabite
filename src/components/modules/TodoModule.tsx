@@ -5,7 +5,6 @@ import {
   Calendar,
   Circle,
   CheckCircle,
-  Loader2,
   AlertCircle,
   CheckCircle2,
 } from "lucide-react";
@@ -13,6 +12,7 @@ import { toast } from "sonner";
 import { useEventStore } from "@/lib/store";
 import { useTodos, TodoItem } from "@/hooks/use-todos";
 import { useAuth } from "@/contexts/AuthContext.firebase";
+import { Loader2 } from "lucide-react";
 
 interface TodoModuleProps {
   title: string;
@@ -113,6 +113,9 @@ const TodoModule: React.FC<TodoModuleProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent, item: TodoItem) => {
+    // Prevent default to ensure we control the drag behavior
+    e.stopPropagation();
+    
     const todoData = {
       id: item.id,
       text: item.title,
@@ -120,13 +123,21 @@ const TodoModule: React.FC<TodoModuleProps> = ({
       completed: item.completed,
     };
 
-    console.log("Starting drag with data:", todoData);
+    console.log("🚀 DRAG START - Todo item:", todoData);
 
-    e.dataTransfer.setData("application/json", JSON.stringify(todoData));
+    // Set data in multiple formats for better browser compatibility
+    const jsonString = JSON.stringify(todoData);
+    e.dataTransfer.setData("application/json", jsonString);
+    e.dataTransfer.setData("text/plain", jsonString);
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.dropEffect = "move";
 
-    if (e.currentTarget) {
-      e.currentTarget.classList.add("opacity-50");
+    // Create a drag image
+    const dragElement = e.currentTarget as HTMLElement;
+    if (dragElement) {
+      dragElement.classList.add("opacity-50");
+      // Set drag image to the element being dragged
+      e.dataTransfer.setDragImage(dragElement, 10, 10);
     }
   };
 
@@ -178,9 +189,8 @@ const TodoModule: React.FC<TodoModuleProps> = ({
     >
       <div className="max-h-60 overflow-y-auto mb-3">
         {loading ? (
-          <div className="flex justify-center items-center p-4">
+          <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="ml-2 text-sm">Loading todos...</span>
           </div>
         ) : error ? (
           <div className="text-center text-sm text-red-400 p-2">
@@ -194,8 +204,8 @@ const TodoModule: React.FC<TodoModuleProps> = ({
           todos.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer"
-              draggable={true}
+              className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-grab active:cursor-grabbing select-none"
+              draggable="true"
               onDragStart={(e) => handleDragStart(e, item)}
               onDragEnd={handleDragEnd}
             >

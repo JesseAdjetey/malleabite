@@ -4,6 +4,7 @@ import { CalendarEventType } from '@/lib/stores/types';
 import { TodoDragData, createCalendarEventFromTodo, createTodoFromCalendarEvent, syncEventTitleWithTodo } from '@/lib/dragdropHandlers';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { useTodos } from '@/hooks/use-todos';
+import { useEisenhower } from '@/hooks/use-eisenhower';
 import { toast } from 'sonner';
 
 export function useTodoCalendarIntegration() {
@@ -13,6 +14,16 @@ export function useTodoCalendarIntegration() {
   
   const { addEvent, updateEvent } = useCalendarEvents();
   const { addTodo, linkTodoToEvent, deleteTodo, updateTodoTitle } = useTodos();
+  const { removeItem: removeEisenhowerItem } = useEisenhower();
+  
+  // Helper to delete based on source
+  const deleteItemBySource = async (todoData: TodoDragData) => {
+    if (todoData.source === 'eisenhower') {
+      await removeEisenhowerItem(todoData.id);
+    } else {
+      await deleteTodo(todoData.id);
+    }
+  };
   
   // Show the integration dialog
   const showTodoCalendarDialog = (todoData: TodoDragData, date: Date, startTime: string) => {
@@ -52,6 +63,15 @@ export function useTodoCalendarIntegration() {
   const handleCreateCalendarOnly = async () => {
     if (!currentTodoData || !currentDateTimeData) return;
     
+    // Create a source-aware delete function
+    const sourceAwareDeleteFn = async (id: string) => {
+      if (currentTodoData.source === 'eisenhower') {
+        await removeEisenhowerItem(id);
+      } else {
+        await deleteTodo(id);
+      }
+    };
+    
     await createCalendarEventFromTodo(
       currentTodoData,
       currentDateTimeData.date,
@@ -61,7 +81,7 @@ export function useTodoCalendarIntegration() {
         addEventFn: addEvent,
         updateEventFn: updateEvent,
         linkTodoToEventFn: linkTodoToEvent,
-        deleteTodoFn: deleteTodo,
+        deleteTodoFn: sourceAwareDeleteFn,
         onShowTodoCalendarDialog: showTodoCalendarDialog
       }
     );

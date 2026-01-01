@@ -10,7 +10,6 @@ import { getTimeInfo } from "../calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
 import { CalendarEventType } from "@/lib/stores/types";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
-import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 
 interface TimeSlotProps {
   hour: dayjs.Dayjs;
@@ -18,6 +17,7 @@ interface TimeSlotProps {
   onTimeSlotClick: (hour: dayjs.Dayjs) => void;
   addEvent?: (event: CalendarEventType) => Promise<any>;
   openEventForm?: (todoData: any, hour: dayjs.Dayjs) => void;
+  showTodoCalendarDialog?: (todoData: any, date: Date, startTime: string) => void;
   isBulkMode?: boolean;
   isSelected?: (eventId: string) => boolean;
   onToggleSelection?: (eventId: string) => void;
@@ -29,13 +29,13 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
   onTimeSlotClick,
   addEvent,
   openEventForm,
+  showTodoCalendarDialog,
   isBulkMode = false,
   isSelected = () => false,
   onToggleSelection = () => {},
 }) => {
   const { openEventSummary, toggleEventLock } = useEventStore();
   const { updateEvent } = useCalendarEvents();
-  const { showTodoCalendarDialog } = useTodoCalendarIntegration();
   
   // State for drag-over visual feedback
   const [isDragOver, setIsDragOver] = useState(false);
@@ -58,9 +58,9 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       const data = JSON.parse(dataString);
       console.log("Received drop data in TimeSlot:", data);
       
-      // Handle todo item drag
-      if (data.source === 'todo-module') {
-        console.log("Todo item detected");
+      // Handle todo item drag (from todo module or eisenhower matrix)
+      if (data.source === 'todo-module' || data.source === 'eisenhower') {
+        console.log("Todo/Eisenhower item detected, source:", data.source);
         
         // Show lock-in animation
         setShowLockIn(true);

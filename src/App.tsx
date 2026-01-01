@@ -11,6 +11,7 @@ import EventDataProvider from '@/contexts/EventDataProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ConsentBanner } from '@/components/legal/ConsentBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { Loader2 } from 'lucide-react';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
@@ -27,11 +28,8 @@ const Billing = lazy(() => import('@/pages/Billing'));
 
 // Loading fallback component
 const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-background">
-    <div className="text-center space-y-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
+  <div className="flex h-screen items-center justify-center bg-background">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
   </div>
 );
 

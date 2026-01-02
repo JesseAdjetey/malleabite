@@ -53,6 +53,7 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
           <TimeSlot
             key={index}
             hour={hour}
+            selectedDate={userSelectedDate}
             events={events}
             onTimeSlotClick={onTimeSlotClick}
             addEvent={addEvent}

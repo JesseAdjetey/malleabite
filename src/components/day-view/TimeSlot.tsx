@@ -13,6 +13,7 @@ import { useCalendarEvents } from "@/hooks/use-calendar-events";
 
 interface TimeSlotProps {
   hour: dayjs.Dayjs;
+  selectedDate: dayjs.Dayjs;
   events: any[];
   onTimeSlotClick: (hour: dayjs.Dayjs) => void;
   addEvent?: (event: CalendarEventType) => Promise<any>;
@@ -25,6 +26,7 @@ interface TimeSlotProps {
 
 const TimeSlot: React.FC<TimeSlotProps> = ({ 
   hour, 
+  selectedDate,
   events, 
   onTimeSlotClick,
   addEvent,
@@ -91,15 +93,15 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
         
         // If we have the showTodoCalendarDialog function, use it
         if (showTodoCalendarDialog) {
-          // Get the current date
-          const currentDate = dayjs().startOf('day').toDate();
+          // Use the selected date from the calendar view
+          const targetDate = selectedDate.startOf('day').toDate();
           
           // Format start time from the hour
           const startTime = hour.format("HH:00");
           
-          console.log("📅 Calling showTodoCalendarDialog with:", data, currentDate, startTime);
+          console.log("📅 Calling showTodoCalendarDialog with:", data, targetDate, startTime);
           // Show the integration dialog
-          showTodoCalendarDialog(data, currentDate, startTime);
+          showTodoCalendarDialog(data, targetDate, startTime);
           return;
         }
         
@@ -170,16 +172,16 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       const descriptionParts = (data.description || '').split('|');
       const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.title || '');
       
-      // Get the current date in YYYY-MM-DD format (or from the event's date)
-      const currentDate = data.date || dayjs().format('YYYY-MM-DD');
+      // Use the selected date from the calendar view (or fall back to event's date)
+      const targetDate = selectedDate.format('YYYY-MM-DD');
       
       // Create the updated event with ISO timestamps
       const updatedEvent = {
         ...data,
         description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
-        date: currentDate,
-        startsAt: dayjs(`${currentDate}T${newStartTime}`).toISOString(),
-        endsAt: dayjs(`${currentDate}T${newEndTime}`).toISOString()
+        date: targetDate,
+        startsAt: dayjs(`${targetDate}T${newStartTime}`).toISOString(),
+        endsAt: dayjs(`${targetDate}T${newEndTime}`).toISOString()
       };
       
       console.log("Updating event with new time:", updatedEvent);
@@ -210,17 +212,18 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
     // Format time strings
     const startTime = hour.format("HH:00");
     const endTime = hour.add(1, 'hour').format("HH:00");
-    const currentDate = dayjs().format('YYYY-MM-DD');
+    // Use the selected date from the calendar view instead of today's date
+    const eventDate = selectedDate.format('YYYY-MM-DD');
     
     // Format ISO strings for startsAt and endsAt
-    const startDateTime = dayjs(`${currentDate} ${startTime}`);
-    const endDateTime = dayjs(`${currentDate} ${endTime}`);
+    const startDateTime = dayjs(`${eventDate} ${startTime}`);
+    const endDateTime = dayjs(`${eventDate} ${endTime}`);
     
     // Create a new calendar event from the todo item
     const newEvent: CalendarEventType = {
       id: nanoid(), // This will be replaced by the database
       title: todoData.text,
-      date: currentDate, // Current date
+      date: eventDate, // Use selected date from calendar view
       description: `${startTime} - ${endTime} | ${todoData.text}`,
       color: 'bg-purple-500/70', // Special color for todo events
       isTodo: true, // Mark as a todo event

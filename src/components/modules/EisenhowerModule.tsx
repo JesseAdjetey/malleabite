@@ -222,7 +222,6 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">No items in this quadrant</div>
             ) : (
               quadrantItems.map(item => (
-                {/* v2 - Fixed drag with window backup */}
                 <div 
                   key={item.id} 
                   className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white cursor-grab active:cursor-grabbing select-none"
@@ -236,11 +235,9 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                     };
                     console.log("🚀 EISENHOWER (focused) DRAG START:", data);
                     const jsonString = JSON.stringify(data);
-                    // Set data transfer
                     e.dataTransfer.setData('application/json', jsonString);
                     e.dataTransfer.setData('text/plain', jsonString);
                     e.dataTransfer.effectAllowed = 'move';
-                    // Backup: store on window for cross-component access
                     (window as any).__dragData = data;
                   }}
                 >
@@ -307,7 +304,6 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                 <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">Click to add items</div>
               ) : (
                 quadrantItems.slice(0, 3).map(item => (
-                {/* v2 - Fixed drag with window backup */}
                   <div
                     key={item.id}
                     className="bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing select-none text-gray-800 dark:text-white"
@@ -321,11 +317,9 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                       };
                       console.log("🚀 EISENHOWER DRAG START:", data);
                       const jsonString = JSON.stringify(data);
-                      // Set data transfer
                       e.dataTransfer.setData('application/json', jsonString);
                       e.dataTransfer.setData('text/plain', jsonString);
                       e.dataTransfer.effectAllowed = 'move';
-                      // Backup: store on window for cross-component access
                       (window as any).__dragData = data;
                     }}
                   >

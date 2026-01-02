@@ -1,7 +1,7 @@
 // Service Worker for Malleabite PWA
 // Implements offline-first caching strategy
 
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.0.1'; // Bumped to force cache refresh for drag fix
 const STATIC_CACHE = `malleabite-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `malleabite-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `malleabite-api-${CACHE_VERSION}`;

@@ -63,6 +63,15 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
         console.log("🎯 text data:", dataString);
       }
       
+      // Fallback: check window backup (for cross-component drag issues)
+      if (!dataString && (window as any).__dragData) {
+        console.log("🎯 Using window backup data");
+        const windowData = (window as any).__dragData;
+        dataString = JSON.stringify(windowData);
+        // Clear the backup
+        delete (window as any).__dragData;
+      }
+      
       if (!dataString) {
         console.error("❌ No data found in drag event");
         return;

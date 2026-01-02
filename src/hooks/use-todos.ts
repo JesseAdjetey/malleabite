@@ -9,6 +9,7 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
+  getDoc,
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
@@ -161,10 +162,34 @@ export function useTodos(options: UseTodosOptions = {}) {
 
   // Delete a todo
   const deleteTodo = async (id: string) => {
-    if (!user?.uid) return;
+    if (!user?.uid) {
+      console.error('Cannot delete todo: user not authenticated');
+      return;
+    }
+
+    console.log('Attempting to delete todo with id:', id, 'for user:', user.uid);
 
     try {
-      await deleteDoc(doc(db, 'todos', id));
+      // First check if the document exists and belongs to this user
+      const todoRef = doc(db, 'todos', id);
+      const todoDoc = await getDoc(todoRef);
+      
+      if (!todoDoc.exists()) {
+        console.error('Todo document does not exist:', id);
+        toast.error('Todo not found');
+        return;
+      }
+      
+      const todoData = todoDoc.data();
+      console.log('Todo data:', todoData);
+      
+      if (todoData?.userId !== user.uid) {
+        console.error('Todo belongs to different user. Todo userId:', todoData?.userId, 'Current user:', user.uid);
+        toast.error('Permission denied');
+        return;
+      }
+      
+      await deleteDoc(todoRef);
       toast.success('Todo deleted');
     } catch (error) {
       console.error('Error deleting todo:', error);

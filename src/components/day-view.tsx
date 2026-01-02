@@ -219,15 +219,14 @@ const DayView = () => {
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
 
       {/* Todo Calendar Integration Dialog */}
-      {currentTodoData && (
-        <TodoCalendarDialog
-          open={isTodoCalendarDialogOpen}
-          onClose={hideTodoCalendarDialog}
-          todoTitle={currentTodoData.text}
-          onCreateBoth={handleCreateBoth}
-          onCreateCalendarOnly={handleCreateCalendarOnly}
-        />
-      )}
+      {console.log("🔔 Day View render - isTodoCalendarDialogOpen:", isTodoCalendarDialogOpen, "currentTodoData:", currentTodoData)}
+      <TodoCalendarDialog
+        open={isTodoCalendarDialogOpen && !!currentTodoData}
+        onClose={hideTodoCalendarDialog}
+        todoTitle={currentTodoData?.text || ""}
+        onCreateBoth={handleCreateBoth}
+        onCreateCalendarOnly={handleCreateCalendarOnly}
+      />
     </>
   );
 };

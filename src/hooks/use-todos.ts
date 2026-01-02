@@ -167,33 +167,49 @@ export function useTodos(options: UseTodosOptions = {}) {
       return;
     }
 
-    console.log('Attempting to delete todo with id:', id, 'for user:', user.uid);
+    console.log('🗑️ Attempting to delete todo with id:', id, 'for user:', user.uid);
 
     try {
       // First check if the document exists and belongs to this user
       const todoRef = doc(db, 'todos', id);
-      const todoDoc = await getDoc(todoRef);
       
-      if (!todoDoc.exists()) {
-        console.error('Todo document does not exist:', id);
-        toast.error('Todo not found');
+      let todoDoc;
+      try {
+        todoDoc = await getDoc(todoRef);
+      } catch (readError) {
+        console.error('🗑️ Error reading todo document (possible permission issue):', readError);
+        // Try to delete anyway - some old documents might not have userId but user should still own them
+      }
+      
+      if (todoDoc && !todoDoc.exists()) {
+        console.log('🗑️ Todo document does not exist:', id, '- may have been already deleted');
+        toast.success('Todo removed');
         return;
       }
       
-      const todoData = todoDoc.data();
-      console.log('Todo data:', todoData);
-      
-      if (todoData?.userId !== user.uid) {
-        console.error('Todo belongs to different user. Todo userId:', todoData?.userId, 'Current user:', user.uid);
-        toast.error('Permission denied');
-        return;
+      if (todoDoc) {
+        const todoData = todoDoc.data();
+        console.log('🗑️ Todo data:', todoData);
+        
+        if (todoData?.userId && todoData.userId !== user.uid) {
+          console.error('🗑️ Todo belongs to different user. Todo userId:', todoData?.userId, 'Current user:', user.uid);
+          toast.error('Permission denied');
+          return;
+        }
       }
       
       await deleteDoc(todoRef);
+      console.log('🗑️ Todo deleted successfully');
       toast.success('Todo deleted');
-    } catch (error) {
-      console.error('Error deleting todo:', error);
-      toast.error('Failed to delete todo');
+    } catch (error: any) {
+      console.error('🗑️ Error deleting todo:', error);
+      // If it's a permission error, the todo might already be gone or have permission issues
+      if (error?.code === 'permission-denied') {
+        console.log('🗑️ Permission denied - todo may have been created without userId');
+        toast.error('Could not delete todo - try refreshing the page');
+      } else {
+        toast.error('Failed to delete todo');
+      }
     }
   };
 

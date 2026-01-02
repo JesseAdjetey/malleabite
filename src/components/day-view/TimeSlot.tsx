@@ -45,22 +45,36 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    console.log("Drop event received in TimeSlot:", hour.format("HH:mm"));
+    console.log("🎯 DROP EVENT FIRED in TimeSlot:", hour.format("HH:mm"));
+    console.log("🎯 Available data types:", e.dataTransfer.types);
     
     try {
-      // Get the drag data
-      const dataString = e.dataTransfer.getData('application/json');
+      // Get the drag data - try multiple formats
+      let dataString = e.dataTransfer.getData('application/json');
+      console.log("🎯 application/json data:", dataString);
+      
       if (!dataString) {
-        console.error("No data found in drag event");
+        dataString = e.dataTransfer.getData('text/plain');
+        console.log("🎯 text/plain data:", dataString);
+      }
+      
+      if (!dataString) {
+        dataString = e.dataTransfer.getData('text');
+        console.log("🎯 text data:", dataString);
+      }
+      
+      if (!dataString) {
+        console.error("❌ No data found in drag event");
         return;
       }
       
       const data = JSON.parse(dataString);
-      console.log("Received drop data in TimeSlot:", data);
+      console.log("🎯 Parsed drop data:", data);
       
       // Handle todo item drag (from todo module or eisenhower matrix)
       if (data.source === 'todo-module' || data.source === 'eisenhower') {
-        console.log("Todo/Eisenhower item detected, source:", data.source);
+        console.log("✅ Todo/Eisenhower item detected, source:", data.source);
+        console.log("🔍 showTodoCalendarDialog available?", !!showTodoCalendarDialog);
         
         // Show lock-in animation
         setShowLockIn(true);
@@ -74,6 +88,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
           // Format start time from the hour
           const startTime = hour.format("HH:00");
           
+          console.log("📅 Calling showTodoCalendarDialog with:", data, currentDate, startTime);
           // Show the integration dialog
           showTodoCalendarDialog(data, currentDate, startTime);
           return;

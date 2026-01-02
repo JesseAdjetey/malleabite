@@ -27,10 +27,14 @@ export function useTodoCalendarIntegration() {
   
   // Show the integration dialog
   const showTodoCalendarDialog = (todoData: TodoDragData, date: Date, startTime: string) => {
-    console.log("Showing todo calendar dialog with:", todoData, date, startTime);
+    console.log("📋 showTodoCalendarDialog called with:", todoData, date, startTime);
+    console.log("📋 Setting currentTodoData...");
     setCurrentTodoData(todoData);
+    console.log("📋 Setting currentDateTimeData...");
     setCurrentDateTimeData({ date, startTime });
+    console.log("📋 Setting isTodoCalendarDialogOpen to TRUE...");
     setIsTodoCalendarDialogOpen(true);
+    console.log("📋 Dialog should now be open!");
   };
   
   // Hide the integration dialog

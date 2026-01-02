@@ -222,7 +222,25 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">No items in this quadrant</div>
             ) : (
               quadrantItems.map(item => (
-                <div key={item.id} className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white">
+                <div 
+                  key={item.id} 
+                  className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white cursor-grab active:cursor-grabbing select-none"
+                  draggable="true"
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    const data = {
+                      id: item.id,
+                      text: item.text,
+                      source: 'eisenhower'
+                    };
+                    console.log("🚀 EISENHOWER (focused) DRAG START:", data);
+                    const jsonString = JSON.stringify(data);
+                    e.dataTransfer.setData('application/json', jsonString);
+                    e.dataTransfer.setData('text/plain', jsonString);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                >
                   <span>{item.text}</span>
                   <button
                     onClick={() => handleRemoveItem(item.id)}

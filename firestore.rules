@@ -137,8 +137,8 @@ service cloud.firestore {
     match /alarms/{alarmId} {
       allow read, delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner()
-        && request.resource.data.alarmTime is timestamp
-        && request.resource.data.keys().hasAll(['userId', 'alarmTime']);
+        && isValidString('title', 1, 200)
+        && request.resource.data.keys().hasAll(['userId', 'title', 'time', 'enabled']);
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
         && isNotRateLimited();

@@ -1,4 +1,4 @@
-// Calendar Snapshot Dialog - Save/restore calendar states
+ // Calendar Snapshot Dialog - Save/restore calendar states
 import { useState } from 'react';
 import {
   Dialog,

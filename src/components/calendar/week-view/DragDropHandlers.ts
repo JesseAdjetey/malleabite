@@ -8,8 +8,17 @@ import { useCalendarEvents } from "@/hooks/use-calendar-events";
 
 export const handleDragOver = (e: React.DragEvent) => {
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
+  // Show copy cursor when Ctrl is held
+  e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
 };
+
+// Result type for recurring event actions
+export interface RecurringDropResult {
+  isRecurring: boolean;
+  parentId?: string;
+  originalDate?: string;
+  newEvent?: CalendarEventType;
+}
 
 export const handleDrop = (
   e: React.DragEvent, 
@@ -18,9 +27,13 @@ export const handleDrop = (
   updateEventFn: (event: CalendarEventType) => Promise<any>,
   addEventFn?: (event: CalendarEventType) => Promise<any>,
   openEventForm?: (todoData: any, date: Date, timeStart: string) => void,
-  addRecurrenceExceptionFn?: (parentId: string, exceptionDate: string) => Promise<any>
+  addRecurrenceExceptionFn?: (parentId: string, exceptionDate: string) => Promise<any>,
+  onRecurringEventDrop?: (result: RecurringDropResult) => void
 ) => {
   e.preventDefault();
+  
+  // Check if Ctrl was held during drop (duplicate mode)
+  const isDuplicateMode = e.ctrlKey;
   
   try {
     // Get the drag data
@@ -31,7 +44,7 @@ export const handleDrop = (
     }
     
     const data = JSON.parse(dataString);
-    console.log("Week view received drop data:", data);
+    console.log("Week view received drop data:", data, "Duplicate mode:", isDuplicateMode);
     
     // Handle todo item drag
     if (data.source === 'todo-module') {
@@ -62,7 +75,10 @@ export const handleDrop = (
     }
     
     // Don't process if the event is locked
-    if (data.isLocked) return;
+    if (data.isLocked) {
+      toast.info("Event is locked. Unlock it first to move.");
+      return;
+    }
     
     // Calculate precise drop time based on cursor position
     const rect = e.currentTarget.getBoundingClientRect();
@@ -93,13 +109,37 @@ export const handleDrop = (
     const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : data.title || '';
     
     // Check if this is a recurring event instance (has recurrenceParentId or synthetic ID with underscore)
-    const isRecurringInstance = data.recurrenceParentId || (data.id && data.id.includes('_'));
+    const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));
     
-    if (isRecurringInstance && addEventFn) {
-      // For recurring instances, we need to:
-      // 1. Add an exception to the parent event for this date
-      // 2. Create a new standalone event at the new position
+    // Handle recurring event instances - trigger the popup
+    if (isRecurringInstance && onRecurringEventDrop) {
+      const parentId = data.recurrenceParentId || (data.id.includes('_') ? data.id.split('_')[0] : data.id);
+      const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
       
+      // Create the new event that would be created if user confirms
+      const newEvent: CalendarEventType = {
+        id: nanoid(),
+        title: data.title,
+        date: day.format('YYYY-MM-DD'),
+        description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        color: data.color || 'bg-purple-500/70',
+        startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+        endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+        isRecurring: false,
+      };
+      
+      // Trigger the recurring event edit dialog
+      onRecurringEventDrop({
+        isRecurring: true,
+        parentId,
+        originalDate,
+        newEvent,
+      });
+      return;
+    }
+    
+    // For recurring instances without callback, handle directly
+    if (isRecurringInstance && addEventFn && !onRecurringEventDrop) {
       const parentId = data.recurrenceParentId || data.id.split('_')[0];
       const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
       
@@ -134,20 +174,68 @@ export const handleDrop = (
       return;
     }
     
-    // For regular events, create the updated event
-    const updatedEvent = {
+    // DUPLICATE MODE: If Ctrl is held, create a copy instead of moving
+    if (isDuplicateMode && addEventFn) {
+      const duplicateEvent: CalendarEventType = {
+        id: nanoid(), // New ID for the duplicate
+        title: data.title,
+        date: day.format('YYYY-MM-DD'),
+        description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        color: data.color || 'bg-purple-500/70',
+        startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+        endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+        isRecurring: false, // Duplicates are not recurring by default
+        isTodo: data.isTodo,
+        hasAlarm: data.hasAlarm,
+        hasReminder: data.hasReminder,
+      };
+      
+      console.log("Duplicating event:", duplicateEvent);
+      
+      addEventFn(duplicateEvent).then(response => {
+        if (response.success) {
+          toast.success(`Event duplicated to ${day.format("MMM D")} at ${newStartTime}`);
+        } else {
+          toast.error("Failed to duplicate event");
+        }
+      });
+      
+      return;
+    }
+    
+    // MOVE MODE: For regular events, UPDATE (don't add) the event
+    // Make sure we have the original event ID
+    if (!data.id) {
+      console.error("Cannot update event: missing event ID");
+      toast.error("Failed to move event: missing ID");
+      return;
+    }
+    
+    // Extract the real ID (not the synthetic one with date suffix)
+    const realEventId = data.id.includes('_') ? data.id.split('_')[0] : data.id;
+    
+    const updatedEvent: CalendarEventType = {
       ...data,
-      date: day.format('YYYY-MM-DD'), // Set to the drop target day
+      id: realEventId, // Use the real event ID
+      date: day.format('YYYY-MM-DD'),
       description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
       startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
       endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
     };
     
-    // Update the event in the store
-    updateEventFn(updatedEvent);
+    console.log("Moving event (UPDATE, not add):", updatedEvent);
     
-    // Show success message
-    toast.success(`Event moved to ${day.format("MMM D")} at ${newStartTime}`);
+    // Update the event in the store - this should UPDATE, not ADD
+    updateEventFn(updatedEvent).then(response => {
+      if (response?.success !== false) {
+        toast.success(`Event moved to ${day.format("MMM D")} at ${newStartTime}`);
+      } else {
+        toast.error("Failed to move event");
+      }
+    }).catch(err => {
+      console.error("Error updating event:", err);
+      toast.error("Failed to move event");
+    });
     
   } catch (error) {
     console.error("Error handling drop:", error);

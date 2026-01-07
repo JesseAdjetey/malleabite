@@ -21,8 +21,10 @@ import { FirebaseFunctions } from "@/integrations/firebase/functions";
 import { CalendarEventType } from "@/lib/stores/types";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { useTodos } from "@/hooks/use-todos";
+import { useTodoLists } from "@/hooks/use-todo-lists";
 import { useEisenhower } from "@/hooks/use-eisenhower";
 import { useAlarms } from "@/hooks/use-alarms";
+import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { shouldUseFirebase, logMigrationStatus } from "@/lib/migration-flags";
 import { logger } from "@/lib/logger";
 import { errorHandler } from "@/lib/error-handler";
@@ -76,8 +78,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const { user } = useAuth();
   const { fetchEvents, addEvent, removeEvent, updateEvent, events } = useCalendarEvents();
   const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
+  const { createList, lists } = useTodoLists();
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
   const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo, alarms } = useAlarms();
+  const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
   
   // Get pause/resume functions for wake word coordination
   const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
@@ -338,9 +342,25 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             toast.error('No todo text provided');
             return false;
           }
-          const result = await addTodo(data.text);
+          // Check if a listId was provided for adding to a specific list
+          const result = await addTodo(data.text, data.listId);
           if (result.success) {
-            toast.success(`Todo "${data.text}" added!`);
+            const listInfo = data.listId && lists ? 
+              ` to "${lists.find(l => l.id === data.listId)?.name || 'list'}"` : '';
+            toast.success(`Todo "${data.text}" added${listInfo}!`);
+            return true;
+          }
+          return false;
+        }
+        
+        case 'create_todo_list': {
+          if (!data.name) {
+            toast.error('No list name provided');
+            return false;
+          }
+          const result = await createList(data.name, data.color);
+          if (result.success) {
+            toast.success(`List "${data.name}" created!`);
             return true;
           }
           return false;
@@ -908,6 +928,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               case 'create_todo':
                 successMessage = `Added '${actionData.text}' to your todo list!`;
                 break;
+              case 'create_todo_list':
+                successMessage = `List '${actionData.name}' created successfully!`;
+                break;
               case 'complete_todo':
                 successMessage = `Marked todo as complete!`;
                 break;
@@ -984,6 +1007,18 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         hasPendingAction: !!pendingAction
       });
 
+      // Check AI usage limits before making the request
+      if (!limits.canUseAI) {
+        updateMessage(loadingMessageId, {
+          text: "You've reached your AI request limit for this month. Upgrade to Pro for unlimited AI assistance! ✨",
+          isLoading: false,
+          isError: false,
+        });
+        triggerUpgradePrompt('ai');
+        setIsLoading(false);
+        return;
+      }
+
       // Build conversation history (last 10 messages for context)
       const conversationHistory = messages
         .filter(m => !m.isLoading)
@@ -1002,6 +1037,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           conversationHistory
         }
       });
+
+      // Increment AI usage count after successful request
+      await incrementAICount();
 
       logger.info('MallyAI', 'Firebase AI Response received', {
         success: response.success,

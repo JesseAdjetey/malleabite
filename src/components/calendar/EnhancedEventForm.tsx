@@ -139,19 +139,46 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     if (eventData) {
       setTitle(eventData.title);
       
-      // Extract time information from description (format: "HH:MM - HH:MM | Description")
-      const descriptionParts = eventData.description.split('|');
-      const timeRange = descriptionParts[0].trim();
-      const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
-      
-      // Split time range into start and end times
-      const times = timeRange.split('-');
-      if (times.length === 2) {
-        setStartTime(times[0].trim());
-        setEndTime(times[1].trim());
+      // First try to get time from startsAt/endsAt fields (modern format)
+      if (eventData.startsAt && eventData.endsAt) {
+        const startDate = new Date(eventData.startsAt);
+        const endDate = new Date(eventData.endsAt);
+        setStartTime(
+          `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`
+        );
+        setEndTime(
+          `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`
+        );
+        
+        // Get description - exclude the time part if it exists in legacy format
+        const desc = eventData.description || '';
+        if (desc.includes('|')) {
+          setDescription(desc.split('|').slice(1).join('|').trim());
+        } else if (/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(desc.trim())) {
+          setDescription('');
+        } else {
+          setDescription(desc);
+        }
+      } else {
+        // Fallback: Extract time information from description (legacy format: "HH:MM - HH:MM | Description")
+        const descriptionParts = eventData.description?.split('|') || [];
+        const timeRange = descriptionParts[0]?.trim() || '';
+        const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+        
+        // Split time range into start and end times
+        const times = timeRange.split('-');
+        if (times.length === 2 && /^\d{2}:\d{2}$/.test(times[0].trim())) {
+          setStartTime(times[0].trim());
+          setEndTime(times[1].trim());
+        } else {
+          // Default times if not found
+          setStartTime('09:00');
+          setEndTime('10:00');
+        }
+        
+        setDescription(actualDescription);
       }
       
-      setDescription(actualDescription);
       setIsLocked(eventData.isLocked || false);
       setIsTodo(eventData.isTodo || false);
       setHasAlarm(eventData.hasAlarm || false);

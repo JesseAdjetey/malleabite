@@ -12,13 +12,28 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+
+// Usage limits callback type - will be set by the component using this hook
+type UsageLimitCallback = () => Promise<boolean>;
+let checkEventLimitCallback: UsageLimitCallback | null = null;
+let incrementEventCountCallback: (() => Promise<void>) | null = null;
+
+// Export functions to set the callbacks from the component level
+export const setUsageLimitCallbacks = (
+  checkLimit: UsageLimitCallback,
+  incrementCount: () => Promise<void>
+) => {
+  checkEventLimitCallback = checkLimit;
+  incrementEventCountCallback = incrementCount;
+};
 
 interface SupabaseActionResponse {
   success: boolean;
@@ -185,6 +200,15 @@ export function useCalendarEvents() {
       return { success: false };
     }
 
+    // Check usage limits before creating event
+    if (checkEventLimitCallback) {
+      const canCreate = await checkEventLimitCallback();
+      if (!canCreate) {
+        // The callback will trigger the upgrade prompt
+        return { success: false, error: new Error('Event limit reached') };
+      }
+    }
+
     try {
       console.log('Adding event:', event);
 
@@ -266,6 +290,12 @@ export function useCalendarEvents() {
       };
 
       await addDoc(collection(db, 'calendar_events'), newEvent);
+      
+      // Increment usage count after successful creation
+      if (incrementEventCountCallback) {
+        await incrementEventCountCallback();
+      }
+      
       toast.success('Event added successfully');
       return { success: true };
     } catch (error) {
@@ -375,6 +405,42 @@ export function useCalendarEvents() {
     }
   };
 
+  // Add an exception date to a recurring event (excludes that date from the recurrence)
+  const addRecurrenceException = async (eventId: string, exceptionDate: string): Promise<SupabaseActionResponse> => {
+    if (!user?.uid || !eventId) {
+      console.error('Invalid event ID or user not authenticated');
+      return { success: false };
+    }
+
+    try {
+      // Get the current event to retrieve existing exceptions
+      const eventDoc = await getDoc(doc(db, 'calendar_events', eventId));
+      if (!eventDoc.exists()) {
+        console.error('Event not found:', eventId);
+        return { success: false, error: 'Event not found' };
+      }
+      
+      const eventData = eventDoc.data();
+      const currentExceptions: string[] = eventData.recurrenceExceptions || [];
+      
+      // Add the new exception if it doesn't already exist
+      if (!currentExceptions.includes(exceptionDate)) {
+        currentExceptions.push(exceptionDate);
+        
+        await updateDoc(doc(db, 'calendar_events', eventId), {
+          recurrenceExceptions: currentExceptions
+        });
+        
+        console.log(`Added exception ${exceptionDate} to event ${eventId}`);
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding recurrence exception:', error);
+      return { success: false, error };
+    }
+  };
+
   // Toggle event lock status
   const toggleEventLock = async (eventId: string, isLocked: boolean): Promise<SupabaseActionResponse> => {
     if (!user?.uid || !eventId) {
@@ -403,6 +469,7 @@ export function useCalendarEvents() {
     addEvent,
     updateEvent,
     removeEvent,
-    toggleEventLock
+    toggleEventLock,
+    addRecurrenceException
   };
 }

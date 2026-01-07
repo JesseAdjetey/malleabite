@@ -89,13 +89,11 @@ export function useAlarms() {
     }
 
     try {
-      const newAlarm = {
+      const newAlarm: any = {
         userId: user.uid,
         title: title.trim(),
         time: typeof time === 'string' ? time : time.toISOString(),
         enabled: true,
-        linkedEventId: options?.linkedEventId,
-        linkedTodoId: options?.linkedTodoId,
         repeatDays: options?.repeatDays || [],
         soundId: options?.soundId || 'default',
         snoozeEnabled: options?.snoozeEnabled ?? true,
@@ -103,6 +101,14 @@ export function useAlarms() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
+
+      // Only add optional fields if they're defined
+      if (options?.linkedEventId) {
+        newAlarm.linkedEventId = options.linkedEventId;
+      }
+      if (options?.linkedTodoId) {
+        newAlarm.linkedTodoId = options.linkedTodoId;
+      }
 
       const docRef = await addDoc(collection(db, 'alarms'), newAlarm);
       toast.success(`Alarm "${title}" created`);

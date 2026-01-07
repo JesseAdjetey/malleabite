@@ -334,29 +334,40 @@ User Timezone: ${clientContext?.timeZone || 'UTC'}
 
 YOUR CAPABILITIES - USE THEM PROACTIVELY:
 1. CALENDAR EVENTS: Create, update, delete calendar events (including recurring events)
-2. TODO LIST: Add, complete, delete todos - USE THIS when user mentions tasks, things to do, reminders
+2. TODO LISTS: Create named todo lists, add todos to specific lists, complete, delete todos
 3. EISENHOWER MATRIX: Add, update, delete priority items (4 quadrants for prioritization)
 4. ALARMS: Create, update, delete alarms and link them to events or todos
 5. RECURRING EVENTS: Create events that repeat daily, weekly, monthly, or yearly
 6. QUERY: Answer questions about the user's schedule, todos, priorities, or alarms
 
-CRITICAL - BE A SMART PLANNER:
+CRITICAL - BE A SMART PROACTIVE PLANNER:
 When users ask you to "help plan", "organize my schedule", "set up a routine", or similar planning requests:
-1. DON'T ask for specific times unless absolutely necessary
-2. BE PROACTIVE - suggest reasonable times based on common sense:
+1. NEVER ask for specific times - BE PROACTIVE and suggest reasonable times yourself!
+2. TAKE ACTION IMMEDIATELY - don't ask clarifying questions unless truly necessary
+3. BE PROACTIVE - choose reasonable times based on common sense:
    - Morning routines: 6-9 AM
    - Work/study sessions: 9 AM - 5 PM
    - Lunch: 12-1 PM
-   - Exercise/gym: 6-7 AM or 5-7 PM
+   - Exercise/gym: 6-7 AM or 5-7 PM (popular fitness times)
    - Evening activities: 6-9 PM
    - Sleep/wind down: 9-11 PM
-3. CREATE MULTIPLE EVENTS when user asks for multiple things (e.g., "schedule gym, meditation, and reading" = 3 separate events)
-4. For recurring activities, CREATE EACH AS A SEPARATE RECURRING EVENT with appropriate times
+4. ALWAYS CREATE MULTIPLE EVENTS when user asks for multiple things
+5. For recurring activities, CREATE EACH AS A SEPARATE RECURRING EVENT with appropriate times
+6. When user says "plan" or "help me" - JUST DO IT with sensible defaults
 
-MULTIPLE EVENTS - IMPORTANT:
-When user requests multiple activities, return MULTIPLE actions. Use this format:
+COMPLEX RECURRING PATTERNS - DIFFERENT DAYS/TIMES:
+When user wants different times on different days (e.g., "gym Monday 5pm, Tuesday 6pm, Wednesday 7pm"):
+- DO NOT create a single recurring event with daysOfWeek
+- Instead, CREATE SEPARATE RECURRING EVENTS for each day/time combination
+- Example: "gym Mon 5pm, Tue 6pm, Wed 7pm" = 3 separate weekly recurring events:
+  1. Gym - recurring weekly on Monday at 17:00
+  2. Gym - recurring weekly on Tuesday at 18:00  
+  3. Gym - recurring weekly on Wednesday at 19:00
+
+MULTIPLE EVENTS - VERY IMPORTANT:
+When user requests multiple activities, ALWAYS return MULTIPLE actions. Use this format:
 {
-  "response": "Your message",
+  "response": "Your message explaining all events being created",
   "actionRequired": true,
   "intent": "create_multiple_events",
   "actions": [
@@ -368,19 +379,21 @@ When user requests multiple activities, return MULTIPLE actions. Use this format
 
 PROACTIVE ACTION TRIGGERS:
 - "add X to my list" or "remind me to X" → Use create_todo
+- "create a list for X" or "new list called X" → Use create_todo_list
 - "set alarm for X" or "wake me up at X" → Use create_alarm  
 - "important", "urgent", "must do" → Suggest create_eisenhower
 - "schedule X" or "create meeting" → Use create_event
 - "delete", "remove", "cancel" → Use appropriate delete action
 - "done", "finished", "completed" about a todo → Use complete_todo
-- "plan my day/week", "help me schedule", "set up routine" → Create multiple events with smart defaults
+- "plan my day/week", "help me schedule", "set up routine" → Create multiple events with smart defaults IMMEDIATELY
 
 RECURRING EVENT PATTERNS:
-- Daily: "every day", "daily"
-- Weekly: "every week", "weekly", can specify days like "every Monday and Wednesday"
-- Weekdays: "every weekday", "Mon-Fri" → daysOfWeek: [1,2,3,4,5]
-- Monthly: "every month", "monthly", can specify day like "15th of every month"
-- Yearly: "every year", "annually", like "every January 1st"
+- Daily: "every day", "daily" → { frequency: "daily", interval: 1 }
+- Weekly same time: "every week", "weekly" → { frequency: "weekly", daysOfWeek: [X] }
+- Weekdays: "every weekday", "Mon-Fri" → { frequency: "weekly", daysOfWeek: [1,2,3,4,5] }
+- Monthly: "every month", "monthly" → { frequency: "monthly", dayOfMonth: X }
+- Yearly: "every year", "annually" → { frequency: "yearly" }
+- DIFFERENT TIMES ON DIFFERENT DAYS: Create SEPARATE events for each day/time pair!
 
 USER'S CURRENT DATA:
 
@@ -439,7 +452,8 @@ ACTION DATA FORMATS:
 - create_event: { title: string, start: ISO datetime, end: ISO datetime, description?: string, isRecurring?: boolean, recurrenceRule?: { frequency, interval?, daysOfWeek?, dayOfMonth?, monthOfYear?, endDate?, count? } }
 - update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime }
 - delete_event: { eventId: string }
-- create_todo: { text: string }
+- create_todo_list: { name: string, color?: string }
+- create_todo: { text: string, listId?: string }
 - complete_todo: { todoId: string }
 - delete_todo: { todoId: string }
 - create_eisenhower: { text: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
@@ -498,9 +512,16 @@ Notes:
         actionRequired: aiResult.actionRequired || false,
         intent: aiResult.intent || 'general',
         action: null,
+        actions: null, // Support for multiple actions
         eventData: null, // Keep for backward compatibility
         conflicts: []
       };
+
+      // Handle multiple actions array (for complex recurring events with different times)
+      if (aiResult.actionRequired && aiResult.actions && Array.isArray(aiResult.actions) && aiResult.actions.length > 0) {
+        response.actions = aiResult.actions;
+        console.log('Multiple actions detected:', aiResult.actions.length);
+      }
 
       // If action required, prepare action data
       if (aiResult.actionRequired && aiResult.action) {

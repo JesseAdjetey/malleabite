@@ -11,6 +11,7 @@ import EventDataProvider from '@/contexts/EventDataProvider';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ConsentBanner } from '@/components/legal/ConsentBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { Loader2 } from 'lucide-react';
 
 // Lazy load pages for better performance
@@ -58,6 +59,7 @@ const AppRoutes = () => {
       </Suspense>
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
+      {!isAuthPage && <UpgradePrompt />}
       <Toaster />
     </ThemeProvider>
   );

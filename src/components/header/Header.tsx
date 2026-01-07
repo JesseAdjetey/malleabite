@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Wrench, FileText, Zap, Crown, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Wrench, FileText, Zap, Crown, BarChart3, FolderPlus } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +20,7 @@ import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '@/hooks/use-subscription';
+import { CalendarSnapshotDialog } from '@/components/calendar/CalendarSnapshotDialog';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -46,6 +47,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   
   const { subscription } = useSubscription();
   const isPro = subscription?.isPro ?? false;
+  
+  const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
 
   const handleToggleBulkMode = () => {
     if (isBulkMode) {
@@ -232,6 +235,10 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   Patterns
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setSnapshotDialogOpen(true)}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  Calendar Snapshots
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/analytics')}>
                   <BarChart3 className="h-4 w-4 mr-2" />
                   Analytics
@@ -262,6 +269,12 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           {!isMobile && <SettingsNav />}
         </TooltipProvider>
       </div>
+      
+      {/* Calendar Snapshot Dialog */}
+      <CalendarSnapshotDialog 
+        open={snapshotDialogOpen} 
+        onOpenChange={setSnapshotDialogOpen} 
+      />
     </div>
   );
 };

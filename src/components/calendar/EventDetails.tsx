@@ -24,10 +24,39 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
   if (!selectedEvent) return null;
 
-  // Extract time information from description (format: "HH:MM - HH:MM | Description")
-  const descriptionParts = selectedEvent.description.split('|');
-  const timeRange = descriptionParts[0].trim();
-  const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+  // Format time from startsAt and endsAt fields
+  const formatTime = () => {
+    if (selectedEvent.startsAt && selectedEvent.endsAt) {
+      const start = dayjs(selectedEvent.startsAt).format('h:mm A');
+      const end = dayjs(selectedEvent.endsAt).format('h:mm A');
+      return `${start} - ${end}`;
+    }
+    // Fallback: try to extract from description (legacy format "HH:MM - HH:MM | Description")
+    const descriptionParts = selectedEvent.description?.split('|') || [];
+    const legacyTimeRange = descriptionParts[0]?.trim();
+    if (legacyTimeRange && /^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(legacyTimeRange)) {
+      return legacyTimeRange;
+    }
+    return 'All day';
+  };
+  
+  const timeRange = formatTime();
+  
+  // Get actual description (not the time part)
+  const getActualDescription = () => {
+    const desc = selectedEvent.description || '';
+    // If description contains the pipe format, extract the description part
+    if (desc.includes('|')) {
+      return desc.split('|').slice(1).join('|').trim();
+    }
+    // If description looks like a time range, return empty
+    if (/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(desc.trim())) {
+      return '';
+    }
+    return desc;
+  };
+  
+  const actualDescription = getActualDescription();
 
   const handleDelete = async () => {
     try {
@@ -53,13 +82,14 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
         return;
       }
       
-      await toggleTodo(selectedEvent.todoId, true);
+      // Toggle the todo to complete it
+      await toggleTodo(selectedEvent.todoId);
       toast.success("Todo marked as complete");
       
       // Update calendar event to reflect completion
       const updatedEvent = {
         ...selectedEvent,
-        color: "bg-green-500/70", // Change color to indicate completion
+        color: "#22c55e", // Green color to indicate completion
       };
       
       await updateEvent(updatedEvent);

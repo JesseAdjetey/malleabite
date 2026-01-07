@@ -4,10 +4,10 @@
 import React, { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { nanoid } from "nanoid";
-import { useEventStore } from "@/lib/store";
 import EnhancedEventForm from "./EnhancedEventForm";
 import { toast } from "@/components/ui/use-toast";
 import { CalendarEventType } from "@/lib/stores/types";
+import { useCalendarEvents } from "@/hooks/use-calendar-events";
 
 interface EventFormProps {
   open: boolean;
@@ -31,7 +31,7 @@ const EventForm: React.FC<EventFormProps> = ({
   onSave: propOnSave,
   onUseAI,
 }) => {
-  const { addEvent } = useEventStore();
+  const { addEvent } = useCalendarEvents();
   const [initialEvent, setInitialEvent] = useState<CalendarEventType | undefined>(undefined);
 
   // Use onCancel or onClose, whichever is provided

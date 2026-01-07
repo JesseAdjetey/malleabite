@@ -13,6 +13,7 @@ import DayColumn from "./calendar/week-view/DayColumn";
 import {
   handleDragOver,
   handleDrop as libHandleDrop,
+  RecurringDropResult,
 } from "./calendar/week-view/DragDropHandlers";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -23,6 +24,8 @@ import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integratio
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
+import { RecurringEventEditDialog } from "@/components/calendar/RecurringEventEditDialog";
+import { EditScope } from "@/hooks/use-recurring-events";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -33,7 +36,7 @@ const WeekView = () => {
     isEventSummaryOpen,
     closeEventSummary,
   } = useEventStore();
-  const { events, updateEvent, addEvent } = useCalendarEvents();
+  const { events, updateEvent, addEvent, addRecurrenceException } = useCalendarEvents();
   const { linkTodoToEvent, deleteTodo } = useTodos();
   const {
     isBulkMode,
@@ -56,6 +59,11 @@ const WeekView = () => {
     day: dayjs.Dayjs;
     hour: dayjs.Dayjs;
   } | null>(null);
+  
+  // State for recurring event drop dialog
+  const [recurringDropDialogOpen, setRecurringDropDialogOpen] = useState(false);
+  const [pendingRecurringDrop, setPendingRecurringDrop] = useState<RecurringDropResult | null>(null);
+  const [recurringEventForDialog, setRecurringEventForDialog] = useState<CalendarEventType | null>(null);
 
   const {
     isTodoCalendarDialogOpen,
@@ -66,6 +74,83 @@ const WeekView = () => {
     handleCreateCalendarOnly,
     handleCreateTodoFromEvent
   } = useTodoCalendarIntegration();
+  
+  // Handler for when a recurring event is dropped
+  const handleRecurringEventDrop = useCallback((result: RecurringDropResult) => {
+    if (!result.isRecurring) return;
+    
+    // Find the parent event to show in dialog
+    const parentEvent = events.find(e => 
+      e.id === result.parentId || 
+      e.id.startsWith(result.parentId || '')
+    );
+    
+    if (parentEvent) {
+      setRecurringEventForDialog(parentEvent);
+      setPendingRecurringDrop(result);
+      setRecurringDropDialogOpen(true);
+    } else if (result.newEvent) {
+      // If we can't find parent, just create the single instance
+      addEvent(result.newEvent);
+      toast.success("Event moved");
+    }
+  }, [events, addEvent]);
+  
+  // Handle confirmation from recurring event dialog
+  const handleRecurringDropConfirm = useCallback(async (scope: EditScope) => {
+    if (!pendingRecurringDrop || !pendingRecurringDrop.newEvent) return;
+    
+    const { parentId, originalDate, newEvent } = pendingRecurringDrop;
+    
+    try {
+      if (scope === 'single') {
+        // Move only this occurrence - create new event and add exception to parent
+        await addEvent(newEvent);
+        if (parentId && originalDate && addRecurrenceException) {
+          await addRecurrenceException(parentId, originalDate);
+        }
+        toast.success("This occurrence has been moved");
+      } else if (scope === 'all') {
+        // Move all occurrences - update the parent event's time
+        const parentEvent = events.find(e => e.id === parentId);
+        if (parentEvent) {
+          const updatedParent = {
+            ...parentEvent,
+            startsAt: newEvent.startsAt,
+            endsAt: newEvent.endsAt,
+            date: newEvent.date,
+          };
+          await updateEvent(updatedParent);
+          toast.success("All occurrences have been updated");
+        }
+      } else if (scope === 'thisAndFuture') {
+        // Move this and future - add exception to parent and create new recurring event
+        if (parentId && originalDate && addRecurrenceException) {
+          await addRecurrenceException(parentId, originalDate);
+        }
+        // Create a new recurring event from this date forward
+        const parentEvent = events.find(e => e.id === parentId);
+        if (parentEvent) {
+          const newRecurring: CalendarEventType = {
+            ...newEvent,
+            isRecurring: true,
+            recurrenceRule: parentEvent.recurrenceRule,
+          };
+          await addEvent(newRecurring);
+          toast.success("This and future occurrences have been moved");
+        } else {
+          await addEvent(newEvent);
+          toast.success("Event moved");
+        }
+      }
+    } catch (error) {
+      console.error("Error handling recurring drop:", error);
+      toast.error("Failed to move event");
+    }
+    
+    setPendingRecurringDrop(null);
+    setRecurringEventForDialog(null);
+  }, [pendingRecurringDrop, events, addEvent, updateEvent, addRecurrenceException]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -199,8 +284,17 @@ const WeekView = () => {
         return;
       }
 
-      // Pass addEvent to handleDrop so it can handle recurring event instances
-      libHandleDrop(e, day, hour, updateEvent, addEvent);
+      // Pass addEvent and recurring handler to handleDrop
+      libHandleDrop(
+        e, 
+        day, 
+        hour, 
+        updateEvent, 
+        addEvent, 
+        undefined, // openEventForm
+        addRecurrenceException, // for adding exceptions
+        handleRecurringEventDrop // callback for recurring events
+      );
     } catch (error) {
       console.error("❌ Error handling drop:", error);
       toast.error("Failed to process drop event");
@@ -304,6 +398,21 @@ const WeekView = () => {
           todoTitle={currentTodoData.text}
           onCreateBoth={handleCreateBoth}
           onCreateCalendarOnly={handleCreateCalendarOnly}
+        />
+      )}
+      
+      {/* Recurring Event Edit Dialog for drag-drop operations */}
+      {recurringEventForDialog && (
+        <RecurringEventEditDialog
+          open={recurringDropDialogOpen}
+          onOpenChange={setRecurringDropDialogOpen}
+          event={recurringEventForDialog}
+          action="edit"
+          onConfirm={handleRecurringDropConfirm}
+          onCancel={() => {
+            setPendingRecurringDrop(null);
+            setRecurringEventForDialog(null);
+          }}
         />
       )}
     </>

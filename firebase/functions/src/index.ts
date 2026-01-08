@@ -25,6 +25,10 @@ interface ConversationMessage {
 interface ProcessAIRequestData {
   message: string;
   userId: string;
+  imageData?: {
+    dataUrl: string;
+    mimeType: string;
+  };
   context?: {
     currentTime?: string;
     timeZone?: string;
@@ -204,7 +208,7 @@ export const processAIRequest = onRequest(
 
       // Parse request body
       const requestData = req.body.data || req.body;
-      const { message, userId, context: clientContext } = requestData as ProcessAIRequestData;
+      const { message, userId, imageData, context: clientContext } = requestData as ProcessAIRequestData;
 
       if (!message || !userId) {
         res.status(400).json({
@@ -483,7 +487,25 @@ Notes:
 - Match item IDs carefully from the user's existing data when updating/deleting
 `;
 
-      const result = await model.generateContent([systemPrompt, `User message: ${message}`]);
+      // Prepare the content parts for Gemini
+      const contentParts: any[] = [];
+      
+      // Add image if provided
+      if (imageData && imageData.dataUrl && imageData.mimeType) {
+        // Extract base64 data from data URL
+        const base64Data = imageData.dataUrl.split(',')[1];
+        contentParts.push({
+          inlineData: {
+            mimeType: imageData.mimeType,
+            data: base64Data
+          }
+        });
+        contentParts.push({ text: `[User uploaded an image]\n\nUser message: ${message}\n\nPlease analyze the image and respond appropriately. If the image contains calendar-related information (schedules, events, dates), help create events from it. If it contains tasks or todo lists, help organize them.` });
+      } else {
+        contentParts.push({ text: `User message: ${message}` });
+      }
+
+      const result = await model.generateContent([systemPrompt, ...contentParts]);
       const responseText = result.response.text();
       
       console.log('Gemini raw response:', responseText);

@@ -9,6 +9,10 @@ const functions = getFunctions(app, 'us-central1');
 export interface SchedulingRequest {
   userMessage: string;
   userId: string;
+  imageData?: {
+    dataUrl: string;
+    mimeType: string;
+  };
   context?: any;
 }
 
@@ -82,6 +86,7 @@ export class FirebaseFunctions {
           data: {
             message: data.userMessage,
             userId: data.userId,
+            imageData: data.imageData,
             context: data.context
           }
         })

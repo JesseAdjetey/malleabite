@@ -14,6 +14,9 @@ import {
   Mic,
   Volume2,
   VolumeX,
+  Image as ImageIcon,
+  Paperclip,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext.firebase";
@@ -39,12 +42,17 @@ interface Message {
   isLoading?: boolean;
   isError?: boolean;
   pendingEvent?: any; // Event data waiting for confirmation
+  image?: {
+    dataUrl: string;
+    fileName: string;
+    mimeType: string;
+  };
 }
 
 const initialMessages: Message[] = [
   {
     id: "1",
-    text: "Hello! I'm Mally, your AI productivity assistant powered by Google Gemini. 🤖\n\nI can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"",
+    text: "Hello! I'm Mally, your AI productivity assistant powered by Google Gemini. 🤖\n\nI can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n📸 **Image Processing** - Upload images of schedules, notes, or tasks and I'll help organize them\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"\n• Upload an image of your schedule to create events",
     sender: "ai",
     timestamp: new Date(),
   },
@@ -71,6 +79,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const [isMuted, setIsMuted] = useState(true); // Voice OFF by default - user can enable
   const [mediaRecorder, setMediaRecorder] = useState<any>(null); // SpeechRecognition instance
   const [isWaitingForVoice, setIsWaitingForVoice] = useState(false); // Track if waiting for user voice input (Siri-style)
+  const [uploadedImage, setUploadedImage] = useState<{
+    dataUrl: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -98,6 +112,53 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   
   // Ref to hold the latest handleSendMessage function for auto-submit
   const handleSendMessageRef = useRef<(text: string) => void>(() => {});
+
+  // Handle image file upload
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    try {
+      // Convert to base64 data URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        setUploadedImage({
+          dataUrl,
+          fileName: file.name,
+          mimeType: file.type,
+        });
+        toast.success(`Image "${file.name}" uploaded`);
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read image file');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      logger.error('MallyAI', 'Image upload failed', error as Error);
+      toast.error('Failed to upload image');
+    }
+  }, []);
+
+  // Remove uploaded image
+  const removeImage = useCallback(() => {
+    setUploadedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
 
   // Listen for "Hey Mally" activation (Siri-style: single interaction)
   useEffect(() => {
@@ -848,11 +909,20 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     const textToSend = messageText || inputText.trim();
     if (!textToSend || isLoading || !user) return;
 
-    // Clear input
+    // Clear input and capture image data before clearing it
     setInputText("");
+    const imageData = uploadedImage;
+    setUploadedImage(null); // Clear image after sending
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
 
-    // Add user message
-    addMessage({ text: textToSend, sender: "user" });
+    // Add user message with optional image
+    addMessage({ 
+      text: textToSend, 
+      sender: "user",
+      image: imageData || undefined 
+    });
 
     // Add loading AI message
     const loadingMessageId = addMessage({
@@ -1031,6 +1101,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       const response = await FirebaseFunctions.processScheduling({
         userMessage: textToSend,
         userId: user.uid,
+        imageData: imageData ? {
+          dataUrl: imageData.dataUrl,
+          mimeType: imageData.mimeType,
+        } : undefined,
         context: {
           currentTime: new Date().toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1335,6 +1409,17 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
                     : "bg-purple-900/50 text-white border border-purple-700/50"
                 }`}
             >
+              {message.image && (
+                <div className="mb-2">
+                  <img
+                    src={message.image.dataUrl}
+                    alt={message.image.fileName}
+                    className="max-w-full h-auto rounded border border-white/20"
+                    style={{ maxHeight: '200px' }}
+                  />
+                  <p className="text-xs opacity-70 mt-1">{message.image.fileName}</p>
+                </div>
+              )}
               <div className="flex items-center space-x-2">
                 {message.sender === "ai" && (
                   <Bot className="h-4 w-4 flex-shrink-0" />
@@ -1374,6 +1459,24 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
       {/* Input */}
       <div className="p-4 border-t border-gray-700 bg-gray-900 rounded-b-lg shrink-0">
+        {/* Image preview */}
+        {uploadedImage && (
+          <div className="mb-2 relative inline-block">
+            <img
+              src={uploadedImage.dataUrl}
+              alt={uploadedImage.fileName}
+              className="max-h-20 rounded border border-gray-600"
+            />
+            <button
+              onClick={removeImage}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+              title="Remove image"
+            >
+              <X className="h-3 w-3" />
+            </button>
+            <p className="text-xs text-gray-400 mt-1">{uploadedImage.fileName}</p>
+          </div>
+        )}
         <div className="flex space-x-2">
           <div className="flex-1 relative">
             <textarea
@@ -1387,6 +1490,21 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               disabled={isLoading}
             />
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="bg-gray-700 text-gray-300 p-3 rounded-lg hover:bg-gray-600 disabled:opacity-50 transition-colors"
+            title="Upload image"
+          >
+            <ImageIcon className="h-4 w-4" />
+          </button>
           <button
             onClick={toggleRecording}
             disabled={isLoading}

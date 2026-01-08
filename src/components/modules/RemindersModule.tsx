@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ModuleContainer from './ModuleContainer';
-import { Bell, Calendar, Clock, Volume2, Plus, Edit2, Trash2, Play } from 'lucide-react';
+import { Bell, Calendar, Clock, Volume2, Plus, Edit2, Trash2, Play, AlarmClock } from 'lucide-react';
 import { useReminders, Reminder, ReminderFormData } from '@/hooks/use-reminders';
+import { useAlarms, Alarm } from '@/hooks/use-alarms';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,26 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
   const { reminders, loading, addReminder, updateReminder, deleteReminder, toggleReminderActive, playSound, getSounds, REMINDER_SOUNDS } = useReminders();
+  const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms();
   const { events } = useCalendarEvents();
+  
+  // Combine reminders and alarms into a single sorted list
+  const allItems = useMemo(() => {
+    const items = [
+      ...reminders.map(r => ({ 
+        ...r, 
+        type: 'reminder' as const,
+        sortTime: dayjs(r.reminderTime).valueOf()
+      })),
+      ...alarms.map(a => ({ 
+        ...a, 
+        type: 'alarm' as const,
+        sortTime: dayjs(a.time).valueOf()
+      }))
+    ];
+    return items.sort((a, b) => a.sortTime - b.sortTime);
+  }, [reminders, alarms]);
+  
   const form = useForm<ReminderFormData>({
     defaultValues: {
       title: '',
@@ -50,11 +70,11 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
         form.reset({
           title: selectedReminder.title,
           description: selectedReminder.description || '',
-          reminderTime: dayjs(selectedReminder.reminder_time).format('YYYY-MM-DDTHH:mm'),
-          eventId: selectedReminder.event_id || undefined,
-          timeBeforeMinutes: selectedReminder.time_before_event_minutes || undefined,
-          timeAfterMinutes: selectedReminder.time_after_event_minutes || undefined,
-          soundId: selectedReminder.sound_id || 'default'
+          reminderTime: dayjs(selectedReminder.reminderTime).format('YYYY-MM-DDTHH:mm'),
+          eventId: selectedReminder.eventId || undefined,
+          timeBeforeMinutes: selectedReminder.timeBeforeMinutes || undefined,
+          timeAfterMinutes: selectedReminder.timeAfterMinutes || undefined,
+          soundId: selectedReminder.soundId || 'default'
         });
       } else {
         form.reset({
@@ -94,7 +114,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   };
 
   const handleToggleActive = async (reminder: Reminder) => {
-    await toggleReminderActive(reminder.id, !reminder.is_active);
+    await toggleReminderActive(reminder.id, !reminder.isActive);
   };
 
   const formatReminderTime = (time: string) => {
@@ -124,97 +144,144 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
       isDragging={isDragging}
     >
       <div className="space-y-3">
-        {/* Reminders list */}
+        {/* Combined Reminders and Alarms list */}
         <div className="max-h-60 overflow-y-auto space-y-2">
-          {loading ? (
-            <div className="text-center py-4 opacity-70">Loading reminders...</div>
-          ) : reminders.length === 0 ? (
+          {(loading || alarmsLoading) ? (
+            <div className="text-center py-4 opacity-70">Loading...</div>
+          ) : allItems.length === 0 ? (
             <div className="text-center py-6 opacity-70">
               <Bell className="mx-auto h-8 w-8 mb-2 opacity-50" />
               <p>No reminders set</p>
               <p className="text-xs">Create one to get started</p>
             </div>
           ) : (
-            reminders.map(reminder => (
-              <div 
-                key={reminder.id}
-                className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${reminder.is_active ? 'bg-purple-100/50 dark:bg-purple-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
-              >
+            allItems.map((item) => (
+              item.type === 'alarm' ? (
+                // Alarm item
                 <div 
-                  className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${reminder.is_active ? 'bg-primary' : 'bg-gray-400 dark:bg-secondary'}`}
-                  onClick={() => handleToggleActive(reminder)}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
-                    <h4 className={`font-medium text-sm truncate text-gray-800 dark:text-white ${!reminder.is_active && 'line-through opacity-70'}`}>
-                      {reminder.title}
-                    </h4>
-                    <div className="flex gap-1 ml-1">
-                      <button 
-                        onClick={() => handleTestSound(reminder.sound_id || 'default')}
-                        className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
-                        title="Test sound"
-                      >
-                        <Play size={14} />
-                      </button>
-                      <button 
-                        onClick={() => openEditDialog(reminder)}
-                        className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
-                        title="Edit reminder"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(reminder)}
-                        className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
-                        title="Delete reminder"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                  key={`alarm-${item.id}`}
+                  className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${item.enabled ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
+                >
+                  <div className="mt-1 flex-shrink-0">
+                    <AlarmClock size={16} className={item.enabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'} />
                   </div>
-                  
-                  <div className="text-xs text-gray-700 dark:text-gray-300 mt-1 space-y-1">
-                    {reminder.description && (
-                      <p className="truncate text-gray-600 dark:text-gray-400">{reminder.description}</p>
-                    )}
-                    
-                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
-                      <Clock size={12} />
-                      <span>{formatReminderTime(reminder.reminder_time)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <h4 className={`font-medium text-sm truncate text-gray-800 dark:text-white ${!item.enabled && 'line-through opacity-70'}`}>
+                        {item.title}
+                      </h4>
+                      <div className="flex gap-1 ml-1">
+                        <button 
+                          onClick={() => toggleAlarm(item.id!, !item.enabled)}
+                          className={`text-xs px-2 py-0.5 rounded ${item.enabled ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300' : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'}`}
+                          title={item.enabled ? 'Disable alarm' : 'Enable alarm'}
+                        >
+                          {item.enabled ? 'ON' : 'OFF'}
+                        </button>
+                        <button 
+                          onClick={() => deleteAlarm(item.id!)}
+                          className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
+                          title="Delete alarm"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
-                    
-                    {reminder.event && (
-                      <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
-                        <Calendar size={12} />
-                        <span className="truncate">{reminder.event.title}</span>
+                    <div className="text-xs text-gray-700 dark:text-gray-300 mt-1">
+                      <div className="flex items-center gap-1">
+                        <Clock size={12} className="opacity-70" />
+                        <span>{formatReminderTime(typeof item.time === 'string' ? item.time : item.time.toISOString())}</span>
                       </div>
-                    )}
-                    
-                    {(reminder.time_before_event_minutes || reminder.time_after_event_minutes) && (
-                      <div className="flex items-center gap-2 text-xs">
-                        {reminder.time_before_event_minutes && (
-                          <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
-                            {reminder.time_before_event_minutes}m before
-                          </span>
-                        )}
-                        {reminder.time_after_event_minutes && (
-                          <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
-                            {reminder.time_after_event_minutes}m after
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
-                      <Volume2 size={12} />
-                      <span>
-                        {REMINDER_SOUNDS.find(s => s.id === reminder.sound_id)?.name || 'Default'}
-                      </span>
+                      {item.repeatDays && item.repeatDays.length > 0 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Repeats: {item.repeatDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                // Reminder item
+                <div 
+                  key={`reminder-${item.id}`}
+                  className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${item.isActive ? 'bg-purple-100/50 dark:bg-purple-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
+                >
+                  <div 
+                    className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${item.isActive ? 'bg-primary' : 'bg-gray-400 dark:bg-secondary'}`}
+                    onClick={() => handleToggleActive(item as Reminder)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <h4 className={`font-medium text-sm truncate text-gray-800 dark:text-white ${!item.isActive && 'line-through opacity-70'}`}>
+                        {item.title}
+                      </h4>
+                      <div className="flex gap-1 ml-1">
+                        <button 
+                          onClick={() => handleTestSound(item.soundId || 'default')}
+                          className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
+                          title="Test sound"
+                        >
+                          <Play size={14} />
+                        </button>
+                        <button 
+                          onClick={() => openEditDialog(item as Reminder)}
+                          className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 p-1 rounded hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
+                          title="Edit reminder"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(item as Reminder)}
+                          className="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
+                          title="Delete reminder"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-gray-700 dark:text-gray-300 mt-1 space-y-1">
+                      {item.description && (
+                        <p className="truncate text-gray-600 dark:text-gray-400">{item.description}</p>
+                      )}
+                    
+                      <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
+                        <Clock size={12} />
+                        <span>{formatReminderTime(item.reminderTime)}</span>
+                      </div>
+                      
+                      {item.event && (
+                        <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
+                          <Calendar size={12} />
+                          <span className="truncate">{item.event.title}</span>
+                        </div>
+                      )}
+                      
+                      {(item.timeBeforeMinutes || item.timeAfterMinutes) && (
+                        <div className="flex items-center gap-2 text-xs">
+                          {item.timeBeforeMinutes && (
+                            <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
+                              {item.timeBeforeMinutes}m before
+                            </span>
+                          )}
+                          {item.timeAfterMinutes && (
+                            <span className="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 px-1.5 py-0.5 rounded-sm">
+                              {item.timeAfterMinutes}m after
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-1 text-gray-700 dark:text-gray-300">
+                        <Volume2 size={12} />
+                        <span>
+                          {REMINDER_SOUNDS.find(s => s.id === item.soundId)?.name || 'Default'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
             ))
           )}
         </div>

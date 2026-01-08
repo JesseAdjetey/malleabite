@@ -26,18 +26,38 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   isMinimized = false,
   isDragging = false
 }) => {
+  // Load saved state from localStorage or use defaults
+  const loadSavedState = () => {
+    try {
+      const saved = localStorage.getItem('pomodoroState');
+      if (saved) {
+        const state = JSON.parse(saved);
+        // Check if saved state has a lastUpdate timestamp and if it's recent (within 24 hours)
+        if (state.lastUpdate && Date.now() - state.lastUpdate < 24 * 60 * 60 * 1000) {
+          return state;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load pomodoro state:', e);
+    }
+    return null;
+  };
+
+  const savedState = loadSavedState();
+
   // Timer settings
-  const [focusTime, setFocusTime] = useState(25); // in minutes
-  const [breakTime, setBreakTime] = useState(5); // in minutes
-  const [focusTarget, setFocusTarget] = useState(180); // in minutes (3 hours default)
+  const [focusTime, setFocusTime] = useState(savedState?.focusTime ?? 25); // in minutes
+  const [breakTime, setBreakTime] = useState(savedState?.breakTime ?? 5); // in minutes
+  const [focusTarget, setFocusTarget] = useState(savedState?.focusTarget ?? 180); // in minutes (3 hours default)
 
   // Timer state
-  const [timeLeft, setTimeLeft] = useState(focusTime * 60); // in seconds
-  const [isActive, setIsActive] = useState(false);
-  const [timerMode, setTimerMode] = useState<TimerMode>('focus');
+  const [timeLeft, setTimeLeft] = useState(savedState?.timeLeft ?? 25 * 60); // in seconds
+  const [isActive, setIsActive] = useState(savedState?.isActive ?? false);
+  const [timerMode, setTimerMode] = useState<TimerMode>(savedState?.timerMode ?? 'focus');
   const [showSettings, setShowSettings] = useState(false);
-  const [completedFocusTime, setCompletedFocusTime] = useState(0); // in minutes
-  const [cycles, setCycles] = useState(0);
+  const [completedFocusTime, setCompletedFocusTime] = useState(savedState?.completedFocusTime ?? 0); // in minutes
+  const [cycles, setCycles] = useState(savedState?.cycles ?? 0);
+  const [lastTickTime, setLastTickTime] = useState(savedState?.lastTickTime ?? Date.now());
 
   // Calculate total time for current mode
   const totalTime = timerMode === 'focus' ? focusTime * 60 : breakTime * 60;
@@ -46,6 +66,23 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   // Target progress percentage
   const targetProgress = Math.min((completedFocusTime / focusTarget) * 100, 100);
 
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    const state = {
+      focusTime,
+      breakTime,
+      focusTarget,
+      timeLeft,
+      isActive,
+      timerMode,
+      completedFocusTime,
+      cycles,
+      lastTickTime,
+      lastUpdate: Date.now()
+    };
+    localStorage.setItem('pomodoroState', JSON.stringify(state));
+  }, [focusTime, breakTime, focusTarget, timeLeft, isActive, timerMode, completedFocusTime, cycles, lastTickTime]);
+
   // Handle timer
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -53,6 +90,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
         setTimeLeft(prevTime => prevTime - 1);
+        setLastTickTime(Date.now());
       }, 1000);
     } else if (timeLeft === 0 && isActive) {
       // Timer finished
@@ -134,6 +172,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
     setIsActive(false);
     setTimerMode('focus');
     setTimeLeft(focusTime * 60);
+    setLastTickTime(Date.now());
   };
 
   const handleFocusTimeChange = (value: number[]) => {

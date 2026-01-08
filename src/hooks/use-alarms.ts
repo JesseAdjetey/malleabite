@@ -157,11 +157,12 @@ export function useAlarms() {
   };
 
   // Toggle alarm enabled/disabled
-  const toggleAlarm = async (alarmId: string) => {
+  const toggleAlarm = async (alarmId: string, enabled?: boolean) => {
     const alarm = alarms.find(a => a.id === alarmId);
     if (!alarm) return { success: false };
 
-    return updateAlarm(alarmId, { enabled: !alarm.enabled });
+    const newEnabled = enabled !== undefined ? enabled : !alarm.enabled;
+    return updateAlarm(alarmId, { enabled: newEnabled });
   };
 
   // Link alarm to event

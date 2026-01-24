@@ -1394,12 +1394,23 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       ${isDraggable ? "h-[600px] max-h-[80vh]" : "h-[65vh] sm:h-[600px] sm:max-h-[85vh]"}
       bg-gray-900 rounded-lg shadow-2xl border border-gray-700 flex flex-col z-50 animate-slide-up
     `}>
-      {/* Header */}
+      {/* Header with Drag Handle */}
       <div className="bg-gradient-to-r from-purple-600 to-violet-600 text-white p-4 rounded-t-lg flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2">
+        {/* Drag Handle Area - this is what users grab to drag */}
+        {isDraggable && (
+          <div
+            className="cursor-grab active:cursor-grabbing p-1 -ml-2 mr-2 hover:bg-white/20 rounded transition-colors"
+            title="Drag to move"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="5" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="19" r="1" />
+              <circle cx="15" cy="5" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="19" r="1" />
+            </svg>
+          </div>
+        )}
+        <div className="flex items-center space-x-2 flex-1">
           <Brain className="h-5 w-5" />
           <span className="font-semibold">Mally AI</span>
-          <MessageSquare className="h-4 w-4 animate-pulse" />
         </div>
         <div className="flex items-center space-x-1">
           <button

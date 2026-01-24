@@ -61,7 +61,7 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
       } else {
         // Ensure position is within viewport bounds after window resize
         const maxX = window.innerWidth - 400;
-        const maxY = window.innerHeight - 650;
+        const maxY = window.innerHeight - 80;
         const boundedX = Math.min(Math.max(position.x, 10), maxX);
         const boundedY = Math.min(Math.max(position.y, 10), maxY);
 
@@ -82,7 +82,7 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
 
     // Calculate the new position
     const newX = Math.min(Math.max(position.x + info.offset.x, 20), window.innerWidth - 400);
-    const newY = Math.min(Math.max(position.y + info.offset.y, 20), window.innerHeight - 650);
+    const newY = Math.min(Math.max(position.y + info.offset.y, 20), window.innerHeight - 80);
 
     // Only update position if we actually moved
     if (Math.abs(info.offset.x) > 2 || Math.abs(info.offset.y) > 2) {
@@ -221,7 +221,7 @@ const DraggableMallyAI: React.FC<DraggableMallyAIProps> = ({ onScheduleEvent }) 
         left: 20,
         right: window.innerWidth - 400,
         top: 20,
-        bottom: window.innerHeight - 650
+        bottom: window.innerHeight - 80
       }}
       onDragStart={() => setIsDragging(true)}
       onDragEnd={handleDragEnd}

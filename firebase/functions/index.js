@@ -78,7 +78,8 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
          - To add to a list: use "add_todo_to_list" with "text" and "listId" or "listName".
       5. ALARMS: To set an alarm: use "create_alarm" with "title" and "time" (ISO string or HH:mm).
       6. POMODORO: To control timer: use "start_pomodoro" or "stop_pomodoro".
-      7. RESPONSE FORMAT: Return a JSON object with this structure:
+      7. EVENT DURATION: Every event MUST have a duration. If the user doesn't specify an end time, assume a duration of 1 hour. NEVER return the same time for "start" and "end".
+      8. RESPONSE FORMAT: Return a JSON object with this structure:
       {
         "response": "Natural language response explaining your reasoning, conflicts found, and suggestions.",
         "actionRequired": boolean,

@@ -1,14 +1,14 @@
 // Firebase-only calendar events hook for production
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   orderBy,
   serverTimestamp,
   Timestamp,
@@ -46,14 +46,14 @@ interface SupabaseActionResponse {
 // Firestore doesn't accept undefined values, so we filter them out
 const cleanRecurrenceRule = (rule: Record<string, any>): Record<string, any> | null => {
   if (!rule) return null;
-  
+
   const cleaned: Record<string, any> = {};
   for (const [key, value] of Object.entries(rule)) {
     if (value !== undefined && value !== null) {
       cleaned[key] = value;
     }
   }
-  
+
   // Return null if no valid fields remain
   return Object.keys(cleaned).length > 0 ? cleaned : null;
 };
@@ -77,10 +77,10 @@ export function useCalendarEvents() {
     const data = doc.data();
     const startsAt = data.startsAt?.toDate?.()?.toISOString() || data.startsAt;
     const endsAt = data.endsAt?.toDate?.()?.toISOString() || data.endsAt;
-    
+
     // Extract date from startsAt for calendar display
     const date = startsAt ? new Date(startsAt).toISOString().split('T')[0] : '';
-    
+
     return {
       id: doc.id,
       title: data.title || '',
@@ -94,7 +94,7 @@ export function useCalendarEvents() {
       todoId: data.todoId || data.todo_id || null,
       startsAt: startsAt,
       endsAt: endsAt,
-      
+
       // Google Calendar-style fields
       location: data.location || undefined,
       meetingUrl: data.meetingUrl || undefined,
@@ -104,18 +104,18 @@ export function useCalendarEvents() {
       visibility: data.visibility || 'public',
       status: data.status || 'confirmed',
       timeZone: data.timeZone || undefined,
-      
+
       // Recurring event fields
       isRecurring: data.isRecurring || false,
       recurrenceRule: data.recurrenceRule || undefined,
       recurrenceParentId: data.recurrenceParentId || undefined,
       recurrenceExceptions: data.recurrenceExceptions || undefined,
-      
+
       // Attendees and reminders
       attendees: data.attendees || undefined,
       reminders: data.reminders || undefined,
       useDefaultReminders: data.useDefaultReminders ?? true,
-      
+
       // Event type
       eventType: data.eventType || 'default',
     };
@@ -221,9 +221,15 @@ export function useCalendarEvents() {
       if (event.startsAt && event.endsAt && !event.startsAt.includes('|')) {
         startsAt = new Date(event.startsAt);
         endsAt = new Date(event.endsAt);
-        
+
+        // Ensure minimum 1-hour duration if start and end are the same
+        if (startsAt.getTime() === endsAt.getTime()) {
+          endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
+          console.log('Adjusting zero-duration event to 1 hour');
+        }
+
         console.log('Using provided startsAt/endsAt:', { startsAt, endsAt });
-        
+
         // If description doesn't contain time info, keep it as is
         if (!actualDescription.includes('|')) {
           // Description is just the description, no time prefix
@@ -239,17 +245,17 @@ export function useCalendarEvents() {
 
         const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
         const eventDate = dayjs(event.date || new Date()).format('YYYY-MM-DD');
-        
+
         startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
         endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
-        
+
         // Extract the actual description part
         const descriptionParts = event.description.split('|');
         actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
       }
-      
+
       console.log('Final startsAt:', startsAt, 'endsAt:', endsAt);
-      
+
       const newEvent: Record<string, any> = {
         title: event.title,
         description: actualDescription,
@@ -263,7 +269,7 @@ export function useCalendarEvents() {
         startsAt: Timestamp.fromDate(startsAt),
         endsAt: Timestamp.fromDate(endsAt),
         createdAt: serverTimestamp(),
-        
+
         // Google Calendar-style fields
         location: event.location || null,
         meetingUrl: event.meetingUrl || null,
@@ -273,29 +279,29 @@ export function useCalendarEvents() {
         visibility: event.visibility || 'public',
         status: event.status || 'confirmed',
         timeZone: event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-        
+
         // Recurring event fields - clean undefined values for Firestore
         isRecurring: event.isRecurring || false,
         recurrenceRule: event.recurrenceRule ? cleanRecurrenceRule(event.recurrenceRule) : null,
         recurrenceParentId: event.recurrenceParentId || null,
         recurrenceExceptions: event.recurrenceExceptions || null,
-        
+
         // Attendees and reminders
         attendees: event.attendees || null,
         reminders: event.reminders || null,
         useDefaultReminders: event.useDefaultReminders ?? true,
-        
+
         // Event type
         eventType: event.eventType || 'default',
       };
 
       await addDoc(collection(db, 'calendar_events'), newEvent);
-      
+
       // Increment usage count after successful creation
       if (incrementEventCountCallback) {
         await incrementEventCountCallback();
       }
-      
+
       toast.success('Event added successfully');
       return { success: true };
     } catch (error) {
@@ -321,7 +327,13 @@ export function useCalendarEvents() {
       if (event.startsAt && event.endsAt && !event.startsAt.includes('|')) {
         startsAt = new Date(event.startsAt);
         endsAt = new Date(event.endsAt);
-        
+
+        // Ensure minimum 1-hour duration if start and end are the same
+        if (startsAt.getTime() === endsAt.getTime()) {
+          endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
+          console.log('Adjusting zero-duration event to 1 hour');
+        }
+
         // Extract the actual description part after the time if present
         if (actualDescription.includes('|')) {
           const descriptionParts = actualDescription.split('|');
@@ -332,10 +344,10 @@ export function useCalendarEvents() {
         const timeRange = extractTimeString(event.description);
         const [startTime, endTime] = timeRange ? timeRange.split('-').map(t => t.trim()) : ['09:00', '10:00'];
         const eventDate = dayjs(event.startsAt || new Date()).format('YYYY-MM-DD');
-        
+
         startsAt = dayjs(`${eventDate} ${startTime}`).toDate();
         endsAt = dayjs(`${eventDate} ${endTime}`).toDate();
-        
+
         const descriptionParts = event.description.split('|');
         actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
       }
@@ -351,7 +363,7 @@ export function useCalendarEvents() {
         todoId: event.todoId || null,
         startsAt: Timestamp.fromDate(startsAt),
         endsAt: Timestamp.fromDate(endsAt),
-        
+
         // Google Calendar-style fields
         location: event.location || null,
         meetingUrl: event.meetingUrl || null,
@@ -361,18 +373,18 @@ export function useCalendarEvents() {
         visibility: event.visibility || 'public',
         status: event.status || 'confirmed',
         timeZone: event.timeZone || null,
-        
+
         // Recurring event fields - clean undefined values for Firestore
         isRecurring: event.isRecurring || false,
         recurrenceRule: event.recurrenceRule ? cleanRecurrenceRule(event.recurrenceRule) : null,
         recurrenceParentId: event.recurrenceParentId || null,
         recurrenceExceptions: event.recurrenceExceptions || null,
-        
+
         // Attendees and reminders
         attendees: event.attendees || null,
         reminders: event.reminders || null,
         useDefaultReminders: event.useDefaultReminders ?? true,
-        
+
         // Event type
         eventType: event.eventType || 'default',
       };
@@ -419,21 +431,21 @@ export function useCalendarEvents() {
         console.error('Event not found:', eventId);
         return { success: false, error: 'Event not found' };
       }
-      
+
       const eventData = eventDoc.data();
       const currentExceptions: string[] = eventData.recurrenceExceptions || [];
-      
+
       // Add the new exception if it doesn't already exist
       if (!currentExceptions.includes(exceptionDate)) {
         currentExceptions.push(exceptionDate);
-        
+
         await updateDoc(doc(db, 'calendar_events', eventId), {
           recurrenceExceptions: currentExceptions
         });
-        
+
         console.log(`Added exception ${exceptionDate} to event ${eventId}`);
       }
-      
+
       return { success: true };
     } catch (error) {
       console.error('Error adding recurrence exception:', error);

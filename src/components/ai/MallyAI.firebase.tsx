@@ -63,6 +63,7 @@ interface MallyAIFirebaseProps {
   initialPrompt?: string;
   preventOpenOnClick?: boolean;
   isMobileSheet?: boolean;
+  isDraggable?: boolean;
 }
 
 export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
@@ -70,6 +71,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   initialPrompt,
   preventOpenOnClick = false,
   isMobileSheet = false,
+  isDraggable = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -1363,7 +1365,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     return (
       <button
         onClick={() => !preventOpenOnClick && setIsOpen(true)}
-        className="fixed bottom-24 right-4 bg-gradient-to-r from-purple-600 to-violet-600 text-white p-4 rounded-full shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 hover:scale-105 z-40 animate-pulse-glow"
+        className={`${isDraggable ? "" : "fixed bottom-24 right-4"} bg-gradient-to-r from-purple-600 to-violet-600 text-white p-4 rounded-full shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 hover:scale-105 z-40 animate-pulse-glow`}
         title="Open Mally AI Assistant"
       >
         <Brain className="h-6 w-6" />
@@ -1372,7 +1374,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   }
 
   return (
-    <div className="fixed left-2 right-2 bottom-16 h-[65vh] sm:left-auto sm:right-4 sm:bottom-4 sm:w-96 sm:h-[600px] bg-gray-900 rounded-lg shadow-2xl border border-gray-700 flex flex-col z-50 animate-slide-up">
+    <div className={`
+      ${isDraggable ? "relative" : "fixed left-2 right-2 bottom-16 sm:left-auto sm:right-4 sm:bottom-4"} 
+      w-full sm:w-96 
+      ${isDraggable ? "h-[600px] max-h-[80vh]" : "h-[65vh] sm:h-[600px] sm:max-h-[85vh]"}
+      bg-gray-900 rounded-lg shadow-2xl border border-gray-700 flex flex-col z-50 animate-slide-up
+    `}>
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-violet-600 text-white p-4 rounded-t-lg flex items-center justify-between shrink-0">
         <div className="flex items-center space-x-2">

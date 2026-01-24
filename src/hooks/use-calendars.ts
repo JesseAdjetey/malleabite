@@ -1,14 +1,14 @@
 // Multiple Calendars Hook - Manage multiple calendars per user
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   orderBy,
   serverTimestamp,
   Timestamp,
@@ -129,7 +129,7 @@ export function useCalendars() {
       calendarsQuery,
       async (snapshot) => {
         const calendarList = snapshot.docs.map(doc => convertFirebaseCalendar(doc));
-        
+
         // If no calendars exist, create a default one
         if (calendarList.length === 0) {
           await createDefaultCalendar();
@@ -217,7 +217,7 @@ export function useCalendars() {
 
   // Update a calendar
   const updateCalendar = useCallback(async (
-    calendarId: string, 
+    calendarId: string,
     updates: Partial<CalendarFormData & { isVisible: boolean }>
   ): Promise<{ success: boolean; error?: string }> => {
     if (!user?.uid) {
@@ -230,7 +230,7 @@ export function useCalendars() {
         ...updates,
         updatedAt: serverTimestamp(),
       });
-      
+
       toast.success('Calendar updated');
       return { success: true };
     } catch (error) {
@@ -292,7 +292,7 @@ export function useCalendars() {
 
       if (alreadyShared) {
         // Update existing share
-        const updatedShares = existingShares.map(s => 
+        const updatedShares = existingShares.map(s =>
           s.email === email ? { ...s, permission } : s
         );
         await updateDoc(doc(db, 'calendars', calendarId), {
@@ -358,6 +358,49 @@ export function useCalendars() {
   // Get default calendar (primary or first available)
   const defaultCalendar = primaryCalendar || calendars[0];
 
+  // Archive current primary calendar and create a fresh one
+  const archiveCalendar = useCallback(async (archiveName?: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user?.uid || !primaryCalendar) return { success: false, error: 'User or primary calendar not found' };
+
+    try {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString([], { month: 'short', year: 'numeric' });
+      const name = archiveName || `Archive (${dateStr})`;
+
+      // 1. Rename existing primary and make it non-primary
+      await updateCalendar(primaryCalendar.id, {
+        name: name,
+        isPrimary: false
+      } as any);
+
+      // 2. Create a new fresh primary calendar
+      const newCalendar = {
+        userId: user.uid,
+        name: user.displayName ? `${user.displayName}'s Calendar` : 'My Calendar',
+        description: 'Primary calendar',
+        color: CALENDAR_COLORS[6].value,
+        isDefault: true,
+        isVisible: true,
+        isPrimary: true,
+        shareSettings: { isPublic: false, sharedWith: [] },
+        defaultReminders: [{ type: 'notification', minutesBefore: 30 }],
+      };
+
+      await addDoc(collection(db, 'calendars'), {
+        ...newCalendar,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      toast.success(`Current calendar archived as "${name}". Created a fresh primary calendar.`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error archiving calendar:', error);
+      toast.error('Failed to archive calendar');
+      return { success: false, error: 'Failed to archive calendar' };
+    }
+  }, [user, primaryCalendar, updateCalendar]);
+
   return {
     calendars,
     loading,
@@ -365,6 +408,7 @@ export function useCalendars() {
     createCalendar,
     updateCalendar,
     deleteCalendar,
+    archiveCalendar,
     toggleVisibility,
     shareCalendar,
     removeShare,

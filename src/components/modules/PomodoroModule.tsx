@@ -5,9 +5,7 @@ import { Play, Pause, Settings, Clock, Target, RotateCcw } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-// Timer modes
-type TimerMode = 'focus' | 'break';
+import { usePomodoroStore, TimerMode } from '@/lib/stores/pomodoro-store';
 
 interface PomodoroModuleProps {
   title?: string;
@@ -26,38 +24,17 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   isMinimized = false,
   isDragging = false
 }) => {
-  // Load saved state from localStorage or use defaults
-  const loadSavedState = () => {
-    try {
-      const saved = localStorage.getItem('pomodoroState');
-      if (saved) {
-        const state = JSON.parse(saved);
-        // Check if saved state has a lastUpdate timestamp and if it's recent (within 24 hours)
-        if (state.lastUpdate && Date.now() - state.lastUpdate < 24 * 60 * 60 * 1000) {
-          return state;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load pomodoro state:', e);
-    }
-    return null;
-  };
+  const {
+    focusTime, setFocusTime,
+    breakTime, setBreakTime,
+    focusTarget, setFocusTarget,
+    timeLeft, setTimeLeft,
+    isActive, toggleTimer, resetTimer,
+    timerMode, completedFocusTime, cycles,
+    tick, completeCycle
+  } = usePomodoroStore();
 
-  const savedState = loadSavedState();
-
-  // Timer settings
-  const [focusTime, setFocusTime] = useState(savedState?.focusTime ?? 25); // in minutes
-  const [breakTime, setBreakTime] = useState(savedState?.breakTime ?? 5); // in minutes
-  const [focusTarget, setFocusTarget] = useState(savedState?.focusTarget ?? 180); // in minutes (3 hours default)
-
-  // Timer state
-  const [timeLeft, setTimeLeft] = useState(savedState?.timeLeft ?? 25 * 60); // in seconds
-  const [isActive, setIsActive] = useState(savedState?.isActive ?? false);
-  const [timerMode, setTimerMode] = useState<TimerMode>(savedState?.timerMode ?? 'focus');
   const [showSettings, setShowSettings] = useState(false);
-  const [completedFocusTime, setCompletedFocusTime] = useState(savedState?.completedFocusTime ?? 0); // in minutes
-  const [cycles, setCycles] = useState(savedState?.cycles ?? 0);
-  const [lastTickTime, setLastTickTime] = useState(savedState?.lastTickTime ?? Date.now());
 
   // Calculate total time for current mode
   const totalTime = timerMode === 'focus' ? focusTime * 60 : breakTime * 60;
@@ -66,31 +43,13 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   // Target progress percentage
   const targetProgress = Math.min((completedFocusTime / focusTarget) * 100, 100);
 
-  // Save state to localStorage whenever it changes
-  useEffect(() => {
-    const state = {
-      focusTime,
-      breakTime,
-      focusTarget,
-      timeLeft,
-      isActive,
-      timerMode,
-      completedFocusTime,
-      cycles,
-      lastTickTime,
-      lastUpdate: Date.now()
-    };
-    localStorage.setItem('pomodoroState', JSON.stringify(state));
-  }, [focusTime, breakTime, focusTarget, timeLeft, isActive, timerMode, completedFocusTime, cycles, lastTickTime]);
-
-  // Handle timer
+  // Handle timer tick
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
 
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
-        setTimeLeft(prevTime => prevTime - 1);
-        setLastTickTime(Date.now());
+        tick();
       }, 1000);
     } else if (timeLeft === 0 && isActive) {
       // Timer finished
@@ -124,39 +83,23 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 
       playNotificationSound();
 
-      if (timerMode === 'focus') {
-        // Update completed focus time
-        setCompletedFocusTime(prev => prev + focusTime);
-        setCycles(prev => prev + 1);
+      const sessionType = timerMode === 'focus' ? 'Focus' : 'Break';
+      const bodyText = timerMode === 'focus' ? 'Take a break now.' : 'Time to focus again.';
 
-        // Switch to break
-        setTimerMode('break');
-        setTimeLeft(breakTime * 60);
+      completeCycle();
 
-        // Notification
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Focus session completed!', {
-            body: 'Take a break now.',
-          });
-        }
-      } else {
-        // Switch back to focus
-        setTimerMode('focus');
-        setTimeLeft(focusTime * 60);
-
-        // Notification
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('Break completed!', {
-            body: 'Time to focus again.',
-          });
-        }
+      // Notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(`${sessionType} session completed!`, {
+          body: bodyText,
+        });
       }
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isActive, timeLeft, timerMode, focusTime, breakTime]);
+  }, [isActive, timeLeft, timerMode, tick, completeCycle]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -164,31 +107,12 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const toggleTimer = () => {
-    setIsActive(!isActive);
-  };
-
-  const resetTimer = () => {
-    setIsActive(false);
-    setTimerMode('focus');
-    setTimeLeft(focusTime * 60);
-    setLastTickTime(Date.now());
-  };
-
   const handleFocusTimeChange = (value: number[]) => {
-    const newFocusTime = value[0];
-    setFocusTime(newFocusTime);
-    if (timerMode === 'focus' && !isActive) {
-      setTimeLeft(newFocusTime * 60);
-    }
+    setFocusTime(value[0]);
   };
 
   const handleBreakTimeChange = (value: number[]) => {
-    const newBreakTime = value[0];
-    setBreakTime(newBreakTime);
-    if (timerMode === 'break' && !isActive) {
-      setTimeLeft(newBreakTime * 60);
-    }
+    setBreakTime(value[0]);
   };
 
   const handleTargetChange = (e: React.ChangeEvent<HTMLInputElement>) => {

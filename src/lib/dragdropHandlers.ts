@@ -37,43 +37,43 @@ export const createCalendarEventFromTodo = async (
     console.error("Invalid todo data or missing functions");
     return null;
   }
-  
+
   try {
     // Format day and time
     const day = dayjs(date);
     const eventDate = day.format('YYYY-MM-DD');
-    
+
     // Calculate end time (1 hour after start by default)
     const startHour = parseInt(startTime.split(':')[0]);
     const startMinute = parseInt(startTime.split(':')[1] || '0');
     const endHour = (startHour + 1) % 24;
     const endTime = `${endHour.toString().padStart(2, '0')}:${startMinute.toString().padStart(2, '0')}`;
-    
+
     // Format ISO strings for startsAt and endsAt
     let startDateTime = day.hour(startHour).minute(startMinute).second(0);
     let endDateTime = day.hour(endHour).minute(startMinute).second(0);
-    
+
     // Validate if the time is in the past
     const now = dayjs();
     if (startDateTime.isBefore(now)) {
       const isToday = startDateTime.isSame(now, 'day');
-      
+
       if (isToday) {
         // If trying to schedule for today but in the past, suggest current time or next hour
         const currentHour = now.hour();
         const currentMinute = now.minute();
         const nextSlot = currentMinute < 30 ? 30 : 0;
         const nextHour = currentMinute < 30 ? currentHour : currentHour + 1;
-        
+
         // Round up to next 30-minute slot
         const suggestedStart = now.minute(nextSlot).hour(nextHour).second(0);
         const suggestedEnd = suggestedStart.add(1, 'hour');
-        
+
         toast.error(`Cannot schedule in the past!`, {
           description: `The time ${startTime} has already passed today. Scheduling for ${suggestedStart.format('h:mm A')} instead.`,
           duration: 5000,
         });
-        
+
         startDateTime = suggestedStart;
         endDateTime = suggestedEnd;
       } else {
@@ -85,12 +85,12 @@ export const createCalendarEventFromTodo = async (
         return null;
       }
     }
-    
+
     // Update eventDate and times to match the validated startDateTime
     const finalEventDate = startDateTime.format('YYYY-MM-DD');
     const finalStartTime = startDateTime.format('HH:mm');
     const finalEndTime = endDateTime.format('HH:mm');
-    
+
     // Create a new calendar event from the todo item
     const newEvent: CalendarEventType = {
       id: nanoid(), // This will be replaced by the database
@@ -103,12 +103,12 @@ export const createCalendarEventFromTodo = async (
       startsAt: startDateTime.toISOString(),
       endsAt: endDateTime.toISOString()
     };
-    
+
     console.log("Creating new calendar event from todo:", newEvent);
-    
+
     // Add the event to the database
     const response = await options.addEventFn(newEvent);
-    
+
     if (response.success) {
       // Link todo to the new event if we're keeping both
       if (keepTodo && response.data?.[0]?.id) {
@@ -117,7 +117,7 @@ export const createCalendarEventFromTodo = async (
           description: `${startDateTime.format('MMM D, YYYY')} at ${startDateTime.format('h:mm A')}`
         });
         return response.data[0].id;
-      } 
+      }
       // If not keeping the todo, delete it
       else if (!keepTodo && options.deleteTodoFn) {
         await options.deleteTodoFn(todoData.id);
@@ -126,7 +126,7 @@ export const createCalendarEventFromTodo = async (
         });
         return response.data?.[0]?.id || null;
       }
-      
+
       toast.success(`Event added to calendar at ${startTime}`);
       return response.data?.[0]?.id || null;
     } else {
@@ -151,14 +151,14 @@ export const createTodoFromCalendarEvent = async (
       console.error("Invalid event data");
       return null;
     }
-    
+
     // Add the todo to the database
     const response = await addTodoFn(event.title);
-    
+
     if (response.success && response.todoId) {
       // Link the new todo to the event
       await linkTodoToEventFn(response.todoId, event.id);
-      
+
       toast.success(`"${event.title}" added to todo list`);
       return response.todoId;
     } else {
@@ -175,7 +175,7 @@ export const createTodoFromCalendarEvent = async (
 // Updates an existing todo item with new title from calendar event
 export const syncEventTitleWithTodo = async (
   eventId: string,
-  todoId: string, 
+  todoId: string,
   newTitle: string,
   updateTodoFn: (id: string, title: string) => Promise<any>
 ): Promise<boolean> => {
@@ -183,10 +183,10 @@ export const syncEventTitleWithTodo = async (
     if (!todoId || !newTitle.trim()) {
       return false;
     }
-    
+
     // Update the todo with the new title from the event
     const response = await updateTodoFn(todoId, newTitle);
-    
+
     if (response?.success) {
       return true;
     }
@@ -198,13 +198,13 @@ export const syncEventTitleWithTodo = async (
 };
 
 export const handleDrop = (
-  e: React.DragEvent, 
-  day: dayjs.Dayjs, 
+  e: React.DragEvent,
+  day: dayjs.Dayjs,
   hour: dayjs.Dayjs,
   options: DragHandlerOptions
 ) => {
   e.preventDefault();
-  
+
   try {
     // Get the drag data
     const dataString = e.dataTransfer.getData('application/json');
@@ -212,61 +212,61 @@ export const handleDrop = (
       console.error("No data found in drag event");
       return;
     }
-    
+
     const data = JSON.parse(dataString);
     console.log("Received drop data:", data);
-    
-    // Handle todo item drag
-    if (data.source === 'todo-module') {
+
+    // Handle todo item or eisenhower item drag
+    if (data.source === 'todo-module' || data.source === 'eisenhower') {
       // Calculate precise drop time based on cursor position
       const rect = e.currentTarget.getBoundingClientRect();
       const relativeY = e.clientY - rect.top;
       const hourHeight = rect.height;
       const minutesWithinHour = Math.floor((relativeY / hourHeight) * 60);
-      
+
       // Snap to nearest 30-minute interval (0 or 30)
       const snappedMinutes = minutesWithinHour < 30 ? 0 : 30;
-      
+
       // Get the base hour and add the snapped minutes
       const baseHour = hour.hour();
       const startTime = `${baseHour.toString().padStart(2, '0')}:${snappedMinutes.toString().padStart(2, '0')}`;
-      
+
       // Show the integration dialog
       options.onShowTodoCalendarDialog(data, day.toDate(), startTime);
       return;
     }
-    
+
     // Don't process if the event is locked
     if (data.isLocked) return;
-    
+
     // Calculate precise drop time based on cursor position
     const rect = e.currentTarget.getBoundingClientRect();
     const relativeY = e.clientY - rect.top;
     const hourHeight = rect.height;
     const minutesWithinHour = Math.floor((relativeY / hourHeight) * 60);
-    
+
     // Snap to nearest 30-minute interval (0 or 30)
     const snappedMinutes = minutesWithinHour < 30 ? 0 : 30;
-    
+
     // Get the base hour and add the snapped minutes
     const baseHour = hour.hour();
     const totalMinutes = baseHour * 60 + snappedMinutes;
-    
+
     // Format as HH:MM
     const newStartTime = formatMinutesAsTime(totalMinutes);
-    
+
     // Calculate new end time by preserving duration
     const oldStartMinutes = getTimeInMinutes(data.timeStart);
     const oldEndMinutes = getTimeInMinutes(data.timeEnd);
     const durationMinutes = oldEndMinutes - oldStartMinutes;
-    
+
     const newEndMinutes = totalMinutes + durationMinutes;
     const newEndTime = formatMinutesAsTime(newEndMinutes);
-    
+
     // Get description without time part
     const descriptionParts = data.description.split('|');
     const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
-    
+
     // Create the updated event
     const updatedEvent = {
       ...data,
@@ -275,13 +275,13 @@ export const handleDrop = (
       startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
       endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString()
     };
-    
+
     // Update the event in the store
     options.updateEventFn(updatedEvent);
-    
+
     // Show success message
     toast.success(`Event moved to ${day.format("MMM D")} at ${newStartTime}`);
-    
+
   } catch (error) {
     console.error("Error handling drop:", error);
     toast.error("Failed to move event");

@@ -13,7 +13,7 @@ const formatEventsForAI = (events) => {
   return events.map(e => {
     const start = e.start_date?.toDate() || e.startDate?.toDate();
     const end = e.end_date?.toDate() || e.endDate?.toDate();
-    return `${e.title}: ${start?.toLocaleString()} - ${end?.toLocaleString()}`;
+    return `ID: ${e.id} | Title: ${e.title} | Start: ${start?.toISOString()} | End: ${end?.toISOString()}`;
   }).join('\n');
 };
 
@@ -34,17 +34,24 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Fetch user's events for context
     const db = admin.firestore();
     const now = new Date();
+
+    // Fetch a broader range of events to check for conflicts (e.g., from 1 day ago to 30 days ahead)
+    const startRange = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const endRange = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
     const eventsSnapshot = await db.collection('calendar_events')
       .where('userId', '==', userId)
-      .where('start_date', '>=', now) // Only future events for context usually
-      .limit(20)
+      .where('start_date', '>=', admin.firestore.Timestamp.fromDate(startRange))
+      .where('start_date', '<=', admin.firestore.Timestamp.fromDate(endRange))
+      .limit(100)
       .get();
 
     const events = [];
-    eventsSnapshot.forEach(doc => events.push(doc.data()));
+    eventsSnapshot.forEach(doc => {
+      events.push({ id: doc.id, ...doc.data() });
+    });
     const eventsContext = formatEventsForAI(events);
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -54,27 +61,40 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
       Current Time: ${clientContext?.currentTime || new Date().toISOString()}
       User Timezone: ${clientContext?.timeZone || 'UTC'}
       
-      Your goal is to help the user manage their calendar.
+      Your goal is to help the user manage their calendar intelligently and boost productivity.
       
-      Existing Future Events:
+      EXISTING EVENTS:
       ${eventsContext}
       
-      Analyze the user's request and return a JSON object with the following structure:
+      RULES:
+      1. AI CONFLICT DETECTION: Before suggesting a time, check EXISTING EVENTS. 
+      2. If a suggested time conflicts (fully or partially) with an existing event:
+         - Mention the conflict specifically in your "response".
+         - If possible, suggest an alternative time that is free.
+         - Alternatively, if the new event is more important (or the user sounds determined), offer to MOVE the existing event.
+      3. IRREGULAR RECURRENCE: If the user wants a routine that happens at DIFFERENT TIMES on DIFFERENT DAYS (e.g., Gym Mon 5pm, Tue 6pm), you must suggest MULTIPLE "create_event" operations, each with its own recurrence rule.
+      4. TODO LISTS: 
+         - To create a new list: use "create_todo_list" with "name".
+         - To add to a list: use "add_todo_to_list" with "text" and "listId" or "listName".
+      5. ALARMS: To set an alarm: use "create_alarm" with "title" and "time" (ISO string or HH:mm).
+      6. POMODORO: To control timer: use "start_pomodoro" or "stop_pomodoro".
+      7. RESPONSE FORMAT: Return a JSON object with this structure:
       {
-        "response": "Natural language response to the user",
-        "actionRequired": boolean (true if the user wants to create/update an event),
-        "suggestedEvent": {
-          "title": "Event Title",
-          "start": "ISO String",
-          "end": "ISO String",
-          "description": "Description"
-        } (only if actionRequired is true),
-        "intent": "scheduling" | "query" | "general"
+        "response": "Natural language response explaining your reasoning, conflicts found, and suggestions.",
+        "actionRequired": boolean,
+        "operations": [
+          { "type": "create_event", "event": { ... } },
+          { "type": "move_event", "eventId": "ID", "newStart": "ISO", "newEnd": "ISO" },
+          { "type": "create_todo_list", "name": "String" },
+          { "type": "add_todo_to_list", "text": "String", "listName": "String" },
+          { "type": "create_alarm", "title": "String", "time": "String" },
+          { "type": "start_pomodoro" },
+          { "type": "stop_pomodoro" }
+        ],
+        "intent": "scheduling" | "query" | "general" | "task_management" | "timer_control"
       }
       
-      If there is a conflict, mention it in the "response" but still suggest the event if explicitly asked.
-      If the user asks a general question, just answer it in "response".
-      IMPORTANT: Return ONLY the JSON object, no markdown formatting.
+      IMPORTANT: Return ONLY the JSON object, NO markdown formatting.
     `;
 
     const result = await model.generateContent([
@@ -83,33 +103,64 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
     ]);
 
     const responseText = result.response.text();
-    // Clean up markdown code blocks if present
     const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const aiResult = JSON.parse(cleanJson);
 
-    // If action required, we construct the event data for the frontend to confirm
-    let eventData = null;
-    if (aiResult.actionRequired && aiResult.suggestedEvent) {
-      eventData = {
-        title: aiResult.suggestedEvent.title,
-        start_date: admin.firestore.Timestamp.fromDate(new Date(aiResult.suggestedEvent.start)),
-        end_date: admin.firestore.Timestamp.fromDate(new Date(aiResult.suggestedEvent.end)),
-        description: aiResult.suggestedEvent.description || `Created by Mally AI`,
-        userId: userId,
-        created_at: admin.firestore.Timestamp.now()
-      };
-    }
+    // Construct final response data
+    const finalActions = (aiResult.operations || []).map(op => {
+      if (op.type === 'create_event') {
+        const event = op.event;
+        return {
+          type: 'create_event',
+          data: {
+            title: event.title,
+            start: event.start,
+            end: event.end,
+            description: event.description || `Created by Mally AI`,
+            isRecurring: event.isRecurring || false,
+            recurrenceRule: event.recurrenceRule || null,
+            _originalMessage: message // Pass for localized parsing in frontend if needed
+          }
+        };
+      } else if (op.type === 'move_event' || op.type === 'update_event') {
+        return {
+          type: 'update_event',
+          data: {
+            eventId: op.eventId,
+            start: op.newStart || op.start,
+            end: op.newEnd || op.end,
+            title: op.title // Optional: AI might rename it too
+          }
+        };
+      } else if (op.type === 'create_todo_list') {
+        return {
+          type: 'create_todo_list',
+          data: { name: op.name }
+        };
+      } else if (op.type === 'add_todo_to_list') {
+        return {
+          type: 'create_todo',
+          data: { text: op.text, listName: op.listName }
+        };
+      } else if (op.type === 'create_alarm') {
+        return {
+          type: 'create_alarm',
+          data: { title: op.title, time: op.time }
+        };
+      } else if (op.type === 'start_pomodoro') {
+        return { type: 'start_pomodoro', data: {} };
+      } else if (op.type === 'stop_pomodoro') {
+        return { type: 'stop_pomodoro', data: {} };
+      }
+      return op;
+    });
 
     return {
       success: true,
       response: aiResult.response,
       actionRequired: aiResult.actionRequired,
-      suggestedEvent: aiResult.suggestedEvent ? {
-        ...aiResult.suggestedEvent,
-        startFormatted: new Date(aiResult.suggestedEvent.start).toLocaleString(),
-        endFormatted: new Date(aiResult.suggestedEvent.end).toLocaleTimeString()
-      } : null,
-      eventData: eventData
+      actions: finalActions,
+      intent: aiResult.intent
     };
 
   } catch (error) {

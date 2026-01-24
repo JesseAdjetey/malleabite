@@ -76,7 +76,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isMuted, setIsMuted] = useState(true); // Voice OFF by default - user can enable
+  const [isMuted, setIsMuted] = useState(false); // Voice ON by default - improved user experience
   const [mediaRecorder, setMediaRecorder] = useState<any>(null); // SpeechRecognition instance
   const [isWaitingForVoice, setIsWaitingForVoice] = useState(false); // Track if waiting for user voice input (Siri-style)
   const [uploadedImage, setUploadedImage] = useState<{
@@ -96,7 +96,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
   const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo, alarms } = useAlarms();
   const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
-  
+
   // Get pause/resume functions for wake word coordination
   const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
 
@@ -108,10 +108,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   }, []);
 
   // Ref to hold the latest toggleRecording function
-  const toggleRecordingRef = useRef<() => void>(() => {});
-  
+  const toggleRecordingRef = useRef<() => void>(() => { });
+
   // Ref to hold the latest handleSendMessage function for auto-submit
-  const handleSendMessageRef = useRef<(text: string) => void>(() => {});
+  const handleSendMessageRef = useRef<(text: string) => void>(() => { });
 
   // Handle image file upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,7 +165,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     const handleHeyMallyActivation = (event: Event) => {
       console.log('🎤 Hey Mally event received in MallyAI component!');
       logger.info('MallyAI', 'Hey Mally activation received');
-      
+
       // IMMEDIATE visual feedback - add a message to show Mally heard you
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
@@ -173,18 +173,22 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         sender: 'ai',
         timestamp: new Date(),
       }]);
-      
+
       // Open the assistant if not already open
       setIsOpen(true);
       setIsWaitingForVoice(true);
-      
+
+      // AUTO-UNMUTE on voice activation
+      setIsMuted(false);
+      console.log('🔊 Auto-unmoting for voice interaction');
+
       // Play activation chime (immediate audio feedback like Siri)
       try {
         playActivationChimeImmediate();
       } catch (e) {
         console.log('Chime failed:', e);
       }
-      
+
       // Speak quick acknowledgment after chime
       setTimeout(() => {
         try {
@@ -193,7 +197,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           console.log('Acknowledgment failed:', e);
         }
       }, 250);
-      
+
       // Start recording after acknowledgment
       setTimeout(() => {
         console.log('🎤 Starting voice recording...');
@@ -207,61 +211,61 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
     console.log('🎤 Setting up Hey Mally event listener');
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
-    
+
     return () => {
       window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
     };
   }, []);
-  
+
   // Siri-style activation chime - IMMEDIATE version for event handler
   const playActivationChimeImmediate = () => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
+
       // Two-tone chime like Siri (rising pitch)
       oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
       oscillator.frequency.setValueAtTime(1047, audioContext.currentTime + 0.1); // C6
-      
+
       gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
-      
+
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.25);
-      
+
       console.log('🔔 Activation chime played');
     } catch (e) {
       console.log('Could not play activation chime:', e);
     }
   };
-  
+
   // Quick voice acknowledgment - IMMEDIATE version for event handler
   const speakQuickAcknowledgmentImmediate = () => {
     if (!window.speechSynthesis) {
       console.log('Speech synthesis not available');
       return;
     }
-    
+
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
-    
+
     const acknowledgments = ["Yes?", "Mm-hmm?", "I'm here", "What's up?"];
     const ack = acknowledgments[Math.floor(Math.random() * acknowledgments.length)];
-    
+
     const utterance = new SpeechSynthesisUtterance(ack);
     utterance.rate = 1.2; // Quick but clear
     utterance.pitch = 1.05;
     utterance.volume = 0.9;
     utterance.lang = navigator.language || 'en-US';
-    
+
     window.speechSynthesis.speak(utterance);
     console.log('🗣️ Spoke acknowledgment:', ack);
   };
-  
+
   // Legacy functions (keep for compatibility)
   const playActivationChime = playActivationChimeImmediate;
   const speakQuickAcknowledgment = speakQuickAcknowledgmentImmediate;
@@ -271,8 +275,8 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     if (!user || !action) return false;
 
     const { type, data } = action;
-    logger.info('MallyAI', 'Executing action', { 
-      type, 
+    logger.info('MallyAI', 'Executing action', {
+      type,
       data,
       hasRecurring: data?.isRecurring,
       recurrenceRule: data?.recurrenceRule
@@ -283,23 +287,23 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         case 'create_event': {
           const startsAt = new Date(data.startsAt || data.start);
           const endsAt = new Date(data.endsAt || data.end);
-          
+
           // Check for recurring properties
           const isRecurring = data.isRecurring === true;
           let recurrenceRule = data.recurrenceRule;
-          
+
           // Parse natural language frequency patterns if recurrence rule exists
           if (isRecurring && recurrenceRule) {
             // Handle weekday pattern (Mon-Fri)
-            if (recurrenceRule.frequency === 'weekly' && 
-                (!recurrenceRule.daysOfWeek || recurrenceRule.daysOfWeek.length === 0)) {
+            if (recurrenceRule.frequency === 'weekly' &&
+              (!recurrenceRule.daysOfWeek || recurrenceRule.daysOfWeek.length === 0)) {
               // Check if user asked for weekdays
               const messageText = (data._originalMessage || '').toLowerCase();
-              if (messageText.includes('weekday') || 
-                  messageText.includes('monday to friday') ||
-                  messageText.includes('mon-fri') ||
-                  messageText.includes('mon - fri') ||
-                  messageText.includes('every weekday')) {
+              if (messageText.includes('weekday') ||
+                messageText.includes('monday to friday') ||
+                messageText.includes('mon-fri') ||
+                messageText.includes('mon - fri') ||
+                messageText.includes('every weekday')) {
                 // Set daysOfWeek to Mon-Fri (1-5)
                 recurrenceRule = {
                   ...recurrenceRule,
@@ -308,19 +312,19 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
                 logger.info('MallyAI', 'Setting weekday pattern for recurring event', { daysOfWeek: [1, 2, 3, 4, 5] });
               }
             }
-            
+
             // Ensure daysOfWeek is an array of numbers
             if (recurrenceRule.daysOfWeek && typeof recurrenceRule.daysOfWeek === 'string') {
               recurrenceRule.daysOfWeek = recurrenceRule.daysOfWeek.split(',').map((d: string) => parseInt(d.trim(), 10));
             }
           }
-          
+
           logger.info('MallyAI', 'Creating event with recurring settings', {
             isRecurring,
             recurrenceRule,
             title: data.title
           });
-          
+
           // Build the event with recurring properties if present
           const newEvent: CalendarEventType = {
             id: crypto.randomUUID(),
@@ -342,12 +346,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               count: recurrenceRule.count,
             } : undefined,
           };
-          
-          logger.info('MallyAI', 'Final event object', { 
+
+          logger.info('MallyAI', 'Final event object', {
             newEvent,
             hasRecurrenceRule: !!newEvent.recurrenceRule
           });
-          
+
           const result = await addEvent(newEvent);
           if (result.success) {
             const recurringText = newEvent.isRecurring ? ' (recurring)' : '';
@@ -406,14 +410,14 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           // Check if a listId was provided for adding to a specific list
           const result = await addTodo(data.text, data.listId);
           if (result.success) {
-            const listInfo = data.listId && lists ? 
+            const listInfo = data.listId && lists ?
               ` to "${lists.find(l => l.id === data.listId)?.name || 'list'}"` : '';
             toast.success(`Todo "${data.text}" added${listInfo}!`);
             return true;
           }
           return false;
         }
-        
+
         case 'create_todo_list': {
           if (!data.name) {
             toast.error('No list name provided');
@@ -605,10 +609,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
     const processedText = processTextForSpeech(text);
     const utterance = new SpeechSynthesisUtterance(processedText);
-    
+
     // Get available voices
     const voices = window.speechSynthesis.getVoices();
-    
+
     // Priority order for most natural, fluent English voices
     // These are ranked by quality and naturalness
     const preferredVoiceNames = [
@@ -636,16 +640,16 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       'Fiona',
       'Veena'
     ];
-    
+
     // Find the best available voice
     let selectedVoice: SpeechSynthesisVoice | null = null;
-    
+
     // First try exact match for preferred voices
     for (const name of preferredVoiceNames) {
       selectedVoice = voices.find(v => v.name === name) || null;
       if (selectedVoice) break;
     }
-    
+
     // Then try partial match for preferred voices
     if (!selectedVoice) {
       for (const name of preferredVoiceNames) {
@@ -653,32 +657,32 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         if (selectedVoice) break;
       }
     }
-    
+
     // Fallback: find any high-quality English voice (prefer Female for assistant)
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => 
-        v.lang.startsWith('en-') && 
+      selectedVoice = voices.find(v =>
+        v.lang.startsWith('en-') &&
         v.localService === false && // Cloud/neural voices are usually non-local
-        (v.name.toLowerCase().includes('female') || 
-         v.name.toLowerCase().includes('natural') ||
-         v.name.toLowerCase().includes('neural'))
+        (v.name.toLowerCase().includes('female') ||
+          v.name.toLowerCase().includes('natural') ||
+          v.name.toLowerCase().includes('neural'))
       ) || null;
     }
-    
+
     // Fallback: any Google or Microsoft English voice
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => 
-        v.lang.startsWith('en-') && 
+      selectedVoice = voices.find(v =>
+        v.lang.startsWith('en-') &&
         (v.name.includes('Google') || v.name.includes('Microsoft'))
       ) || null;
     }
-    
+
     // Last resort: any English voice, preferring US/UK
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en-GB') || 
-                      voices.find(v => v.lang.startsWith('en-')) || null;
+      selectedVoice = voices.find(v => v.lang === 'en-US' || v.lang === 'en-GB') ||
+        voices.find(v => v.lang.startsWith('en-')) || null;
     }
-    
+
     if (selectedVoice) {
       utterance.voice = selectedVoice;
       console.log('Using voice:', selectedVoice.name, selectedVoice.lang);
@@ -693,13 +697,13 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     utterance.onstart = () => {
       console.log('Speech started');
     };
-    
+
     utterance.onend = () => {
       console.log('Speech ended');
       // Siri-style: don't auto-restart recording
       // User needs to say "Hey Mally" again or click mic button
     };
-    
+
     utterance.onerror = (event) => {
       console.error('Speech error:', event.error);
     };
@@ -712,10 +716,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     const loadVoices = () => {
       window.speechSynthesis?.getVoices();
     };
-    
+
     loadVoices();
     window.speechSynthesis?.addEventListener('voiceschanged', loadVoices);
-    
+
     return () => {
       window.speechSynthesis?.removeEventListener('voiceschanged', loadVoices);
     };
@@ -770,12 +774,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     } else {
       // Pause wake word detection while we use speech recognition
       pauseWakeWord();
-      
+
       // Start speech recognition using Web Speech API
       try {
         // Check if browser supports speech recognition
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        
+
         if (!SpeechRecognition) {
           toast.error("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
           resumeWakeWord(); // Resume on error
@@ -800,12 +804,12 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         recognition.onresult = (event: any) => {
           let interimTranscript = '';
           hasReceivedSpeech = true;
-          
+
           // Clear any existing silence timeout
           if (silenceTimeout) {
             clearTimeout(silenceTimeout);
           }
-          
+
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
@@ -814,10 +818,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               interimTranscript += transcript;
             }
           }
-          
+
           // Show interim results in input for visual feedback
           setInputText(finalTranscript + interimTranscript);
-          
+
           // Smart silence detection: if user stops speaking for 1.5 seconds, auto-submit
           silenceTimeout = setTimeout(() => {
             if (finalTranscript.trim() || interimTranscript.trim()) {
@@ -834,18 +838,18 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           setIsRecording(false);
           setMediaRecorder(null);
           setIsWaitingForVoice(false);
-          
+
           // Clear silence timeout
           if (silenceTimeout) {
             clearTimeout(silenceTimeout);
           }
-          
+
           // Resume wake word detection
           resumeWakeWord();
-          
+
           // Clear input field
           setInputText('');
-          
+
           if (finalTranscript.trim()) {
             logger.info('MallyAI', 'Speech recognition complete', { transcript: finalTranscript });
             // Auto-submit the captured speech for smooth conversation flow
@@ -862,36 +866,36 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         recognition.onerror = (event: any) => {
           setIsRecording(false);
           setMediaRecorder(null);
-          
+
           // Resume wake word detection on error
           resumeWakeWord();
-          
+
           // Handle expected/non-critical errors gracefully
           if (event.error === 'aborted') {
             // User or system stopped recognition, no need to log or show error
             return;
           }
-          
+
           if (event.error === 'no-speech') {
             toast.info("No speech detected. Try again.");
             return;
           }
-          
+
           if (event.error === 'not-allowed') {
             logger.warn('MallyAI', 'Microphone access denied');
             toast.error("Microphone access denied. Please allow microphone access.");
             return;
           }
-          
+
           // Log only unexpected errors
-          logger.error('MallyAI', 'Speech recognition error', { error: event.error });
+          logger.error('MallyAI', 'Speech recognition error', new Error(event.error));
           toast.error(`Speech recognition error: ${event.error}`);
         };
 
         // Store recognition instance for stopping
         setMediaRecorder(recognition as any);
         recognition.start();
-        
+
       } catch (error) {
         logger.error('MallyAI', 'Failed to start speech recognition', error as Error);
         toast.error("Failed to start speech recognition");
@@ -918,10 +922,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
     }
 
     // Add user message with optional image
-    addMessage({ 
-      text: textToSend, 
+    addMessage({
+      text: textToSend,
       sender: "user",
-      image: imageData || undefined 
+      image: imageData || undefined
     });
 
     // Add loading AI message
@@ -935,15 +939,15 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
     // Check if this is a simple confirmation and we have a pending action
     const confirmationWords = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'alright', 'confirm', 'do it', 'go ahead', 'please', 'sounds good', 'perfect', 'great', 'create it', 'make it', 'add it'];
-    const isSimpleConfirmation = confirmationWords.some(word => 
-      textToSend.toLowerCase().trim() === word || 
+    const isSimpleConfirmation = confirmationWords.some(word =>
+      textToSend.toLowerCase().trim() === word ||
       textToSend.toLowerCase().trim() === word + '!'
     );
 
     // If user confirms and we have a pending action, execute it directly
     if (isSimpleConfirmation && pendingAction) {
       logger.info('MallyAI', 'User confirmed pending action', { pendingAction });
-      
+
       const loadingMessageId = addMessage({
         text: pendingAction.type === 'batch' ? "Creating your events..." : "Creating your event...",
         sender: "ai",
@@ -953,13 +957,13 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       try {
         let actionExecuted = false;
         let successMessage = "Done!";
-        
+
         // Handle batch actions (multiple events at once)
         if (pendingAction.type === 'batch' && pendingAction.actions) {
           logger.info('MallyAI', 'Executing batch of confirmed actions', { count: pendingAction.actions.length });
           let successCount = 0;
           const eventTitles: string[] = [];
-          
+
           for (const singleAction of pendingAction.actions) {
             const success = await executeAction(singleAction);
             if (success) {
@@ -969,7 +973,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               }
             }
           }
-          
+
           actionExecuted = successCount > 0;
           if (eventTitles.length > 0) {
             successMessage = `Done! I've created ${successCount} events: ${eventTitles.join(', ')}. You're all set!`;
@@ -979,11 +983,11 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         } else {
           // Handle single action (original logic)
           actionExecuted = await executeAction(pendingAction);
-        
+
           if (actionExecuted) {
             const actionType = pendingAction.type;
             const actionData = pendingAction.data;
-          
+
             switch (actionType) {
               case 'create_event': {
                 const isRecurring = actionData.isRecurring;
@@ -1017,8 +1021,8 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
                 successMessage = `Removed item from priority matrix.`;
                 break;
               case 'create_alarm': {
-                const linkedText = actionData.linkedEventId ? ' (linked to event)' : 
-                                  actionData.linkedTodoId ? ' (linked to todo)' : '';
+                const linkedText = actionData.linkedEventId ? ' (linked to event)' :
+                  actionData.linkedTodoId ? ' (linked to todo)' : '';
                 successMessage = `Alarm '${actionData.title}' created${linkedText}!`;
                 break;
               }
@@ -1042,7 +1046,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             }
           }
         }
-        
+
         if (actionExecuted) {
           updateMessage(loadingMessageId, {
             text: successMessage,
@@ -1134,11 +1138,11 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       // NEW: Handle multiple actions array (for creating multiple events at once)
       if (response.success && actions && Array.isArray(actions) && actions.length > 0) {
         logger.info('MallyAI', 'Executing multiple actions', { count: actions.length, intent });
-        
+
         // For multiple event creation, we might want user confirmation first
         const isConfirmation = intent === 'confirmation';
         const isMultipleEvents = intent === 'create_multiple_events';
-        
+
         if (isConfirmation || isMultipleEvents) {
           // Execute all actions in sequence
           let successCount = 0;
@@ -1161,7 +1165,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         // Handle single action (original logic)
         // Check if this is a confirmation (user said yes to a previous suggestion)
         const isConfirmation = intent === 'confirmation';
-        
+
         // Actions that should execute immediately without additional confirmation:
         // - Delete/update actions (AI already confirmed intent)
         // - Completion actions
@@ -1169,8 +1173,8 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         // - Alarm creation (when clearly requested)
         const isDirectAction = [
           'delete_event', 'update_event',
-          'create_todo', 'complete_todo', 'delete_todo', 
-          'create_eisenhower', 'update_eisenhower', 'delete_eisenhower', 
+          'create_todo', 'complete_todo', 'delete_todo',
+          'create_eisenhower', 'update_eisenhower', 'delete_eisenhower',
           'create_alarm', 'update_alarm', 'delete_alarm', 'link_alarm'
         ].includes(action.type);
 
@@ -1190,7 +1194,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         // Legacy: Handle old eventData format for backward compatibility
         const operation = response.operations[0];
         const eventData = operation.data;
-        
+
         if (intent === 'confirmation' && eventData) {
           logger.info('MallyAI', 'Legacy: User confirmed event creation', { eventData });
           const legacyAction = { type: 'create_event', data: eventData };
@@ -1224,9 +1228,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
       logger.error('MallyAI', 'Firebase AI Error', error as Error);
 
       // Check if it's an authentication error
-      const is401Error = error?.code === 'unauthenticated' || 
-                         error?.message?.includes('must be authenticated') ||
-                         error?.message?.includes('401');
+      const is401Error = error?.code === 'unauthenticated' ||
+        error?.message?.includes('must be authenticated') ||
+        error?.message?.includes('401');
 
       const errorMessage = is401Error
         ? "🔄 AI functions are still being deployed to Firebase. In the meantime, I'm working in development mode with limited capabilities. You can still create events manually using the calendar interface, and I'll be fully functional once the deployment completes!"
@@ -1273,10 +1277,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             >
               <div
                 className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
-                    ? "bg-purple-600 text-white"
-                    : message.isError
-                      ? "bg-red-900 text-red-100 border border-red-700"
-                      : "bg-purple-900/50 text-white border border-purple-700/50"
+                  ? "bg-purple-600 text-white"
+                  : message.isError
+                    ? "bg-red-900 text-red-100 border border-red-700"
+                    : "bg-purple-900/50 text-white border border-purple-700/50"
                   }`}
               >
                 <div className="flex items-center space-x-2">
@@ -1335,8 +1339,8 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               onClick={toggleRecording}
               disabled={isLoading}
               className={`p-3 rounded-lg transition-colors ${isRecording
-                  ? "bg-red-500 text-white animate-pulse"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                ? "bg-red-500 text-white animate-pulse"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                 }`}
               title={isRecording ? "Stop recording" : "Start voice recording"}
             >
@@ -1403,10 +1407,10 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           >
             <div
               className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
-                  ? "bg-purple-600 text-white"
-                  : message.isError
-                    ? "bg-red-900 text-red-100 border border-red-700"
-                    : "bg-purple-900/50 text-white border border-purple-700/50"
+                ? "bg-purple-600 text-white"
+                : message.isError
+                  ? "bg-red-900 text-red-100 border border-red-700"
+                  : "bg-purple-900/50 text-white border border-purple-700/50"
                 }`}
             >
               {message.image && (
@@ -1509,8 +1513,8 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             onClick={toggleRecording}
             disabled={isLoading}
             className={`p-3 rounded-lg transition-colors ${isRecording
-                ? "bg-red-500 text-white animate-pulse"
-                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+              ? "bg-red-500 text-white animate-pulse"
+              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
               }`}
             title={isRecording ? "Stop recording" : "Start voice recording"}
           >

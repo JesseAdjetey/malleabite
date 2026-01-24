@@ -89,6 +89,7 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
           { "type": "create_todo_list", "name": "String" },
           { "type": "add_todo_to_list", "text": "String", "listName": "String" },
           { "type": "create_alarm", "title": "String", "time": "String" },
+          { "type": "archive_calendar", "folderName": "String" },
           { "type": "start_pomodoro" },
           { "type": "stop_pomodoro" }
         ],
@@ -148,6 +149,8 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
           type: 'create_alarm',
           data: { title: op.title, time: op.time }
         };
+      } else if (op.type === 'archive_calendar') {
+        return { type: 'archive_calendar', data: { folderName: op.folderName || 'Archived Calendar' } };
       } else if (op.type === 'start_pomodoro') {
         return { type: 'start_pomodoro', data: {} };
       } else if (op.type === 'stop_pomodoro') {

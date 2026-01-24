@@ -6,6 +6,7 @@ import InvitesModule from '../modules/InvitesModule';
 import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
+import ArchivesModule from '../modules/ArchivesModule';
 
 interface ModuleRendererProps {
   module: ModuleInstance;
@@ -17,10 +18,10 @@ interface ModuleRendererProps {
   isDragging?: boolean;
 }
 
-const ModuleRenderer: React.FC<ModuleRendererProps> = ({ 
-  module, 
-  index, 
-  moduleWidth, 
+const ModuleRenderer: React.FC<ModuleRendererProps> = ({
+  module,
+  index,
+  moduleWidth,
   onRemove,
   onTitleChange,
   onToggleMinimize,
@@ -31,7 +32,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     width: `${moduleWidth}px`,
     maxWidth: '100%'
   };
-  
+
   // Add common props to each module type
   const moduleProps = {
     title: module.title,
@@ -42,9 +43,9 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     isDragging: isDragging,
     listId: module.listId
   };
-  
+
   const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;
-  
+
   switch (module.type) {
     case 'todo':
       return (
@@ -74,6 +75,12 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
           <InvitesModule {...moduleProps} />
+        </div>
+      );
+    case 'archives':
+      return (
+        <div key={index} style={moduleStyle} className={moduleClassName}>
+          <ArchivesModule {...moduleProps} />
         </div>
       );
     default:

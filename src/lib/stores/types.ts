@@ -1,5 +1,5 @@
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites' | 'archives';
 
 export interface ModuleInstance {
   type: ModuleType;
@@ -31,57 +31,61 @@ export type CalendarEventType = {
   participants?: string[];
   color?: string;
   todoId?: string; // Reference to the original todo item
-  
+
   // Updated fields to match the database schema
   startsAt: string; // ISO string format
   endsAt: string; // ISO string format
-  
+
   // Optional date field for backward compatibility
   date?: string; // Derived from startsAt for backward compatibility
-  
+
   // Additional fields for UI display
   timeStart?: string; // Derived from startsAt
   timeEnd?: string; // Derived from endsAt
-  
+
   // Recurring event fields
   isRecurring?: boolean;
   recurrenceRule?: RecurrenceRule;
   recurrenceParentId?: string; // For instances of recurring events
   recurrenceExceptions?: string[]; // ISO dates to skip
-  
+
   // NEW: Google Calendar-style fields
   calendarId?: string; // Which calendar this event belongs to
   isAllDay?: boolean; // All-day event flag
   location?: string; // Event location (address, room, etc.)
   meetingUrl?: string; // Video conferencing URL (Zoom, Meet, Teams)
   meetingProvider?: 'zoom' | 'google_meet' | 'teams' | 'other';
-  
+
   // Time zone support
   timeZone?: string; // IANA time zone (e.g., 'America/New_York')
-  
+
   // Status and visibility
   status?: 'confirmed' | 'tentative' | 'cancelled';
   visibility?: 'public' | 'private' | 'confidential';
-  
+
   // Guest/attendee management
   attendees?: EventAttendee[];
   guestsCanModify?: boolean;
   guestsCanInviteOthers?: boolean;
   guestsCanSeeOtherGuests?: boolean;
-  
+
   // Reminder settings per event
   reminders?: EventReminder[];
   useDefaultReminders?: boolean;
-  
+
   // Event metadata
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
   etag?: string; // For sync conflict detection
-  
+
   // Focus time / Out of office
   eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
   focusTimeDeclineMessage?: string;
+
+  // Archiving support
+  isArchived?: boolean;
+  folderName?: string;
 };
 
 // Event attendee type

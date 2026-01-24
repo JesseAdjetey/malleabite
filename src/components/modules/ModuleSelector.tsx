@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'eisenhower' | 'invites';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'eisenhower' | 'invites' | 'archives';
 
 interface ModuleSelectorProps {
   onSelect: (moduleType: ModuleType) => void;
@@ -68,6 +68,12 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Event Invites
+        </button>
+        <button
+          onClick={() => handleSelect('archives')}
+          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-purple-500/30"
+        >
+          Archives
         </button>
       </div>
     </div>

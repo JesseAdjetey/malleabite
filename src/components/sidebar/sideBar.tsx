@@ -41,7 +41,7 @@ const SideBar = () => {
 
   const handleAddModule = (moduleType: ModuleType) => {
     if (!activePageId) return;
-    
+
     let defaultTitle = '';
     switch (moduleType) {
       case 'todo': defaultTitle = 'To-Do List'; break;
@@ -49,8 +49,9 @@ const SideBar = () => {
       case 'alarms': defaultTitle = 'Reminders'; break;
       case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
       case 'invites': defaultTitle = 'Event Invites'; break;
+      case 'archives': defaultTitle = 'Calendar Archives'; break;
     }
-    
+
     addModule(activePageId, { type: moduleType, title: defaultTitle });
   };
 

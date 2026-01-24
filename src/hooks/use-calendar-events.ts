@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   Timestamp,
   getDocs,
-  getDoc
+  getDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
@@ -58,12 +59,20 @@ const cleanRecurrenceRule = (rule: Record<string, any>): Record<string, any> | n
   return Object.keys(cleaned).length > 0 ? cleaned : null;
 };
 
+export interface ArchivedFolder {
+  name: string;
+  count: number;
+  lastUpdatedAt?: string;
+}
+
 export function useCalendarEvents() {
   const [events, setEvents] = useState<CalendarEventType[]>([]);
+  const [archivedFolders, setArchivedFolders] = useState<ArchivedFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const archivedUnsubscribeRef = useRef<(() => void) | null>(null);
 
   // Helper function to format timestring from event descriptions
   const extractTimeString = (description: string): string => {
@@ -118,6 +127,10 @@ export function useCalendarEvents() {
 
       // Event type
       eventType: data.eventType || 'default',
+
+      // Archiving support
+      isArchived: data.isArchived || false,
+      folderName: data.folderName || undefined,
     };
   };
 
@@ -137,6 +150,7 @@ export function useCalendarEvents() {
       const eventsQuery = query(
         collection(db, 'calendar_events'),
         where('userId', '==', user.uid),
+        where('isArchived', '==', false),
         orderBy('startsAt', 'asc')
       );
 
@@ -169,6 +183,7 @@ export function useCalendarEvents() {
     const eventsQuery = query(
       collection(db, 'calendar_events'),
       where('userId', '==', user.uid),
+      where('isArchived', '==', false),
       orderBy('startsAt', 'asc')
     );
 
@@ -185,10 +200,49 @@ export function useCalendarEvents() {
 
     unsubscribeRef.current = unsubscribe;
 
+    // Archived folders listener
+    if (archivedUnsubscribeRef.current) {
+      archivedUnsubscribeRef.current();
+    }
+
+    const archivedQuery = query(
+      collection(db, 'calendar_events'),
+      where('userId', '==', user.uid),
+      where('isArchived', '==', true)
+    );
+
+    const archivedUnsubscribe = onSnapshot(archivedQuery, (snapshot) => {
+      const foldersMap = new Map<string, ArchivedFolder>();
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const name = data.folderName || 'Uncategorized';
+        const updatedAt = data.updatedAt?.toDate?.()?.toISOString();
+
+        if (foldersMap.has(name)) {
+          const folder = foldersMap.get(name)!;
+          folder.count++;
+          if (updatedAt && (!folder.lastUpdatedAt || updatedAt > folder.lastUpdatedAt)) {
+            folder.lastUpdatedAt = updatedAt;
+          }
+        } else {
+          foldersMap.set(name, { name, count: 1, lastUpdatedAt: updatedAt });
+        }
+      });
+
+      setArchivedFolders(Array.from(foldersMap.values()));
+    });
+
+    archivedUnsubscribeRef.current = archivedUnsubscribe;
+
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
+      }
+      if (archivedUnsubscribeRef.current) {
+        archivedUnsubscribeRef.current();
+        archivedUnsubscribeRef.current = null;
       }
     };
   }, [user?.uid]);
@@ -293,6 +347,9 @@ export function useCalendarEvents() {
 
         // Event type
         eventType: event.eventType || 'default',
+
+        // Archiving
+        isArchived: false,
       };
 
       await addDoc(collection(db, 'calendar_events'), newEvent);
@@ -387,6 +444,10 @@ export function useCalendarEvents() {
 
         // Event type
         eventType: event.eventType || 'default',
+
+        // Ensure archiving fields are preserved or set
+        isArchived: event.isArchived ?? false,
+        folderName: event.folderName ?? null,
       };
 
       await updateDoc(doc(db, 'calendar_events', event.id), updatedEvent);
@@ -462,19 +523,130 @@ export function useCalendarEvents() {
 
     try {
       await updateDoc(doc(db, 'calendar_events', eventId), {
-        is_locked: isLocked
+        isLocked: isLocked
       });
       toast.success(isLocked ? 'Event locked' : 'Event unlocked');
       return { success: true };
     } catch (error) {
       console.error('Error toggling event lock:', error);
-      toast.error('Failed to update event');
+      toast.error('Failed to update event status');
+      return { success: false, error };
+    }
+  };
+
+  // Archive all visible events into a folder
+  const archiveAllEvents = async (folderName: string): Promise<SupabaseActionResponse> => {
+    if (!user?.uid) {
+      toast.error('User not authenticated');
+      return { success: false };
+    }
+
+    try {
+      setLoading(true);
+      const batch = writeBatch(db);
+      let count = 0;
+
+      // Archive each currently loaded event
+      events.forEach((event) => {
+        if (!event.isArchived) {
+          const docRef = doc(db, 'calendar_events', event.id);
+          batch.update(docRef, {
+            isArchived: true,
+            folderName: folderName,
+            updatedAt: serverTimestamp()
+          });
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+        toast.success(`Archived ${count} events into "${folderName}"`);
+      } else {
+        toast.info("No events to archive");
+      }
+
+      setLoading(false);
+      return { success: true };
+    } catch (error) {
+      console.error('Error archiving events:', error);
+      toast.error('Failed to archive events');
+      setLoading(false);
+      return { success: false, error };
+    }
+  };
+
+  // Restore all events from an archived folder
+  const restoreFolder = async (folderName: string): Promise<SupabaseActionResponse> => {
+    if (!user?.uid) return { success: false };
+
+    try {
+      setLoading(true);
+      const q = query(
+        collection(db, 'calendar_events'),
+        where('userId', '==', user.uid),
+        where('folderName', '==', folderName),
+        where('isArchived', '==', true)
+      );
+
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+
+      snapshot.forEach(d => {
+        batch.update(d.ref, {
+          isArchived: false,
+          folderName: null,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      await batch.commit();
+      toast.success(`Restored ${snapshot.size} events from "${folderName}"`);
+      setLoading(false);
+      return { success: true };
+    } catch (error) {
+      console.error('Error restoring folder:', error);
+      toast.error('Failed to restore archive');
+      setLoading(false);
+      return { success: false, error };
+    }
+  };
+
+  // Permanently delete all events in an archived folder
+  const deleteArchivedFolder = async (folderName: string): Promise<SupabaseActionResponse> => {
+    if (!user?.uid) return { success: false };
+
+    try {
+      setLoading(true);
+      const q = query(
+        collection(db, 'calendar_events'),
+        where('userId', '==', user.uid),
+        where('folderName', '==', folderName),
+        where('isArchived', '==', true)
+      );
+
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+
+      snapshot.forEach(d => {
+        batch.delete(d.ref);
+      });
+
+      await batch.commit();
+      toast.success(`Permanently deleted folder "${folderName}"`);
+      setLoading(false);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting folder:', error);
+      toast.error('Failed to delete archived folder');
+      setLoading(false);
       return { success: false, error };
     }
   };
 
   return {
     events,
+    archivedFolders,
     loading,
     error,
     fetchEvents,
@@ -482,6 +654,9 @@ export function useCalendarEvents() {
     updateEvent,
     removeEvent,
     toggleEventLock,
-    addRecurrenceException
+    addRecurrenceException,
+    archiveAllEvents,
+    restoreFolder,
+    deleteArchivedFolder
   };
 }

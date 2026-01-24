@@ -92,7 +92,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { user } = useAuth();
-  const { fetchEvents, addEvent, removeEvent, updateEvent, events } = useCalendarEvents();
+  const { fetchEvents, addEvent, removeEvent, updateEvent, events, archiveAllEvents } = useCalendarEvents();
   const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
   const { createList, lists } = useTodoLists();
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
@@ -372,6 +372,17 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           const result = await removeEvent(data.eventId);
           if (result.success) {
             toast.success('Event deleted!');
+            await fetchEvents();
+            return true;
+          }
+          return false;
+        }
+
+        case 'archive_calendar': {
+          const folderName = data.folderName || 'Archived Calendar';
+          const result = await archiveAllEvents(folderName);
+          if (result.success) {
+            toast.success(`Calendar archived into "${folderName}"`);
             await fetchEvents();
             return true;
           }
@@ -1042,6 +1053,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
                 break;
               case 'update_event':
                 successMessage = `Event updated!`;
+                break;
+              case 'archive_calendar':
+                successMessage = `I've successfully archived your calendar into "${actionData.folderName || 'Archived Calendar'}" and cleared your current view for a fresh start!`;
                 break;
               default:
                 successMessage = "Done!";

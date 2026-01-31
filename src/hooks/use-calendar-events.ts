@@ -310,8 +310,11 @@ export function useCalendarEvents() {
 
       console.log('Final startsAt:', startsAt, 'endsAt:', endsAt);
 
+      // Ensure title is not empty (Firestore rules require at least 1 character)
+      const eventTitle = (event.title || '').trim() || 'Untitled Event';
+
       const newEvent: Record<string, any> = {
-        title: event.title,
+        title: eventTitle,
         description: actualDescription,
         color: event.color || '#3b82f6',
         isLocked: event.isLocked || false,
@@ -352,7 +355,33 @@ export function useCalendarEvents() {
         isArchived: false,
       };
 
-      await addDoc(collection(db, 'calendar_events'), newEvent);
+      // OPTIMISTIC UPDATE: Add to local state immediately for instant UI feedback
+      const optimisticId = `temp_${Date.now()}`;
+      const optimisticEvent: CalendarEventType = {
+        id: optimisticId,
+        title: eventTitle,
+        description: actualDescription,
+        date: dayjs(startsAt).format('YYYY-MM-DD'),
+        color: newEvent.color,
+        isLocked: newEvent.isLocked,
+        isTodo: newEvent.isTodo,
+        hasAlarm: newEvent.hasAlarm,
+        hasReminder: newEvent.hasReminder,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        isRecurring: newEvent.isRecurring,
+        recurrenceRule: newEvent.recurrenceRule,
+      };
+
+      // Add to state immediately (optimistic)
+      setEvents(prev => [...prev, optimisticEvent]);
+
+      // Now write to Firestore
+      const docRef = await addDoc(collection(db, 'calendar_events'), newEvent);
+
+      // Update the optimistic event with the real ID (the listener will handle this,
+      // but we remove the temp one to prevent duplicates)
+      setEvents(prev => prev.filter(e => e.id !== optimisticId));
 
       // Increment usage count after successful creation
       if (incrementEventCountCallback) {
@@ -360,9 +389,11 @@ export function useCalendarEvents() {
       }
 
       toast.success('Event added successfully');
-      return { success: true };
+      return { success: true, data: { id: docRef.id } };
     } catch (error) {
       console.error('Error adding event:', error);
+      // Remove optimistic event on failure
+      setEvents(prev => prev.filter(e => !e.id.startsWith('temp_')));
       toast.error('Failed to add event');
       return { success: false, error };
     }

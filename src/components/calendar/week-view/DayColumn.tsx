@@ -33,7 +33,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
   toggleEventLock,
   isBulkMode = false,
   isSelected = () => false,
-  onToggleSelection = () => {},
+  onToggleSelection = () => { },
 }) => {
   const hourHeight = 80; // The height in pixels of each hour cell
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
@@ -56,18 +56,17 @@ const DayColumn: React.FC<DayColumnProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="relative border-r border-gray-200 dark:border-white/10"
       onDragLeave={handleDragLeave}
     >
       {getHours.map((hour, i) => (
         <div
           key={i}
-          className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${
-            dragOverHour === i 
-              ? 'bg-primary/20 dark:bg-primary/30 ring-2 ring-inset ring-primary/50 dark:ring-white/50 shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]' 
+          className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${dragOverHour === i
+              ? 'bg-primary/30 dark:bg-white/20 ring-2 ring-inset ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.5)] scale-[1.02]'
               : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
-          }`}
+            }`}
           onClick={() => onTimeSlotClick(currentDate, hour)}
           onDragOver={(e) => {
             onDragOver(e);
@@ -83,12 +82,12 @@ const DayColumn: React.FC<DayColumnProps> = ({
         const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
         const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
         const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
-        
+
         return (
-          <div 
-            key={event.id} 
+          <div
+            key={event.id}
             className="absolute inset-x-0.5 sm:inset-x-1 z-10"
-            style={{ 
+            style={{
               top: `${topPosition}px`,
               height: `${eventHeight}px`
             }}
@@ -124,9 +123,9 @@ const DayColumn: React.FC<DayColumnProps> = ({
       })}
 
       {/* Current Time indicator */}
-      <CurrentTimeIndicator 
-        currentTime={currentTime} 
-        isCurrentDay={isCurrentDay(currentDate)} 
+      <CurrentTimeIndicator
+        currentTime={currentTime}
+        isCurrentDay={isCurrentDay(currentDate)}
       />
     </div>
   );

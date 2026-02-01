@@ -233,7 +233,11 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
                     <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div>
                       <span className="text-sm font-medium text-muted-foreground">Participants</span>
-                      <p className="text-foreground">{selectedEvent.participants?.join(', ')}</p>
+                      <p className="text-foreground">
+                        {Array.isArray(selectedEvent.participants)
+                          ? selectedEvent.participants.join(', ')
+                          : String(selectedEvent.participants || '')}
+                      </p>
                     </div>
                   </div>
                 )}

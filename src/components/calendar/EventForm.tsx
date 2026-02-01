@@ -49,15 +49,15 @@ const EventForm: React.FC<EventFormProps> = ({
     if (initialTime) {
       // Start with time data - make sure we have the current initialTime
       console.log("Setting initialEvent with time:", initialTime.startTime);
-      
+
       try {
         const startDate = initialTime.date.toISOString().split("T")[0];
         const startHour = parseInt(initialTime.startTime.split(":")[0]);
         const startMinutes = parseInt(initialTime.startTime.split(":")[1] || "0");
-        
+
         const startTimeFormatted = `${startHour.toString().padStart(2, "0")}:${startMinutes.toString().padStart(2, "0")}`;
         const startsAt = new Date(`${startDate}T${startTimeFormatted}:00`);
-        
+
         const endHour = (startHour + 1) % 24;
         const endTime = `${endHour.toString().padStart(2, "0")}:${startMinutes.toString().padStart(2, "0")}`;
         const endsAt = new Date(`${startDate}T${endTime}:00`);
@@ -68,7 +68,8 @@ const EventForm: React.FC<EventFormProps> = ({
           description: `${startTimeFormatted} - ${endTime} | `,
           date: startDate,
           startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString()
+          endsAt: endsAt.toISOString(),
+          isLocked: false,
         };
 
         // If we have todo data, add it

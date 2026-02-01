@@ -1,15 +1,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  updateDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  doc,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -44,10 +44,10 @@ export interface ReminderFormData {
 }
 
 const REMINDER_SOUNDS = [
-  { id: 'default', name: 'Default', url: '/sounds/default-notification.mp3' },
-  { id: 'bell', name: 'Bell', url: '/sounds/bell-notification.mp3' },
-  { id: 'chime', name: 'Chime', url: '/sounds/chime-notification.mp3' },
-  { id: 'soft', name: 'Soft', url: '/sounds/soft-notification.mp3' },
+  { id: 'default', name: 'Default', url: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
+  { id: 'bell', name: 'Bell', url: 'https://actions.google.com/sounds/v1/alarms/mechanic_clock_ring.ogg' },
+  { id: 'chime', name: 'Chime', url: 'https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg' },
+  { id: 'soft', name: 'Soft', url: 'https://actions.google.com/sounds/v1/alarms/gentle_walk_alarm.ogg' },
 ];
 
 export function useReminders() {
@@ -62,10 +62,10 @@ export function useReminders() {
       setLoading(false);
       return;
     }
-    
+
     try {
       console.log('Setting up Firebase subscription for reminders for user:', user.uid);
-      
+
       const remindersQuery = query(
         collection(db, 'reminders'),
         where('userId', '==', user.uid),
@@ -92,7 +92,7 @@ export function useReminders() {
               userId: data.userId
             });
           });
-          
+
           console.log('Received reminders from Firebase:', remindersData);
           setReminders(remindersData);
           setLoading(false);
@@ -113,12 +113,12 @@ export function useReminders() {
   }, [user]);
 
   // Add a new reminder
-  const addReminder = async (data: ReminderFormData): Promise<{success: boolean, error?: any}> => {
+  const addReminder = async (data: ReminderFormData): Promise<{ success: boolean, error?: any }> => {
     if (!user) {
       toast.error('You must be logged in to create reminders');
       return { success: false };
     }
-    
+
     try {
       // Format the data for insertion - reminderTime must be a Firestore Timestamp
       const reminderTimeDate = data.reminderTime ? new Date(data.reminderTime) : new Date();
@@ -134,12 +134,12 @@ export function useReminders() {
         isActive: true,
         createdAt: serverTimestamp()
       };
-      
+
       const docRef = await addDoc(collection(db, 'reminders'), reminderData);
-      
+
       console.log('Reminder created with ID:', docRef.id);
       toast.success('Reminder created');
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('Error creating reminder:', error);
@@ -149,16 +149,16 @@ export function useReminders() {
   };
 
   // Update a reminder
-  const updateReminder = async (id: string, data: Partial<ReminderFormData>): Promise<{success: boolean, error?: any}> => {
+  const updateReminder = async (id: string, data: Partial<ReminderFormData>): Promise<{ success: boolean, error?: any }> => {
     if (!user) {
       toast.error('You must be logged in to update reminders');
       return { success: false };
     }
-    
+
     try {
       // Format the update data
       const updateData: Record<string, any> = {};
-      
+
       if (data.title !== undefined) updateData.title = data.title;
       if (data.description !== undefined) updateData.description = data.description;
       if (data.reminderTime !== undefined) {
@@ -168,12 +168,12 @@ export function useReminders() {
       if (data.timeBeforeMinutes !== undefined) updateData.timeBeforeMinutes = data.timeBeforeMinutes;
       if (data.timeAfterMinutes !== undefined) updateData.timeAfterMinutes = data.timeAfterMinutes;
       if (data.soundId !== undefined) updateData.soundId = data.soundId;
-      
+
       await updateDoc(doc(db, 'reminders', id), updateData);
-      
+
       console.log('Reminder updated:', id);
       toast.success('Reminder updated');
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('Error updating reminder:', error);
@@ -183,18 +183,18 @@ export function useReminders() {
   };
 
   // Toggle reminder active status
-  const toggleReminderActive = async (id: string, isActive: boolean): Promise<{success: boolean, error?: any}> => {
+  const toggleReminderActive = async (id: string, isActive: boolean): Promise<{ success: boolean, error?: any }> => {
     if (!user) {
       toast.error('You must be logged in to update reminders');
       return { success: false };
     }
-    
+
     try {
       await updateDoc(doc(db, 'reminders', id), { isActive: isActive });
-      
+
       console.log('Reminder active status toggled:', id, isActive);
       toast.success(`Reminder ${isActive ? 'activated' : 'deactivated'}`);
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('Error toggling reminder:', error);
@@ -204,18 +204,18 @@ export function useReminders() {
   };
 
   // Delete a reminder
-  const deleteReminder = async (id: string): Promise<{success: boolean, error?: any}> => {
+  const deleteReminder = async (id: string): Promise<{ success: boolean, error?: any }> => {
     if (!user) {
       toast.error('You must be logged in to delete reminders');
       return { success: false };
     }
-    
+
     try {
       await deleteDoc(doc(db, 'reminders', id));
-      
+
       console.log('Reminder deleted:', id);
       toast.success('Reminder deleted');
-      
+
       return { success: true };
     } catch (error: any) {
       console.error('Error deleting reminder:', error);
@@ -223,7 +223,7 @@ export function useReminders() {
       return { success: false, error };
     }
   };
-  
+
   // Play a reminder sound for testing
   const playSound = (soundId: string = 'default') => {
     const sound = REMINDER_SOUNDS.find(s => s.id === soundId) || REMINDER_SOUNDS[0];

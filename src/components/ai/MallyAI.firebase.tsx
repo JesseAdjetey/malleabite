@@ -415,16 +415,28 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
           return false;
         }
 
+        case 'add_todo_to_list': // Alias for create_todo
         case 'create_todo': {
           if (!data.text) {
             toast.error('No todo text provided');
             return false;
           }
+
+          let targetListId = data.listId;
+
+          // Resolve list name to ID if provided (and ID is missing)
+          if (!targetListId && data.listName && lists) {
+            const targetList = lists.find(l => l.name.toLowerCase().trim() === data.listName.toLowerCase().trim());
+            if (targetList) {
+              targetListId = targetList.id;
+            }
+          }
+
           // Check if a listId was provided for adding to a specific list
-          const result = await addTodo(data.text, data.listId);
+          const result = await addTodo(data.text, targetListId);
           if (result.success) {
-            const listInfo = data.listId && lists ?
-              ` to "${lists.find(l => l.id === data.listId)?.name || 'list'}"` : '';
+            const listInfo = targetListId && lists ?
+              ` to "${lists.find(l => l.id === targetListId)?.name || 'list'}"` : '';
             toast.success(`Todo "${data.text}" added${listInfo}!`);
             return true;
           }

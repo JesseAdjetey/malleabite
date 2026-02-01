@@ -121,7 +121,7 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
       
       4. TODO LISTS: 
          - To create a new list: use "create_todo_list" with "name".
-         - To add to a list: use "add_todo_to_list" with "text" and "listId" or "listName".
+         - To add to a list: use "create_todo" with "text" and "listId" or "listName".
       
       5. ALARMS: To set an alarm: use "create_alarm" with "title" and "time" (ISO string or HH:mm).
       
@@ -139,7 +139,7 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
           { "type": "create_event", "event": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": true/false, "recurrenceRule": { "frequency": "weekly", "daysOfWeek": [1] } } },
           { "type": "move_event", "eventId": "ID", "newStart": "ISO", "newEnd": "ISO" },
           { "type": "create_todo_list", "name": "String" },
-          { "type": "add_todo_to_list", "text": "String", "listName": "String" },
+          { "type": "create_todo", "text": "String", "listName": "String" },
           { "type": "create_alarm", "title": "String", "time": "String" },
           { "type": "archive_calendar", "folderName": "String" },
           { "type": "start_pomodoro" },

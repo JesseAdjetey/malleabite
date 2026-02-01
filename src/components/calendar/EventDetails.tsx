@@ -19,14 +19,23 @@ interface EventDetailsProps {
 }
 
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
+  console.log('🎯 EventDetails rendering, open:', open);
+
   const { selectedEvent } = useEventStore();
+  console.log('🎯 EventDetails selectedEvent:', selectedEvent);
+
   const { updateEvent, removeEvent, addRecurrenceException } = useCalendarEvents();
   const { toggleTodo, deleteTodo } = useTodos();
   const [isEditing, setIsEditing] = useState(false);
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
 
   // Early return if no event selected
-  if (!selectedEvent) return null;
+  if (!selectedEvent) {
+    console.log('⚠️ EventDetails: No selectedEvent, returning null');
+    return null;
+  }
+
+  console.log('✅ EventDetails: selectedEvent exists, proceeding with render');
 
   // Format time from startsAt and endsAt fields (wrapped in try-catch)
   const timeRange = (() => {

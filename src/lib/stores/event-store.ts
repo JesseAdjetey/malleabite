@@ -46,32 +46,32 @@ export const useEventStore = create<EventStore>()(
             }
             return event;
           });
-          
+
           set({ events: formattedEvents });
         },
         addEvent: (event) => {
           // Ensure date property exists for backward compatibility
-          const eventWithDate = !event.date && event.startsAt 
+          const eventWithDate = !event.date && event.startsAt
             ? { ...event, date: dayjs(event.startsAt).format('YYYY-MM-DD') }
             : event;
-            
-          set(state => ({ 
+
+          set(state => ({
             events: [...state.events, eventWithDate]
           }));
         },
         updateEvent: (event) => {
           // Ensure date property exists for backward compatibility
-          const eventWithDate = !event.date && event.startsAt 
+          const eventWithDate = !event.date && event.startsAt
             ? { ...event, date: dayjs(event.startsAt).format('YYYY-MM-DD') }
             : event;
-            
+
           set(state => ({
-            events: state.events.map(e => 
+            events: state.events.map(e =>
               e.id === event.id ? { ...e, ...eventWithDate } : e
             ),
             // If the updated event is the selected event, update selectedEvent too
-            selectedEvent: state.selectedEvent?.id === event.id 
-              ? { ...state.selectedEvent, ...eventWithDate } 
+            selectedEvent: state.selectedEvent?.id === event.id
+              ? { ...state.selectedEvent, ...eventWithDate }
               : state.selectedEvent
           }));
         },
@@ -89,6 +89,16 @@ export const useEventStore = create<EventStore>()(
           set({ isPopoverOpen: false });
         },
         openEventSummary: (event) => {
+          console.log('🔍 openEventSummary called with event:', event);
+          console.log('🔍 Event fields:', {
+            id: event.id,
+            title: event.title,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            date: event.date,
+            participants: event.participants,
+            description: event.description
+          });
           set({ isEventSummaryOpen: true, selectedEvent: event });
         },
         closeEventSummary: () => {
@@ -96,12 +106,12 @@ export const useEventStore = create<EventStore>()(
         },
         toggleEventLock: (id, isLocked) => {
           set(state => ({
-            events: state.events.map(event => 
+            events: state.events.map(event =>
               event.id === id ? { ...event, isLocked } : event
             ),
             // If the updated event is the selected event, update selectedEvent too
-            selectedEvent: state.selectedEvent?.id === id 
-              ? { ...state.selectedEvent, isLocked } 
+            selectedEvent: state.selectedEvent?.id === id
+              ? { ...state.selectedEvent, isLocked }
               : state.selectedEvent
           }));
         }

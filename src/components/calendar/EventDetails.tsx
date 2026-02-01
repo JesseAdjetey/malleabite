@@ -29,10 +29,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
   // Format time from startsAt and endsAt fields
   const formatTime = () => {
-    if (selectedEvent.startsAt && selectedEvent.endsAt) {
-      const start = dayjs(selectedEvent.startsAt).format('h:mm A');
-      const end = dayjs(selectedEvent.endsAt).format('h:mm A');
-      return `${start} - ${end}`;
+    try {
+      if (selectedEvent.startsAt && selectedEvent.endsAt) {
+        const start = dayjs(selectedEvent.startsAt);
+        const end = dayjs(selectedEvent.endsAt);
+        if (start.isValid() && end.isValid()) {
+          return `${start.format('h:mm A')} - ${end.format('h:mm A')}`;
+        }
+      }
+    } catch (error) {
+      console.error('Error formatting time:', error);
     }
     // Fallback: try to extract from description (legacy format "HH:MM - HH:MM | Description")
     const descriptionParts = selectedEvent.description?.split('|') || [];
@@ -180,9 +186,22 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   };
 
   // Format date for display
-  const formattedDate = selectedEvent.date
-    ? dayjs(selectedEvent.date).format('dddd, MMMM D, YYYY')
-    : dayjs(selectedEvent.startsAt).format('dddd, MMMM D, YYYY');
+  const formattedDate = (() => {
+    try {
+      if (selectedEvent.date) {
+        const dateObj = dayjs(selectedEvent.date);
+        if (dateObj.isValid()) return dateObj.format('dddd, MMMM D, YYYY');
+      }
+      if (selectedEvent.startsAt) {
+        const dateObj = dayjs(selectedEvent.startsAt);
+        if (dateObj.isValid()) return dateObj.format('dddd, MMMM D, YYYY');
+      }
+      return 'Date not available';
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Date not available';
+    }
+  })();
 
   // Get participants if any
   const hasParticipants = selectedEvent.participants && selectedEvent.participants.length > 0;

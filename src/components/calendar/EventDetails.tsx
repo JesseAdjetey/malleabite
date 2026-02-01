@@ -25,10 +25,11 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
 
+  // Early return if no event selected
   if (!selectedEvent) return null;
 
-  // Format time from startsAt and endsAt fields
-  const formatTime = () => {
+  // Format time from startsAt and endsAt fields (wrapped in try-catch)
+  const timeRange = (() => {
     try {
       if (selectedEvent.startsAt && selectedEvent.endsAt) {
         const start = dayjs(selectedEvent.startsAt);
@@ -37,35 +38,37 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
           return `${start.format('h:mm A')} - ${end.format('h:mm A')}`;
         }
       }
+      // Fallback: try to extract from description (legacy format "HH:MM - HH:MM | Description")
+      const descriptionParts = selectedEvent.description?.split('|') || [];
+      const legacyTimeRange = descriptionParts[0]?.trim();
+      if (legacyTimeRange && /^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(legacyTimeRange)) {
+        return legacyTimeRange;
+      }
+      return 'All day';
     } catch (error) {
       console.error('Error formatting time:', error);
+      return 'All day';
     }
-    // Fallback: try to extract from description (legacy format "HH:MM - HH:MM | Description")
-    const descriptionParts = selectedEvent.description?.split('|') || [];
-    const legacyTimeRange = descriptionParts[0]?.trim();
-    if (legacyTimeRange && /^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(legacyTimeRange)) {
-      return legacyTimeRange;
-    }
-    return 'All day';
-  };
-
-  const timeRange = formatTime();
+  })();
 
   // Get actual description (not the time part)
-  const getActualDescription = () => {
-    const desc = selectedEvent.description || '';
-    // If description contains the pipe format, extract the description part
-    if (desc.includes('|')) {
-      return desc.split('|').slice(1).join('|').trim();
-    }
-    // If description looks like a time range, return empty
-    if (/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(desc.trim())) {
+  const actualDescription = (() => {
+    try {
+      const desc = selectedEvent.description || '';
+      // If description contains the pipe format, extract the description part
+      if (desc.includes('|')) {
+        return desc.split('|').slice(1).join('|').trim();
+      }
+      // If description looks like a time range, return empty
+      if (/^\d{2}:\d{2}\s*-\s*\d{2}:\d{2}$/.test(desc.trim())) {
+        return '';
+      }
+      return desc;
+    } catch (error) {
+      console.error('Error getting description:', error);
       return '';
     }
-    return desc;
-  };
-
-  const actualDescription = getActualDescription();
+  })();
 
   // Check if this is a recurring event or instance
   const isRecurringEvent = Boolean(

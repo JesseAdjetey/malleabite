@@ -8,13 +8,35 @@ admin.initializeApp();
 // Note: Ensure GEMINI_API_KEY is set in your Firebase Functions environment variables
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'MISSING_API_KEY');
 
-// Helper to format events for the AI context
+// Helper to format events for the AI context - provides clear time slot information
 const formatEventsForAI = (events) => {
+  if (!events || events.length === 0) {
+    return 'No events scheduled in the next 30 days.';
+  }
+
   return events.map(e => {
-    const start = e.start_date?.toDate() || e.startDate?.toDate();
-    const end = e.end_date?.toDate() || e.endDate?.toDate();
-    return `ID: ${e.id} | Title: ${e.title} | Start: ${start?.toISOString()} | End: ${end?.toISOString()}`;
-  }).join('\n');
+    // Handle both Timestamp objects and ISO strings
+    let start, end;
+    if (e.startsAt?.toDate) {
+      start = e.startsAt.toDate();
+    } else if (e.startsAt) {
+      start = new Date(e.startsAt);
+    }
+    if (e.endsAt?.toDate) {
+      end = e.endsAt.toDate();
+    } else if (e.endsAt) {
+      end = new Date(e.endsAt);
+    }
+
+    if (!start || !end) return null;
+
+    // Format in a clear, readable way for the AI
+    const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    return `- "${e.title}" on ${dateStr} from ${startTime} to ${endTime} (ID: ${e.id})`;
+  }).filter(Boolean).join('\n');
 };
 
 exports.processAIRequest = functions.https.onCall(async (data, context) => {
@@ -37,14 +59,17 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
     const db = admin.firestore();
     const now = new Date();
 
-    // Fetch a broader range of events to check for conflicts (e.g., from 1 day ago to 30 days ahead)
-    const startRange = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    // Fetch events from today to 30 days ahead for conflict checking
+    const startRange = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Start of today
     const endRange = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+    // Query using the correct field name: startsAt (not start_date)
     const eventsSnapshot = await db.collection('calendar_events')
       .where('userId', '==', userId)
-      .where('start_date', '>=', admin.firestore.Timestamp.fromDate(startRange))
-      .where('start_date', '<=', admin.firestore.Timestamp.fromDate(endRange))
+      .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(startRange))
+      .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(endRange))
+      .where('isArchived', '==', false)
+      .orderBy('startsAt', 'asc')
       .limit(100)
       .get();
 
@@ -52,6 +77,8 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
     eventsSnapshot.forEach(doc => {
       events.push({ id: doc.id, ...doc.data() });
     });
+
+    console.log(`Fetched ${events.length} events for AI context`);
     const eventsContext = formatEventsForAI(events);
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });

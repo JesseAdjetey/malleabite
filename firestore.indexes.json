@@ -23,7 +23,11 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "startAt",
+          "fieldPath": "isArchived",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startsAt",
           "order": "ASCENDING"
         }
       ]

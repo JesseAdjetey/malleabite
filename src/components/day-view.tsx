@@ -16,6 +16,7 @@ import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
+import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -33,6 +34,8 @@ const DayView = () => {
     bulkUpdateColor,
     bulkReschedule,
     bulkDuplicate,
+    hasRecurringEvents,
+    getRecurringEvents,
   } = useBulkSelection();
   const {
     isTodoCalendarDialogOpen,
@@ -83,6 +86,9 @@ const DayView = () => {
   const isToday =
     userSelectedDate.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
 
+  // Get calendar visibility filter
+  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+
   // Expand recurring events into instances for the current day
   const expandedEvents = useMemo(() => {
     const dayStart = userSelectedDate.startOf('day').toDate();
@@ -90,7 +96,10 @@ const DayView = () => {
     
     const allInstances: CalendarEventType[] = [];
     
-    events.forEach(event => {
+    // First filter by calendar visibility, then expand recurring events
+    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
+    
+    visibleEvents.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, dayStart, dayEnd);
@@ -105,7 +114,7 @@ const DayView = () => {
     });
     
     return allInstances;
-  }, [events, userSelectedDate]);
+  }, [events, userSelectedDate, isCalendarVisible]);
 
   const dayEvents = expandedEvents.filter((event) => {
     const dayStr = userSelectedDate.format("YYYY-MM-DD");
@@ -200,6 +209,8 @@ const DayView = () => {
           onReschedule={bulkReschedule}
           onDuplicate={bulkDuplicate}
           onDeselectAll={deselectAll}
+          hasRecurringEvents={hasRecurringEvents()}
+          recurringCount={getRecurringEvents().length}
         />
       )}
 

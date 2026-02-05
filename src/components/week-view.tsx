@@ -26,6 +26,8 @@ import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { RecurringEventEditDialog } from "@/components/calendar/RecurringEventEditDialog";
 import { EditScope } from "@/hooks/use-recurring-events";
+import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -36,7 +38,7 @@ const WeekView = () => {
     isEventSummaryOpen,
     closeEventSummary,
   } = useEventStore();
-  const { events, updateEvent, addEvent, addRecurrenceException } = useCalendarEvents();
+  const { events, updateEvent, addEvent, addRecurrenceException, removeEvent } = useCalendarEvents();
   const { linkTodoToEvent, deleteTodo } = useTodos();
   const {
     isBulkMode,
@@ -49,7 +51,16 @@ const WeekView = () => {
     bulkUpdateColor,
     bulkReschedule,
     bulkDuplicate,
+    hasRecurringEvents,
+    getRecurringEvents,
   } = useBulkSelection();
+  
+  // Calendar filtering
+  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+  
+  // Undo/redo functionality - keyboard shortcuts are handled automatically
+  const { trackCreateEvent, trackDeleteEvent, trackUpdateEvent, trackBulkDeleteEvents } = useUndoRedo();
+  
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -181,7 +192,7 @@ const WeekView = () => {
   // Expand recurring events into instances for the current week view
   const expandedEvents = useMemo(() => {
     if (!weekDays.length) {
-      return events;
+      return events.filter(event => isCalendarVisible(event.calendarId));
     }
     
     // weekDays returns { currentDate, today } objects, not dayjs directly
@@ -190,7 +201,10 @@ const WeekView = () => {
     
     const allInstances: CalendarEventType[] = [];
     
-    events.forEach(event => {
+    // First filter by calendar visibility, then expand recurring events
+    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
+    
+    visibleEvents.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, weekStart, weekEnd);
@@ -205,7 +219,7 @@ const WeekView = () => {
     });
     
     return allInstances;
-  }, [events, userSelectedDate]);
+  }, [events, userSelectedDate, isCalendarVisible]);
 
   const getEventsForDay = (day: dayjs.Dayjs) => {
     const dayStr = day.format("YYYY-MM-DD");
@@ -321,6 +335,7 @@ const WeekView = () => {
       const response = await addEvent(event);
 
       if (response.success) {
+        trackCreateEvent(event); // Track for undo
         setFormOpen(false);
         toast.success(`${event.title} has been added to your calendar.`);
       } else {
@@ -331,6 +346,58 @@ const WeekView = () => {
     } catch (error) {
       console.error("Error adding event:", error);
       toast.error("An unexpected error occurred");
+    }
+  };
+
+  // Context menu handlers
+  const handleDeleteEvent = async (eventId: string) => {
+    const event = events.find(e => e.id === eventId);
+    const result = await removeEvent(eventId);
+    if (result.success) {
+      if (event) trackDeleteEvent(event); // Track for undo
+      toast.success("Event deleted");
+    } else {
+      toast.error("Failed to delete event");
+    }
+  };
+
+  const handleDuplicateEvent = async (event: CalendarEventType) => {
+    const duplicatedEvent: CalendarEventType = {
+      ...event,
+      id: crypto.randomUUID(),
+      title: `${event.title} (Copy)`,
+    };
+    const result = await addEvent(duplicatedEvent);
+    if (result.success) {
+      trackCreateEvent(duplicatedEvent); // Track for undo
+      toast.success("Event duplicated");
+    } else {
+      toast.error("Failed to duplicate event");
+    }
+  };
+
+  const handleColorChange = async (eventId: string, color: string) => {
+    const event = events.find(e => e.id === eventId);
+    if (event) {
+      const previousEvent = { ...event };
+      const updatedEvent = { ...event, color };
+      await updateEvent(updatedEvent);
+      trackUpdateEvent(previousEvent, updatedEvent); // Track for undo
+      toast.success("Color updated");
+    }
+  };
+
+  const handleAddAlarmToEvent = (event: CalendarEventType) => {
+    // Open the event summary which has alarm functionality
+    openEventSummary(event);
+    toast.info("Edit the event to add an alarm");
+  };
+
+  const handleAddTodoFromEvent = async (event: CalendarEventType) => {
+    const todoId = await handleCreateTodoFromEvent(event);
+    if (todoId) {
+      await updateEvent({ ...event, isTodo: true, todoId });
+      toast.success("Todo created from event");
     }
   };
 
@@ -359,6 +426,11 @@ const WeekView = () => {
                   isBulkMode={isBulkMode}
                   isSelected={isSelected}
                   onToggleSelection={toggleSelection}
+                  onDeleteEvent={handleDeleteEvent}
+                  onDuplicateEvent={handleDuplicateEvent}
+                  onColorChange={handleColorChange}
+                  onAddAlarm={handleAddAlarmToEvent}
+                  onAddTodo={handleAddTodoFromEvent}
                 />
               );
             })}
@@ -375,6 +447,8 @@ const WeekView = () => {
           onReschedule={bulkReschedule}
           onDuplicate={bulkDuplicate}
           onDeselectAll={deselectAll}
+          hasRecurringEvents={hasRecurringEvents()}
+          recurringCount={getRecurringEvents().length}
         />
       )}
 

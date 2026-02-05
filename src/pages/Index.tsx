@@ -36,40 +36,44 @@ const Index = () => {
         return { success: false, error: "Invalid event data" };
       }
       
-      // Validate event using Zod schema
-      const validation = eventSchema.safeParse(event);
-      if (!validation.success) {
-        const errorMessage = validation.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-        logger.warn('Index', 'Event validation failed', { 
-          event, 
-          errors: validation.error.errors 
-        });
-        toast.error(`Invalid event: ${errorMessage}`);
-        return { success: false, error: errorMessage };
+      // Transform ISO datetime strings to the format addEvent expects
+      // The AI sends full ISO strings like "2026-02-06T05:00:00Z"
+      let startsAt = event.startsAt;
+      let endsAt = event.endsAt;
+      let eventDate = event.date;
+      
+      // If startsAt is an ISO datetime string, parse it
+      if (typeof startsAt === 'string' && startsAt.includes('T')) {
+        const startDate = new Date(startsAt);
+        eventDate = eventDate || startDate;
       }
       
       // Ensure the event has all required fields before passing to addEvent
       const formattedEvent: CalendarEventType = {
         id: event.id || crypto.randomUUID(),
         title: event.title,
-        description: event.description,
-        date: event.date,
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
+        description: event.description || '',
+        date: eventDate,
+        startsAt: startsAt,
+        endsAt: endsAt,
         color: event.color || 'bg-purple-500/70',
         isLocked: event.isLocked || false,
         isTodo: event.isTodo || false,
         hasAlarm: event.hasAlarm || false,
         hasReminder: event.hasReminder || false,
-        todoId: event.todoId
+        todoId: event.todoId,
+        isRecurring: event.isRecurring,
+        recurrenceRule: event.recurrenceRule,
+        calendarId: event.calendarId,
       };
       
       logger.debug('Index', 'Formatted event ready for addEvent', { 
         title: formattedEvent.title,
-        date: formattedEvent.date 
+        startsAt: formattedEvent.startsAt,
+        endsAt: formattedEvent.endsAt
       });
       
-      // Use the addEvent function from the hook
+      // Use the addEvent function from the hook - skip Zod validation for AI events
       const result = await addEvent(formattedEvent);
       
       if (result.success) {

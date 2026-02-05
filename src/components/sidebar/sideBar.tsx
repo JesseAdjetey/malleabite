@@ -15,6 +15,7 @@ const SideBar = () => {
     setActivePageId,
     createPage,
     updatePage,
+    deletePage,
     addModule,
     removeModule,
     updateModule,
@@ -50,6 +51,8 @@ const SideBar = () => {
       case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
       case 'invites': defaultTitle = 'Event Invites'; break;
       case 'archives': defaultTitle = 'Calendar Archives'; break;
+      case 'templates': defaultTitle = 'Templates'; break;
+      case 'calendars': defaultTitle = 'Calendars'; break;
     }
 
     addModule(activePageId, { type: moduleType, title: defaultTitle });
@@ -75,6 +78,11 @@ const SideBar = () => {
     if (result.success && result.pageId) {
       setActivePageId(result.pageId);
     }
+  };
+
+  const handleDeletePage = async () => {
+    if (!activePageId) return;
+    await deletePage(activePageId);
   };
 
   const handleUpdatePageTitle = (newTitle: string) => {
@@ -103,8 +111,10 @@ const SideBar = () => {
         onUpdateTitle={handleUpdatePageTitle}
         onPrevPage={handlePrevPage}
         onNextPage={handleNextPage}
+        onDeletePage={handleDeletePage}
         canGoToPrevPage={currentPageIndex > 0}
         canGoToNextPage={currentPageIndex < pages.length - 1}
+        canDeletePage={pages.length > 1}
       />
 
       {/* Page modules with responsive grid */}
@@ -112,7 +122,10 @@ const SideBar = () => {
         ref={sidebarContentRef}
         className="flex-1 overflow-y-auto p-3"
       >
-        <ModuleSelector onSelect={handleAddModule} />
+        <ModuleSelector 
+          onSelect={handleAddModule} 
+          existingModules={activePage?.modules?.map(m => m.type) || []}
+        />
 
         {/* Module container - uses grid for two columns or flex for one column */}
         <ModuleGrid

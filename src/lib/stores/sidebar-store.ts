@@ -26,7 +26,11 @@ export const useSidebarStore = create<SidebarStoreType>()(
             modules: [
               { type: 'todo', title: 'To-Do List' },
               { type: 'eisenhower', title: 'Eisenhower Matrix' }
-            ]
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            userId: 'default',
+            isDefault: true
           },
           {
             id: '2',
@@ -35,16 +39,24 @@ export const useSidebarStore = create<SidebarStoreType>()(
               { type: 'pomodoro', title: 'Pomodoro' },
               { type: 'alarms', title: 'Reminders' },
               { type: 'invites', title: 'Event Invites' }
-            ]
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            userId: 'default',
+            isDefault: true
           }
         ],
         currentPageIndex: 0,
         addPage: (title) => {
+          const now = new Date().toISOString();
           set(state => ({
             pages: [...state.pages, {
               id: Date.now().toString(),
               title,
-              modules: []
+              modules: [],
+              createdAt: now,
+              updatedAt: now,
+              userId: 'default'
             }]
           }));
         },
@@ -64,10 +76,14 @@ export const useSidebarStore = create<SidebarStoreType>()(
                 case 'invites': defaultTitle = 'Event Invites'; break;
               }
               
-              newPages[pageIndex].modules = [
-                ...newPages[pageIndex].modules, 
-                { type: moduleType, title: defaultTitle }
-              ];
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules: [
+                  ...newPages[pageIndex].modules, 
+                  { type: moduleType, title: defaultTitle }
+                ],
+                updatedAt: new Date().toISOString()
+              };
             }
             return { pages: newPages };
           });
@@ -76,7 +92,11 @@ export const useSidebarStore = create<SidebarStoreType>()(
           set(state => {
             const newPages = [...state.pages];
             if (newPages[pageIndex] && newPages[pageIndex].modules) {
-              newPages[pageIndex].modules = newPages[pageIndex].modules.filter((_, i) => i !== moduleIndex);
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules: newPages[pageIndex].modules.filter((_, i) => i !== moduleIndex),
+                updatedAt: new Date().toISOString()
+              };
             }
             return { pages: newPages };
           });
@@ -85,7 +105,11 @@ export const useSidebarStore = create<SidebarStoreType>()(
           set(state => {
             const newPages = [...state.pages];
             if (newPages[pageIndex]) {
-              newPages[pageIndex].title = title;
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                title,
+                updatedAt: new Date().toISOString()
+              };
             }
             return { pages: newPages };
           });
@@ -94,7 +118,16 @@ export const useSidebarStore = create<SidebarStoreType>()(
           set(state => {
             const newPages = [...state.pages];
             if (newPages[pageIndex] && newPages[pageIndex].modules[moduleIndex]) {
-              newPages[pageIndex].modules[moduleIndex].title = title;
+              const updatedModules = [...newPages[pageIndex].modules];
+              updatedModules[moduleIndex] = {
+                ...updatedModules[moduleIndex],
+                title
+              };
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules: updatedModules,
+                updatedAt: new Date().toISOString()
+              };
             }
             return { pages: newPages };
           });
@@ -106,7 +139,11 @@ export const useSidebarStore = create<SidebarStoreType>()(
               const modules = [...newPages[pageIndex].modules];
               const [movedModule] = modules.splice(fromIndex, 1);
               modules.splice(toIndex, 0, movedModule);
-              newPages[pageIndex].modules = modules;
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules,
+                updatedAt: new Date().toISOString()
+              };
             }
             return { pages: newPages };
           });
@@ -116,9 +153,15 @@ export const useSidebarStore = create<SidebarStoreType>()(
             const newPages = [...state.pages];
             if (newPages[pageIndex] && newPages[pageIndex].modules[moduleIndex]) {
               const module = newPages[pageIndex].modules[moduleIndex];
-              newPages[pageIndex].modules[moduleIndex] = {
+              const updatedModules = [...newPages[pageIndex].modules];
+              updatedModules[moduleIndex] = {
                 ...module,
                 minimized: !module.minimized
+              };
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules: updatedModules,
+                updatedAt: new Date().toISOString()
               };
             }
             return { pages: newPages };

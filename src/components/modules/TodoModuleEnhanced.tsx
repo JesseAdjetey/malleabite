@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useEventStore } from "@/lib/store";
 import { useTodoLists } from "@/hooks/use-todo-lists";
 import { useAuth } from "@/contexts/AuthContext.firebase";
+import { useEisenhower } from "@/hooks/use-eisenhower";
 
 
 interface TodoModuleEnhancedProps {
@@ -41,6 +42,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     success?: boolean;
     message?: string;
   } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   const { addEvent, events } = useEventStore();
   const {
@@ -53,6 +55,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     deleteTodo,
     updateList,
   } = useTodoLists();
+  const { removeItem: removeEisenhowerItem } = useEisenhower();
   
   // Use module-specific list
   const activeList = lists.find(l => l.id === moduleListId);
@@ -102,6 +105,9 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent, item: any) => {
+    // Stop propagation to prevent the module container from being dragged
+    e.stopPropagation();
+    
     const todoData = {
       id: item.id,
       text: item.text,
@@ -112,14 +118,67 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     e.dataTransfer.setData("application/json", JSON.stringify(todoData));
     e.dataTransfer.effectAllowed = "move";
 
-    if (e.currentTarget) {
-      e.currentTarget.classList.add("opacity-50");
+    // Create a drag image of just the todo item
+    const dragElement = e.currentTarget as HTMLElement;
+    if (dragElement) {
+      dragElement.classList.add("opacity-50");
+      e.dataTransfer.setDragImage(dragElement, 10, 10);
     }
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
     if (e.currentTarget) {
       e.currentTarget.classList.remove("opacity-50");
+    }
+  };
+
+  // Handle drops from Eisenhower Matrix
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    try {
+      const dataString = e.dataTransfer.getData("application/json");
+      if (!dataString) return;
+
+      const data = JSON.parse(dataString);
+      console.log("📥 Todo module received drop:", data);
+
+      // Only handle drops from Eisenhower module
+      if (data.source === "eisenhower" && moduleListId) {
+        // Add to todo list
+        const response = await addTodo(data.text, moduleListId);
+        
+        if (response.success) {
+          // Remove from Eisenhower matrix
+          await removeEisenhowerItem(data.id);
+          toast.success(`Moved "${data.text}" to todo list`);
+        } else {
+          toast.error("Failed to add item to todo list");
+        }
+      }
+    } catch (error) {
+      console.error("Error handling drop in todo module:", error);
+      toast.error("Failed to process drop");
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    
+    // Check if the drag data is from Eisenhower
+    const types = e.dataTransfer.types;
+    if (types.includes("application/json")) {
+      e.dataTransfer.dropEffect = "move";
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the container entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setIsDragOver(false);
     }
   };
 
@@ -163,8 +222,18 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       isMinimized={isMinimized}
       onMinimize={onMinimize}
     >
-      {/* Todo Items */}
-      <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
+      {/* Droppable area for Eisenhower items */}
+      <div 
+        className={cn(
+          "transition-all duration-150 rounded-lg",
+          isDragOver && "ring-2 ring-primary/50 bg-primary/10"
+        )}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+      >
+        {/* Todo Items */}
+        <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
         {loading ? (
           <div className="flex justify-center items-center p-4">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -255,6 +324,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           Add
         </button>
       </div>
+      </div> {/* Close droppable area */}
     </ModuleContainer>
   );
 };

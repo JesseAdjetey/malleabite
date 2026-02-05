@@ -89,6 +89,18 @@ export const useEventStore = create<EventStore>()(
           set({ isPopoverOpen: false });
         },
         openEventSummary: (event) => {
+          // Defensive check: validate event object before opening
+          if (!event || typeof event !== 'object') {
+            console.error('🔍 openEventSummary: Invalid event object', event);
+            return;
+          }
+          
+          // Ensure event has minimum required properties
+          if (!event.id) {
+            console.error('🔍 openEventSummary: Event missing id', event);
+            return;
+          }
+          
           console.log('🔍 openEventSummary called with event:', event);
           console.log('🔍 Event fields:', {
             id: event.id,
@@ -99,7 +111,17 @@ export const useEventStore = create<EventStore>()(
             participants: event.participants,
             description: event.description
           });
-          set({ isEventSummaryOpen: true, selectedEvent: event });
+          
+          // Sanitize the event object to prevent crashes
+          const safeEvent = {
+            ...event,
+            title: event.title || 'Untitled Event',
+            description: event.description || '',
+            date: event.date || (event.startsAt ? dayjs(event.startsAt).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD')),
+            participants: Array.isArray(event.participants) ? event.participants : [],
+          };
+          
+          set({ isEventSummaryOpen: true, selectedEvent: safeEvent });
         },
         closeEventSummary: () => {
           set({ isEventSummaryOpen: false, selectedEvent: null });

@@ -8,6 +8,11 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,6 +29,7 @@ interface BulkModeToggleProps {
   onReschedule?: (days: number) => void;
   onDuplicate?: () => void;
   onDeselectAll?: () => void;
+  iconOnly?: boolean;
 }
 
 const colors = [
@@ -46,9 +52,32 @@ const BulkModeToggle: React.FC<BulkModeToggleProps> = ({
   onReschedule,
   onDuplicate,
   onDeselectAll,
+  iconOnly = false,
 }) => {
   const showActions = isBulkMode && selectedCount > 0;
 
+  // Icon-only mode with tooltip
+  if (iconOnly && !isBulkMode) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onToggle}
+            className="h-9 w-9 text-gray-700 dark:text-white border-gray-300 dark:border-white/20 hover:bg-gray-100 dark:hover:bg-white/10"
+          >
+            <CheckSquare className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Bulk Edit</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // When in bulk mode or not iconOnly, show full UI with hover card
   return (
     <HoverCard openDelay={100} closeDelay={200}>
       <HoverCardTrigger asChild>
@@ -66,7 +95,7 @@ const BulkModeToggle: React.FC<BulkModeToggleProps> = ({
           {isBulkMode ? (
             <>
               <X className="h-4 w-4 mr-1" />
-              <span>Exit Bulk Mode</span>
+              <span>Exit</span>
               {selectedCount > 0 && (
                 <span className="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-xs">
                   {selectedCount}

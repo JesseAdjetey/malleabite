@@ -27,11 +27,13 @@ import { useTodos } from "@/hooks/use-todos";
 import { useTodoLists } from "@/hooks/use-todo-lists";
 import { useEisenhower } from "@/hooks/use-eisenhower";
 import { useAlarms } from "@/hooks/use-alarms";
+import { useReminders } from "@/hooks/use-reminders";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { shouldUseFirebase, logMigrationStatus } from "@/lib/migration-flags";
 import { logger } from "@/lib/logger";
 import { errorHandler } from "@/lib/error-handler";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
+import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import "../../styles/ai-animations.css";
 
 interface Message {
@@ -52,7 +54,7 @@ interface Message {
 const initialMessages: Message[] = [
   {
     id: "1",
-    text: "Hello! I'm Mally, your AI productivity assistant powered by Google Gemini. 🤖\n\nI can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms** - Set reminders and link them to events or todos\n📸 **Image Processing** - Upload images of schedules, notes, or tasks and I'll help organize them\n\nJust tell me what you need! For example:\n• \"Add gym to my todos\"\n• \"Set an alarm for 8am tomorrow\"\n• \"Create a meeting every Monday at 10am\"\n• Upload an image of your schedule to create events",
+    text: "Hello! I'm Mally, your AI productivity assistant powered by Google Gemini. 🤖\n\nI can help you with:\n\n📅 **Calendar Events** - Create, update, or delete events (including recurring ones)\n✅ **Todo Lists** - Create lists, add, complete, or remove tasks\n🎯 **Priority Matrix** - Organize tasks using the Eisenhower method\n⏰ **Alarms & Reminders** - Set alarms, create reminders, and link them to events or todos\n📸 **Image Processing** - Upload images of schedules, notes, or tasks and I'll help organize them\n\nJust tell me what you need! For example:\n• \"Create a new todo list called Work Tasks\"\n• \"Add gym to my todos\"\n• \"Set a reminder for 3pm tomorrow\"\n• \"Create a meeting every Monday at 10am\"\n• Upload an image of your schedule to create events",
     sender: "ai",
     timestamp: new Date(),
   },
@@ -97,7 +99,9 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
   const { createList, lists } = useTodoLists();
   const { addItem: addEisenhowerItem, removeItem: removeEisenhowerItem, updateQuadrant, items: eisenhowerItems } = useEisenhower();
   const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo, alarms } = useAlarms();
+  const { addReminder, updateReminder, deleteReminder, reminders } = useReminders();
   const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
+  const calendarAccounts = useCalendarFilterStore(state => state.accounts);
 
   // Get pause/resume functions for wake word coordination
   const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
@@ -327,6 +331,21 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             title: data.title
           });
 
+          // Determine which calendar to add the event to
+          // AI can specify calendarId or calendarName, otherwise use default
+          let targetCalendarId = 'default';
+          if (data.calendarId) {
+            targetCalendarId = data.calendarId;
+          } else if (data.calendarName) {
+            // Find calendar by name (case-insensitive)
+            const matchedAccount = calendarAccounts.find(
+              a => a.name.toLowerCase() === data.calendarName.toLowerCase()
+            );
+            if (matchedAccount) {
+              targetCalendarId = matchedAccount.id;
+            }
+          }
+
           // Build the event with recurring properties if present
           const newEvent: CalendarEventType = {
             id: crypto.randomUUID(),
@@ -336,6 +355,7 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
             startsAt: startsAt.toISOString(),
             endsAt: endsAt.toISOString(),
             color: data.color || '#8b5cf6',
+            calendarId: targetCalendarId,
             // Add recurring event properties
             isRecurring: isRecurring,
             recurrenceRule: recurrenceRule ? {
@@ -351,13 +371,15 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
 
           logger.info('MallyAI', 'Final event object', {
             newEvent,
-            hasRecurrenceRule: !!newEvent.recurrenceRule
+            hasRecurrenceRule: !!newEvent.recurrenceRule,
+            calendarId: targetCalendarId
           });
 
           const result = await addEvent(newEvent);
           if (result.success) {
             const recurringText = newEvent.isRecurring ? ' (recurring)' : '';
-            toast.success(`Event "${data.title}"${recurringText} created!`);
+            const calendarName = calendarAccounts.find(a => a.id === targetCalendarId)?.name || 'My Calendar';
+            toast.success(`Event "${data.title}"${recurringText} added to ${calendarName}!`);
             await fetchEvents();
             return true;
           }
@@ -572,6 +594,55 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
               toast.success('Alarm linked to todo!');
               return true;
             }
+          }
+          return false;
+        }
+
+        case 'create_reminder': {
+          if (!data.title || !data.reminderTime) {
+            toast.error('Missing reminder title or time');
+            return false;
+          }
+          const result = await addReminder({
+            title: data.title,
+            description: data.description,
+            reminderTime: data.reminderTime,
+            eventId: data.eventId,
+            soundId: data.soundId || 'default'
+          });
+          if (result.success) {
+            toast.success(`Reminder "${data.title}" created!`);
+            return true;
+          }
+          return false;
+        }
+
+        case 'update_reminder': {
+          if (!data.reminderId) {
+            toast.error('No reminder ID provided');
+            return false;
+          }
+          const updates: any = {};
+          if (data.title) updates.title = data.title;
+          if (data.description) updates.description = data.description;
+          if (data.reminderTime) updates.reminderTime = data.reminderTime;
+          const result = await updateReminder(data.reminderId, updates);
+          if (result.success) {
+            toast.success('Reminder updated!');
+            return true;
+          }
+          return false;
+        }
+
+        case 'delete_reminder': {
+          if (!data.reminderId) {
+            toast.error('No reminder ID provided');
+            return false;
+          }
+          const result = await deleteReminder(data.reminderId);
+          if (result.success) {
+            toast.success('Reminder deleted!');
+            return true;
           }
           return false;
         }
@@ -1140,7 +1211,14 @@ export const MallyAIFirebase: React.FC<MallyAIFirebaseProps> = ({
         context: {
           currentTime: new Date().toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          conversationHistory
+          conversationHistory,
+          // Provide available calendars for multi-account support
+          availableCalendars: calendarAccounts.map(a => ({
+            id: a.id,
+            name: a.name,
+            isDefault: a.isDefault || false,
+            isGoogle: a.isGoogle || false,
+          })),
         }
       });
 

@@ -161,19 +161,29 @@ export function useSidebarPages() {
   const deletePage = async (pageId: string) => {
     if (!user?.uid) return { success: false };
 
-    const page = pages.find(p => p.id === pageId);
-    if (page?.isDefault) {
-      toast.error('Cannot delete the default page');
+    // Don't allow deleting if it's the last page
+    if (pages.length <= 1) {
+      toast.error('Cannot delete the last page');
       return { success: false };
     }
 
     try {
+      const page = pages.find(p => p.id === pageId);
+      
       await deleteDoc(doc(db, 'sidebar_pages', pageId));
       
-      // Switch to default page if we deleted the active one
-      if (activePageId === pageId) {
-        const defaultPage = pages.find(p => p.isDefault);
-        setActivePageId(defaultPage?.id || null);
+      // If we deleted the active page or the default page, switch to another
+      if (activePageId === pageId || page?.isDefault) {
+        const remainingPages = pages.filter(p => p.id !== pageId);
+        const newActivePage = remainingPages[0];
+        setActivePageId(newActivePage?.id || null);
+        
+        // If we deleted the default page, mark the first remaining page as default
+        if (page?.isDefault && newActivePage) {
+          await updateDoc(doc(db, 'sidebar_pages', newActivePage.id), {
+            isDefault: true
+          });
+        }
       }
       
       toast.success('Page deleted');

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Trash2, Palette, Clock, Copy, X, Calendar } from 'lucide-react';
+import { Trash2, Palette, Clock, Copy, X, Calendar, Repeat } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,14 +20,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RecurringDeleteScope } from '@/hooks/use-bulk-selection';
 
 interface BulkActionToolbarProps {
   selectedCount: number;
-  onDelete: () => void;
+  onDelete: (recurringScope?: RecurringDeleteScope) => void;
   onUpdateColor: (color: string) => void;
   onReschedule: (days: number) => void;
   onDuplicate: () => void;
   onDeselectAll: () => void;
+  hasRecurringEvents?: boolean;
+  recurringCount?: number;
 }
 
 const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
@@ -37,8 +40,11 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   onReschedule,
   onDuplicate,
   onDeselectAll,
+  hasRecurringEvents = false,
+  recurringCount = 0,
 }) => {
   const [showRescheduleDialog, setShowRescheduleDialog] = useState(false);
+  const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
   const [rescheduleOffset, setRescheduleOffset] = useState('1');
 
   const colors = [
@@ -59,6 +65,19 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
       setShowRescheduleDialog(false);
       setRescheduleOffset('1');
     }
+  };
+
+  const handleDeleteClick = () => {
+    if (hasRecurringEvents) {
+      setShowRecurringDeleteDialog(true);
+    } else {
+      onDelete();
+    }
+  };
+
+  const handleRecurringDelete = (scope: RecurringDeleteScope) => {
+    onDelete(scope);
+    setShowRecurringDeleteDialog(false);
   };
 
   // Use Portal to render outside any overflow:hidden containers
@@ -82,11 +101,14 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onDelete}
+                onClick={handleDeleteClick}
                 className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Delete
+                {hasRecurringEvents && (
+                  <Repeat className="h-3 w-3 ml-1 text-yellow-500" />
+                )}
               </Button>
 
               <Select onValueChange={onUpdateColor}>
@@ -176,6 +198,58 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
             </Button>
             <Button onClick={handleReschedule}>
               Reschedule Events
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recurring Delete Confirmation Dialog */}
+      <Dialog open={showRecurringDeleteDialog} onOpenChange={setShowRecurringDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Repeat className="h-5 w-5 text-yellow-500" />
+              Delete Recurring Events
+            </DialogTitle>
+            <DialogDescription>
+              {recurringCount > 0 
+                ? `${recurringCount} of the selected event${recurringCount !== 1 ? 's are' : ' is'} recurring.`
+                : 'Some of the selected events are recurring.'
+              } How would you like to delete them?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-4">
+            <Button
+              variant="outline"
+              className="w-full justify-start h-auto p-4"
+              onClick={() => handleRecurringDelete('single')}
+            >
+              <div className="text-left">
+                <div className="font-medium">Delete only these occurrences</div>
+                <div className="text-sm text-muted-foreground">
+                  Only the selected instances will be removed. Other occurrences will remain.
+                </div>
+              </div>
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-start h-auto p-4 border-red-200 hover:bg-red-50 hover:border-red-300"
+              onClick={() => handleRecurringDelete('all')}
+            >
+              <div className="text-left">
+                <div className="font-medium text-red-600">Delete all occurrences</div>
+                <div className="text-sm text-muted-foreground">
+                  All occurrences of the recurring events will be permanently deleted.
+                </div>
+              </div>
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowRecurringDeleteDialog(false)}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

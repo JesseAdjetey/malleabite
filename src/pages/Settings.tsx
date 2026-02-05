@@ -6,7 +6,7 @@ import { CalendarImportExport } from '@/components/calendar/CalendarImportExport
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette } from 'lucide-react';
+import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MobileNavigation from '@/components/MobileNavigation';
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -234,6 +234,13 @@ const Settings = () => {
               label="Integrations"
               sublabel="Google Calendar, Slack & more"
               onClick={() => setActiveSection('integrations')}
+            />
+
+            <MenuItem
+              icon={Wrench}
+              label="Tools"
+              sublabel="Templates, Patterns, Analytics"
+              onClick={() => setActiveSection('tools')}
             />
           </div>
 
@@ -453,6 +460,66 @@ const Settings = () => {
             
             <GoogleCalendarSync />
             <SlackNotifications />
+          </div>
+        </div>
+        <MobileNavigation />
+      </div>
+    );
+  }
+
+  // Tools Section
+  if (activeSection === 'tools') {
+    return (
+      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+        <div className="px-4 pt-6 max-w-lg mx-auto">
+          <BackButton title="Tools" />
+          
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground mb-4">
+              Quick access to productivity tools and features.
+            </p>
+            
+            <MenuItem
+              icon={FileText}
+              label="Templates"
+              sublabel="Create events from saved templates"
+              onClick={() => navigate('/templates')}
+            />
+
+            <MenuItem
+              icon={Zap}
+              label="Quick Schedule"
+              sublabel="Rapidly add multiple events"
+              onClick={() => navigate('/quick-schedule')}
+            />
+
+            <MenuItem
+              icon={MoreHorizontal}
+              label="Patterns"
+              sublabel="Discover scheduling patterns"
+              onClick={() => navigate('/patterns')}
+            />
+
+            <MenuItem
+              icon={FolderPlus}
+              label="Archive & Start Fresh"
+              sublabel="Save and clear your calendar"
+              onClick={() => navigate('/snapshots')}
+            />
+
+            <MenuItem
+              icon={BarChart3}
+              label="Analytics"
+              sublabel="View productivity insights"
+              onClick={() => navigate('/analytics')}
+            />
+
+            <MenuItem
+              icon={FolderPlus}
+              label="Calendar Archives"
+              sublabel="Access archived calendars"
+              onClick={() => navigate('/calendar-archives')}
+            />
           </div>
         </div>
         <MobileNavigation />

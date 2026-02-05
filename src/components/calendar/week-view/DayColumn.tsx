@@ -1,12 +1,14 @@
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { getHours, isCurrentDay } from "@/lib/getTime";
 import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import CalendarEvent from "../CalendarEvent";
 import SelectableCalendarEvent from "../SelectableCalendarEvent";
+import EventContextMenu from "../EventContextMenu";
 import CurrentTimeIndicator from "./CurrentTimeIndicator";
 import { calculateEventHeight, calculateEventPosition, getTimeInfo } from "../event-utils/touch-handlers";
+import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overlap";
 
 interface DayColumnProps {
   currentDate: dayjs.Dayjs;
@@ -20,6 +22,12 @@ interface DayColumnProps {
   isBulkMode?: boolean;
   isSelected?: (eventId: string) => boolean;
   onToggleSelection?: (eventId: string) => void;
+  // Context menu handlers
+  onDeleteEvent?: (eventId: string) => void;
+  onDuplicateEvent?: (event: CalendarEventType) => void;
+  onColorChange?: (eventId: string, color: string) => void;
+  onAddAlarm?: (event: CalendarEventType) => void;
+  onAddTodo?: (event: CalendarEventType) => void;
 }
 
 const DayColumn: React.FC<DayColumnProps> = ({
@@ -34,9 +42,17 @@ const DayColumn: React.FC<DayColumnProps> = ({
   isBulkMode = false,
   isSelected = () => false,
   onToggleSelection = () => { },
+  onDeleteEvent,
+  onDuplicateEvent,
+  onColorChange,
+  onAddAlarm,
+  onAddTodo,
 }) => {
   const hourHeight = 80; // The height in pixels of each hour cell
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+
+  // Calculate event positions for overlapping events
+  const eventPositions = useMemo(() => calculateEventPositions(dayEvents), [dayEvents]);
 
   const handleDragEnter = (hourIndex: number) => {
     setDragOverHour(hourIndex);
@@ -82,14 +98,20 @@ const DayColumn: React.FC<DayColumnProps> = ({
         const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
         const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
         const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
+        
+        // Get overlap position for side-by-side display
+        const position = eventPositions.get(event.id);
+        const overlapStyle = getEventStyle(position);
 
         return (
           <div
             key={event.id}
-            className="absolute inset-x-0.5 sm:inset-x-1 z-10"
+            className="absolute z-10"
             style={{
               top: `${topPosition}px`,
-              height: `${eventHeight}px`
+              height: `${eventHeight}px`,
+              left: overlapStyle.left,
+              width: overlapStyle.width,
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -106,17 +128,30 @@ const DayColumn: React.FC<DayColumnProps> = ({
                 onToggleSelection={onToggleSelection}
               />
             ) : (
-              <CalendarEvent
+              <EventContextMenu
                 event={event}
-                color={event.color}
-                isLocked={event.isLocked}
-                hasAlarm={event.hasAlarm}
-                hasReminder={event.hasReminder}
-                hasTodo={event.isTodo}
-                participants={event.participants}
-                onClick={() => openEventSummary(event)}
-                onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
-              />
+                onEdit={openEventSummary}
+                onDelete={onDeleteEvent}
+                onDuplicate={onDuplicateEvent}
+                onColorChange={onColorChange}
+                onLockToggle={(eventId, locked) => toggleEventLock(eventId, locked)}
+                onAddAlarm={onAddAlarm}
+                onAddTodo={onAddTodo}
+              >
+                <div className="h-full">
+                  <CalendarEvent
+                    event={event}
+                    color={event.color}
+                    isLocked={event.isLocked}
+                    hasAlarm={event.hasAlarm}
+                    hasReminder={event.hasReminder}
+                    hasTodo={event.isTodo}
+                    participants={event.participants}
+                    onClick={() => openEventSummary(event)}
+                    onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
+                  />
+                </div>
+              </EventContextMenu>
             )}
           </div>
         );

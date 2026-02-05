@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Home } from 'lucide-react';
 import { CalendarEventType } from '@/lib/stores/types';
 import '../styles/ai-animations.css';
-import DraggableMallyAI from '@/components/ai/DraggableMallyAI';
+import BottomMallyAI from '@/components/ai/BottomMallyAI';
 import MobileNavigation from '@/components/MobileNavigation';
 import { motion } from 'framer-motion';
 import { eventSchema } from '@/lib/validation';
@@ -39,40 +39,47 @@ const Calendar = () => {
         return { success: false, error: "Invalid event data" };
       }
       
-      // Validate event using Zod schema
-      const validation = eventSchema.safeParse(event);
-      if (!validation.success) {
-        const errorMessage = validation.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
-        logger.warn('Calendar', 'Event validation failed', { 
-          event, 
-          errors: validation.error.errors 
-        });
-        toast.error(`Invalid event: ${errorMessage}`);
-        return { success: false, error: errorMessage };
+      // Transform ISO datetime strings to the format addEvent expects
+      // The AI sends full ISO strings like "2026-02-06T05:00:00Z"
+      // We need to parse these and pass to addEvent which handles the conversion
+      let startsAt = event.startsAt;
+      let endsAt = event.endsAt;
+      let eventDate = event.date;
+      
+      // If startsAt is an ISO datetime string, parse it
+      if (typeof startsAt === 'string' && startsAt.includes('T')) {
+        const startDate = new Date(startsAt);
+        eventDate = eventDate || startDate;
+        // Keep the ISO string - addEvent handles this format
       }
       
       // Ensure the event has all required fields before passing to addEvent
       const formattedEvent: CalendarEventType = {
         id: event.id || crypto.randomUUID(),
         title: event.title,
-        description: event.description,
-        date: event.date,
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
+        description: event.description || '',
+        date: eventDate,
+        startsAt: startsAt,
+        endsAt: endsAt,
         color: event.color || 'bg-purple-500/70',
         isLocked: event.isLocked || false,
         isTodo: event.isTodo || false,
         hasAlarm: event.hasAlarm || false,
         hasReminder: event.hasReminder || false,
-        todoId: event.todoId
+        todoId: event.todoId,
+        isRecurring: event.isRecurring,
+        recurrenceRule: event.recurrenceRule,
+        calendarId: event.calendarId,
       };
       
       logger.debug('Calendar', 'Formatted event ready for addEvent', { 
         title: formattedEvent.title,
-        date: formattedEvent.date 
+        startsAt: formattedEvent.startsAt,
+        endsAt: formattedEvent.endsAt
       });
       
-      // Use the addEvent function from the hook
+      // Use the addEvent function from the hook - skip Zod validation for AI events
+      // The addEvent function handles the ISO datetime format properly
       const result = await addEvent(formattedEvent);
       
       if (result.success) {
@@ -94,9 +101,9 @@ const Calendar = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col text-white relative pb-16 md:pb-0 bg-background">
+    <div className="h-screen flex flex-col text-white relative overflow-hidden bg-background">
       <Mainview />
-      <DraggableMallyAI onScheduleEvent={handleScheduleEvent} />
+      <BottomMallyAI onScheduleEvent={handleScheduleEvent} />
       <MobileNavigation />
     </div>
   );

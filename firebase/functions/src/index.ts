@@ -153,6 +153,7 @@ export const processAIRequest = onRequest(
   { 
     cors: [
       'http://localhost:8080', 
+      'http://localhost:8081',
       'http://localhost:5173', 
       'http://localhost:3000', 
       'https://malleabite-97d35.web.app', 
@@ -320,6 +321,12 @@ export const processAIRequest = onRequest(
         ? conversationHistory.map(m => `${m.role === 'user' ? 'User' : 'Mally'}: ${m.content}`).join('\n')
         : 'No previous conversation.';
 
+      // Build available calendars context for multi-account support
+      const availableCalendars = (clientContext as any)?.availableCalendars || [];
+      const calendarsContext = availableCalendars.length > 0
+        ? availableCalendars.map((c: any) => `- "${c.name}" (ID: ${c.id})${c.isDefault ? ' [Default]' : ''}${c.isGoogle ? ' [Google Calendar]' : ''}`).join('\n')
+        : '- "My Calendar" (ID: default) [Default]';
+
       // Generate AI response with Gemini (using flash model for free tier efficiency)
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-2.5-flash',
@@ -341,8 +348,9 @@ YOUR CAPABILITIES - USE THEM PROACTIVELY:
 2. TODO LISTS: Create named todo lists, add todos to specific lists, complete, delete todos
 3. EISENHOWER MATRIX: Add, update, delete priority items (4 quadrants for prioritization)
 4. ALARMS: Create, update, delete alarms and link them to events or todos
-5. RECURRING EVENTS: Create events that repeat daily, weekly, monthly, or yearly
-6. QUERY: Answer questions about the user's schedule, todos, priorities, or alarms
+5. REMINDERS: Create, update, delete reminders with custom times and sounds
+6. RECURRING EVENTS: Create events that repeat daily, weekly, monthly, or yearly
+7. QUERY: Answer questions about the user's schedule, todos, priorities, alarms, or reminders
 
 CRITICAL - BE A SMART PROACTIVE PLANNER:
 When users ask you to "help plan", "organize my schedule", "set up a routine", or similar planning requests:
@@ -385,6 +393,7 @@ PROACTIVE ACTION TRIGGERS:
 - "add X to my list" or "remind me to X" → Use create_todo
 - "create a list for X" or "new list called X" → Use create_todo_list
 - "set alarm for X" or "wake me up at X" → Use create_alarm  
+- "set reminder for X" or "remind me at X" → Use create_reminder
 - "important", "urgent", "must do" → Suggest create_eisenhower
 - "schedule X" or "create meeting" → Use create_event
 - "delete", "remove", "cancel" → Use appropriate delete action
@@ -412,6 +421,11 @@ ${eisenhowerContext}
 
 === ALARMS ===
 ${alarmsContext}
+
+=== AVAILABLE CALENDARS ===
+${calendarsContext}
+When the user specifies which calendar to add an event to (e.g., "add to my work calendar", "put it in Google Calendar"), use the matching calendarId or calendarName in the event data.
+If no calendar is specified, use the default calendar.
 
 === CONVERSATION HISTORY ===
 ${historyString}
@@ -453,8 +467,8 @@ For MULTIPLE actions:
 }
 
 ACTION DATA FORMATS:
-- create_event: { title: string, start: ISO datetime, end: ISO datetime, description?: string, isRecurring?: boolean, recurrenceRule?: { frequency, interval?, daysOfWeek?, dayOfMonth?, monthOfYear?, endDate?, count? } }
-- update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime }
+- create_event: { title: string, start: ISO datetime, end: ISO datetime, description: string (ALWAYS generate a short 1-2 sentence description for the event - be helpful and contextual), calendarId?: string, calendarName?: string, isRecurring?: boolean, recurrenceRule?: { frequency, interval?, daysOfWeek?, dayOfMonth?, monthOfYear?, endDate?, count? } }
+- update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime, description?: string, calendarId?: string }
 - delete_event: { eventId: string }
 - create_todo_list: { name: string, color?: string }
 - create_todo: { text: string, listId?: string }
@@ -467,6 +481,9 @@ ACTION DATA FORMATS:
 - update_alarm: { alarmId: string, title?: string, time?: ISO datetime }
 - delete_alarm: { alarmId: string }
 - link_alarm: { alarmId: string, linkedEventId?: string, linkedTodoId?: string }
+- create_reminder: { title: string, reminderTime: ISO datetime, description?: string, eventId?: string, soundId?: string }
+- update_reminder: { reminderId: string, title?: string, reminderTime?: ISO datetime, description?: string }
+- delete_reminder: { reminderId: string }
 
 RECURRENCE EXAMPLES:
 - Daily: { frequency: "daily", interval: 1 }
@@ -485,6 +502,11 @@ Notes:
 - Default event duration is 1 hour if not specified
 - Default alarm time is 15 minutes before linked event if not specified
 - Match item IDs carefully from the user's existing data when updating/deleting
+- ALWAYS generate a short, helpful description for every event (1-2 sentences max). Examples:
+  * "Prayer" → "Daily spiritual practice and reflection time"
+  * "Gym" → "Workout session to stay active and healthy"
+  * "Meeting with John" → "Catch up and discuss project updates"
+  * "Dentist appointment" → "Regular dental checkup and cleaning"
 `;
 
       // Prepare the content parts for Gemini

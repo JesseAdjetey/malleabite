@@ -1,14 +1,16 @@
 
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit2, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit2, Check, Trash2 } from 'lucide-react';
 
 interface PageHeaderProps {
   title: string;
   onUpdateTitle: (newTitle: string) => void;
   onPrevPage: () => void;
   onNextPage: () => void;
+  onDeletePage?: () => void;
   canGoToPrevPage: boolean;
   canGoToNextPage: boolean;
+  canDeletePage?: boolean;
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
@@ -16,8 +18,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   onUpdateTitle,
   onPrevPage,
   onNextPage,
+  onDeletePage,
   canGoToPrevPage,
-  canGoToNextPage
+  canGoToNextPage,
+  canDeletePage = true
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
@@ -70,6 +74,19 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             >
               <Edit2 size={14} />
             </button>
+            {canDeletePage && onDeletePage && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this page?')) {
+                    onDeletePage();
+                  }
+                }}
+                className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-red-500/20 hover:text-red-500"
+                title="Delete page"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
           </div>
         )}
       </div>

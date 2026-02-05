@@ -7,6 +7,7 @@ import { useDateStore, useEventStore } from "@/lib/store";
 import AddEventButton from "@/components/calendar/AddEventButton";
 import EventForm from "@/components/calendar/EventForm";
 import EventDetails from "@/components/calendar/EventDetails";
+import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 import dayjs from "dayjs";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -15,6 +16,8 @@ import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
+import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
+import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
@@ -33,7 +36,17 @@ const MonthView = () => {
     bulkUpdateColor,
     bulkReschedule,
     bulkDuplicate,
+    hasRecurringEvents,
+    getRecurringEvents,
   } = useBulkSelection();
+  const {
+    isTodoCalendarDialogOpen,
+    currentTodoData,
+    showTodoCalendarDialog,
+    hideTodoCalendarDialog,
+    handleCreateBoth,
+    handleCreateCalendarOnly,
+  } = useTodoCalendarIntegration();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -74,6 +87,9 @@ const MonthView = () => {
     }
   }, [pendingDaySelection]);
 
+  // Get calendar visibility filter
+  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+
   // Expand recurring events into instances for the current month view
   const expandedEvents = useMemo(() => {
     // Get month date range for recurring event expansion
@@ -82,7 +98,7 @@ const MonthView = () => {
     const lastDay = lastWeek?.[6] || lastWeek?.[lastWeek.length - 1];
     
     if (!firstDay || !lastDay) {
-      return events; // Return original events if month array not ready
+      return events.filter(event => isCalendarVisible(event.calendarId)); // Filter and return
     }
     
     const monthStart = firstDay.startOf('day').toDate();
@@ -90,7 +106,10 @@ const MonthView = () => {
     
     const allInstances: CalendarEventType[] = [];
     
-    events.forEach(event => {
+    // First filter by calendar visibility, then expand recurring events
+    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
+    
+    visibleEvents.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, monthStart, monthEnd);
@@ -105,7 +124,7 @@ const MonthView = () => {
     });
     
     return allInstances;
-  }, [events, twoDMonthArray]);
+  }, [events, twoDMonthArray, isCalendarVisible]);
 
   const getEventsForDay = (day: any) => {
     if (!day) return [];
@@ -191,6 +210,7 @@ const MonthView = () => {
                   onEventDrop={handleEventDrop}
                   addEvent={addEvent}
                   openEventForm={openEventForm}
+                  showTodoCalendarDialog={showTodoCalendarDialog}
                   isBulkMode={isBulkMode}
                   isSelected={isSelected}
                   onToggleSelection={toggleSelection}
@@ -210,6 +230,8 @@ const MonthView = () => {
           onReschedule={bulkReschedule}
           onDuplicate={bulkDuplicate}
           onDeselectAll={deselectAll}
+          hasRecurringEvents={hasRecurringEvents()}
+          recurringCount={getRecurringEvents().length}
         />
       )}
 
@@ -225,6 +247,14 @@ const MonthView = () => {
       />
 
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
+
+      <TodoCalendarDialog
+        open={isTodoCalendarDialogOpen && !!currentTodoData}
+        onClose={hideTodoCalendarDialog}
+        todoTitle={currentTodoData?.text || ''}
+        onCreateBoth={handleCreateBoth}
+        onCreateCalendarOnly={handleCreateCalendarOnly}
+      />
     </>
   );
 };

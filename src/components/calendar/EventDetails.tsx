@@ -1,17 +1,77 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useEventStore } from "@/lib/store";
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useUndoRedo } from '@/hooks/use-undo-redo';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 import EnhancedEventForm from './EnhancedEventForm';
 import { CalendarEventType } from '@/lib/stores/types';
 import { useTodos } from '@/hooks/use-todos';
-import { Calendar, Clock, CheckCircle, Lock, Users, Repeat } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, Lock, Users, Repeat, AlertTriangle } from 'lucide-react';
 import { RecurringEventEditDialog } from './RecurringEventEditDialog';
 import { EditScope } from '@/hooks/use-recurring-events';
+
+// Error boundary specific to EventDetails to catch rendering errors
+class EventDetailsErrorBoundary extends Component<
+  { children: ReactNode; onClose: () => void },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: ReactNode; onClose: () => void }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('EventDetails error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Dialog open={true} onOpenChange={() => {
+          this.setState({ hasError: false, error: undefined });
+          this.props.onClose();
+        }}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle size={20} />
+                Error Loading Event
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-muted-foreground">
+                There was an error loading this event's details. The event data may be corrupted.
+              </p>
+              {import.meta.env.DEV && this.state.error && (
+                <pre className="mt-2 text-xs bg-destructive/10 p-2 rounded overflow-auto">
+                  {this.state.error.message}
+                </pre>
+              )}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => {
+                this.setState({ hasError: false, error: undefined });
+                this.props.onClose();
+              }}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface EventDetailsProps {
   open: boolean;
@@ -25,11 +85,53 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   console.log('🎯 EventDetails selectedEvent:', selectedEvent);
 
   const { updateEvent, removeEvent, addRecurrenceException } = useCalendarEvents();
+  const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();
   const { toggleTodo, deleteTodo } = useTodos();
   const [isEditing, setIsEditing] = useState(false);
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
 
-  // Early return if no event selected
+  // All hooks must be called before any early returns!
+  // Memoize handleRecurringDeleteConfirm at the top level
+  const handleRecurringDeleteConfirm = useCallback(async (scope: EditScope) => {
+    if (!selectedEvent) return;
+    
+    try {
+      const parentId = selectedEvent.recurrenceParentId ||
+        (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
+      const instanceDate = selectedEvent.id.includes('_')
+        ? selectedEvent.id.split('_')[1]
+        : dayjs(selectedEvent.startsAt).format('YYYY-MM-DD');
+
+      if (scope === 'single') {
+        // Delete only this occurrence by adding an exception to the parent
+        if (addRecurrenceException && parentId) {
+          await addRecurrenceException(parentId, instanceDate);
+          toast.success("This occurrence has been removed");
+        } else {
+          // Fallback: just delete the event
+          await removeEvent(selectedEvent.id);
+          toast.success("Event deleted");
+        }
+      } else if (scope === 'all') {
+        // Delete the parent event (which deletes all occurrences)
+        await removeEvent(parentId);
+        toast.success("All occurrences deleted");
+      } else if (scope === 'thisAndFuture') {
+        // Add end date to parent recurrence rule
+        // For now, just delete all as a simpler implementation
+        await removeEvent(parentId);
+        toast.success("This and future occurrences deleted");
+      }
+
+      setShowRecurringDeleteDialog(false);
+      onClose();
+    } catch (error) {
+      console.error("Error deleting recurring event:", error);
+      toast.error("Failed to delete event");
+    }
+  }, [selectedEvent, addRecurrenceException, removeEvent, onClose]);
+
+  // Early return if no event selected - AFTER all hooks
   if (!selectedEvent) {
     console.log('⚠️ EventDetails: No selectedEvent, returning null');
     return null;
@@ -94,43 +196,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     }
   };
 
-  const handleRecurringDeleteConfirm = useCallback(async (scope: EditScope) => {
-    try {
-      const parentId = selectedEvent.recurrenceParentId ||
-        (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
-      const instanceDate = selectedEvent.id.includes('_')
-        ? selectedEvent.id.split('_')[1]
-        : dayjs(selectedEvent.startsAt).format('YYYY-MM-DD');
-
-      if (scope === 'single') {
-        // Delete only this occurrence by adding an exception to the parent
-        if (addRecurrenceException && parentId) {
-          await addRecurrenceException(parentId, instanceDate);
-          toast.success("This occurrence has been removed");
-        } else {
-          // Fallback: just delete the event
-          await removeEvent(selectedEvent.id);
-          toast.success("Event deleted");
-        }
-      } else if (scope === 'all') {
-        // Delete the parent event (which deletes all occurrences)
-        await removeEvent(parentId);
-        toast.success("All occurrences deleted");
-      } else if (scope === 'thisAndFuture') {
-        // Add end date to parent recurrence rule
-        // For now, just delete all as a simpler implementation
-        await removeEvent(parentId);
-        toast.success("This and future occurrences deleted");
-      }
-
-      setShowRecurringDeleteDialog(false);
-      onClose();
-    } catch (error) {
-      console.error("Error deleting recurring event:", error);
-      toast.error("Failed to delete event");
-    }
-  }, [selectedEvent, addRecurrenceException, removeEvent, onClose]);
-
   const handleDelete = async () => {
     try {
       // If it's a todo event, also handle todo item
@@ -139,6 +204,9 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
         console.log("Removing todo calendar event:", selectedEvent.id);
       }
 
+      // Track for undo before deleting
+      trackDeleteEvent(selectedEvent);
+      
       await removeEvent(selectedEvent.id);
       toast.success("Event deleted");
       onClose();
@@ -354,4 +422,13 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   );
 };
 
-export default EventDetails;
+// Wrap EventDetails with error boundary
+const EventDetailsWithErrorBoundary: React.FC<EventDetailsProps> = ({ open, onClose }) => {
+  return (
+    <EventDetailsErrorBoundary onClose={onClose}>
+      <EventDetails open={open} onClose={onClose} />
+    </EventDetailsErrorBoundary>
+  );
+};
+
+export default EventDetailsWithErrorBoundary;

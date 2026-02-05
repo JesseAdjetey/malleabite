@@ -7,6 +7,8 @@ import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
 import ArchivesModule from '../modules/ArchivesModule';
+import TemplatesModule from '../modules/TemplatesModule';
+import CalendarFilterModule from '../modules/CalendarFilterModule';
 
 interface ModuleRendererProps {
   module: ModuleInstance;
@@ -81,6 +83,18 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
           <ArchivesModule {...moduleProps} />
+        </div>
+      );
+    case 'templates':
+      return (
+        <div key={index} style={moduleStyle} className={moduleClassName}>
+          <TemplatesModule {...moduleProps} />
+        </div>
+      );
+    case 'calendars':
+      return (
+        <div key={index} style={moduleStyle} className={moduleClassName}>
+          <CalendarFilterModule {...moduleProps} />
         </div>
       );
     default:

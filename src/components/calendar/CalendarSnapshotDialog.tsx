@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -29,7 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { FolderPlus, FolderOpen, Trash2, Download, Calendar, RotateCcw } from 'lucide-react';
+import { FolderPlus, FolderOpen, Trash2, Download, Calendar, RotateCcw, Sparkles } from 'lucide-react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import dayjs from 'dayjs';
 
@@ -118,6 +117,44 @@ export function CalendarSnapshotDialog({
             {/* Save Tab */}
             <TabsContent value="save" className="space-y-4 mt-4">
               <div className="space-y-4">
+                {/* Quick Start Fresh Button */}
+                <div className="p-4 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-primary/10">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-medium">Quick Start Fresh</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Archive all events and start with a clean calendar
+                      </p>
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        const autoName = `Archive ${dayjs().format('MMM D, YYYY')}`;
+                        const result = await archiveAllEvents(autoName);
+                        if (result.success) {
+                          onOpenChange(false);
+                        }
+                      }}
+                      disabled={loading}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Start Fresh
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">or customize</span>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="snapshot-name">Archive Name</Label>
                   <Input

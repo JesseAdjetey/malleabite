@@ -2,19 +2,23 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'eisenhower' | 'invites' | 'archives';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'eisenhower' | 'invites' | 'archives' | 'templates' | 'calendars';
 
 interface ModuleSelectorProps {
   onSelect: (moduleType: ModuleType) => void;
+  existingModules?: ModuleType[];
 }
 
-const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
+const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect, existingModules = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleSelect = (type: ModuleType) => {
     onSelect(type);
     setIsOpen(false);
   };
+
+  // Check if a module type is already added
+  const isModuleAdded = (type: ModuleType) => existingModules.includes(type);
 
   if (!isOpen) {
     return (
@@ -39,42 +43,62 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
       <h3 className="text-lg font-semibold mb-3 text-primary">Select a Module</h3>
 
       <div className="grid grid-cols-2 gap-2">
+        {!isModuleAdded('todo') && (
         <button
           onClick={() => handleSelect('todo')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Todo List
         </button>
+        )}
+        {!isModuleAdded('pomodoro') && (
         <button
           onClick={() => handleSelect('pomodoro')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Pomodoro Timer
         </button>
+        )}
+        {!isModuleAdded('alarms') && (
         <button
           onClick={() => handleSelect('alarms')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Alarms
         </button>
+        )}
+        {!isModuleAdded('eisenhower') && (
         <button
           onClick={() => handleSelect('eisenhower')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Eisenhower Matrix
         </button>
+        )}
+        {!isModuleAdded('invites') && (
         <button
           onClick={() => handleSelect('invites')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Event Invites
         </button>
+        )}
+        {!isModuleAdded('templates') && (
         <button
-          onClick={() => handleSelect('archives')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-purple-500/30"
+          onClick={() => handleSelect('templates')}
+          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-blue-500/30"
         >
-          Archives
+          Templates
         </button>
+        )}
+        {!isModuleAdded('calendars') && (
+        <button
+          onClick={() => handleSelect('calendars')}
+          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-green-500/30"
+        >
+          Calendars
+        </button>
+        )}
       </div>
     </div>
   );

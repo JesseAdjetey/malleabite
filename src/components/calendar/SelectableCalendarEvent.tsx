@@ -55,7 +55,7 @@ const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
   };
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       {/* Selection Checkbox (only in bulk mode) */}
       {isBulkMode && (
         <div
@@ -77,7 +77,7 @@ const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
       {/* Event Component with selection highlight */}
       <div
         className={cn(
-          "transition-all duration-200",
+          "transition-all duration-200 h-full",
           isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-md"
         )}
       >

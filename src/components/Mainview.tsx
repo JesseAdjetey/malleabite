@@ -20,8 +20,14 @@ const Mainview = () => {
   const isMobile = useIsMobile();
 
   // Set limits for sidebar width
-  const MIN_WIDTH = 300;
-  const MAX_WIDTH = 1000;
+  const MIN_WIDTH = 280;
+  const MAX_WIDTH = 500;
+
+  // Ensure initial width is within bounds
+  useEffect(() => {
+    if (sidebarWidth < MIN_WIDTH) setSidebarWidth(MIN_WIDTH);
+    if (sidebarWidth > MAX_WIDTH) setSidebarWidth(MAX_WIDTH);
+  }, []);
 
   // Detect touch device on mount
   useEffect(() => {
@@ -159,8 +165,13 @@ const Mainview = () => {
           className="hidden md:flex items-center justify-center w-6 cursor-ew-resize z-10 hover:bg-purple-400/30 transition-colors"
           onMouseDown={startDrag}
           onTouchStart={handleTouchStart}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
         >
-          <div className="h-16 w-4 rounded-md flex items-center justify-center light-mode:bg-purple-200 light-mode:hover:bg-purple-300 dark-mode:bg-purple-600/30 dark-mode:hover:bg-purple-500/60">
+          <div 
+            className="h-16 w-4 rounded-md flex items-center justify-center light-mode:bg-purple-200 light-mode:hover:bg-purple-300 dark-mode:bg-purple-600/30 dark-mode:hover:bg-purple-500/60"
+            draggable={false}
+          >
             <GripVertical className="text-purple-500 h-10" />
           </div>
         </div>

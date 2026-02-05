@@ -16,6 +16,7 @@ interface MonthViewBoxProps {
   onEventDrop?: (event: any, date: string) => void;
   addEvent?: (event: CalendarEventType) => void;
   openEventForm?: (todoData: any, day: dayjs.Dayjs) => void;
+  showTodoCalendarDialog?: (todoData: any, date: Date, startTime: string) => void;
   isBulkMode?: boolean;
   isSelected?: (eventId: string) => boolean;
   onToggleSelection?: (eventId: string) => void;
@@ -30,6 +31,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   onEventDrop,
   addEvent,
   openEventForm,
+  showTodoCalendarDialog,
   isBulkMode = false,
   isSelected = () => false,
   onToggleSelection = () => {},
@@ -114,6 +116,13 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       
       // Handle todo item or Eisenhower item drag
       if (data.source === 'todo-module' || data.source === 'eisenhower') {
+        // Use TodoCalendarDialog for consistency with week/day views
+        if (showTodoCalendarDialog && day) {
+          // Default to 9:00 AM for month view drops
+          showTodoCalendarDialog(data, day.toDate(), '09:00');
+          return;
+        }
+        
         if (openEventForm && day) {
           // Open event form with todo/eisenhower data
           openEventForm(data, day);

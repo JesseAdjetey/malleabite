@@ -1,16 +1,11 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, MoreHorizontal, Wrench, FileText, Zap, Crown, BarChart3, FolderPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Crown } from 'lucide-react';
+import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+
 import dayjs from 'dayjs';
 import SettingsNav from './SettingsNav';
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,7 +15,6 @@ import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '@/hooks/use-subscription';
-import { CalendarSnapshotDialog } from '@/components/calendar/CalendarSnapshotDialog';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -47,8 +41,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   
   const { subscription } = useSubscription();
   const isPro = subscription?.isPro ?? false;
-  
-  const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
 
   const handleToggleBulkMode = () => {
     if (isBulkMode) {
@@ -124,17 +116,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   return (
     <div className="glass mx-2 mt-2 rounded-xl p-2 md:p-3 flex items-center justify-between border border-gray-300 dark:border-white/10 overflow-x-auto">
-      {/* Left Side - Logo and Navigation */}
+      {/* Left Side - Navigation */}
       <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
-        {/* Logo with spinning animation - Hidden on mobile */}
-        <div className="relative rounded-lg cursor-pointer hidden lg:block">
-          <img
-            src="/assets/logo-header.png"
-            alt="Malleabite Logo"
-            className="h-8 w-8 md:h-10 md:w-10 rounded-lg shadow-md transition-transform duration-300 hover:animate-[gentle-rotate_1s_ease-in-out]"
-          />
-        </div>
- {/* Home/Dashboard button - only show when not on dashboard */}
+        {/* Home/Dashboard button - only show when not on dashboard */}
         {location.pathname !== '/' && (
           <Button
             variant="outline"
@@ -206,46 +190,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             onReschedule={bulkReschedule}
             onDuplicate={bulkDuplicate}
             onDeselectAll={deselectAll}
+            iconOnly
           />}
           
-          {/* Tools Dropdown - Groups Templates, Quick Schedule, Patterns, and Analytics */}
-          {!isMobile && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 md:h-9 px-2 text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-white/10"
-                >
-                  <Wrench className="h-4 w-4 mr-1" />
-                  <span className="text-xs md:text-sm">Tools</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => navigate('/templates')}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Templates
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/quick-schedule')}>
-                  <Zap className="h-4 w-4 mr-2" />
-                  Quick Schedule
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/patterns')}>
-                  <MoreHorizontal className="h-4 w-4 mr-2" />
-                  Patterns
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setSnapshotDialogOpen(true)}>
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  Calendar Snapshots
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/analytics')}>
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {/* Undo/Redo Toolbar */}
+          {!isMobile && <UndoRedoToolbar />}
           
           {/* Upgrade Button or Pro Badge */}
           {!isMobile && (
@@ -269,12 +218,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           {!isMobile && <SettingsNav />}
         </TooltipProvider>
       </div>
-      
-      {/* Calendar Snapshot Dialog */}
-      <CalendarSnapshotDialog 
-        open={snapshotDialogOpen} 
-        onOpenChange={setSnapshotDialogOpen} 
-      />
     </div>
   );
 };

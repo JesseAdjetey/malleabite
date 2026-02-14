@@ -52,9 +52,8 @@ service cloud.firestore {
       allow read, delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner()
         && isValidString('title', 1, 200)
-        && request.resource.data.startsAt is timestamp
-        && request.resource.data.endsAt is timestamp
-        && request.resource.data.keys().hasAll(['userId', 'title', 'startsAt', 'endsAt']);
+        && request.resource.data.startAt is timestamp
+        && request.resource.data.endAt is timestamp;
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId; // Can't change owner
     }

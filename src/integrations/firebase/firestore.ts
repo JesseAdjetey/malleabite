@@ -104,6 +104,10 @@ export interface CalendarEvent extends BaseDocument {
   
   // Event type
   eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
+
+  // Google Calendar 2-way sync
+  googleEventId?: string;
+  source?: string;
 }
 
 export interface Todo extends BaseDocument {

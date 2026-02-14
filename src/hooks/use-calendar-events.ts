@@ -84,11 +84,21 @@ export function useCalendarEvents() {
   // Convert Firebase doc to CalendarEventType
   const convertFirebaseEvent = (doc: any): CalendarEventType => {
     const data = doc.data();
-    const startsAt = data.startsAt?.toDate?.()?.toISOString() || data.startsAt;
-    const endsAt = data.endsAt?.toDate?.()?.toISOString() || data.endsAt;
+    // Support both startAt/endAt (standardized) and startsAt/endsAt (legacy)
+    const startsAt = data.startAt?.toDate?.()?.toISOString() ||
+      (typeof data.startAt === 'string' ? data.startAt : null) ||
+      data.startsAt?.toDate?.()?.toISOString() ||
+      (typeof data.startsAt === 'string' ? data.startsAt : null);
+
+    const endsAt = data.endAt?.toDate?.()?.toISOString() ||
+      (typeof data.endAt === 'string' ? data.endAt : null) ||
+      data.endsAt?.toDate?.()?.toISOString() ||
+      (typeof data.endsAt === 'string' ? data.endsAt : null);
 
     // Extract date from startsAt for calendar display
     const date = startsAt ? new Date(startsAt).toISOString().split('T')[0] : '';
+    // Handle isArchived which might be missing in old docs
+    const isArchived = data.isArchived === true || data.is_archived === true;
 
     return {
       id: doc.id,
@@ -101,8 +111,8 @@ export function useCalendarEvents() {
       hasAlarm: data.hasAlarm || data.has_alarm || false,
       hasReminder: data.hasReminder || data.has_reminder || false,
       todoId: data.todoId || data.todo_id || null,
-      startsAt: startsAt,
-      endsAt: endsAt,
+      startsAt: startsAt || '',
+      endsAt: endsAt || '',
 
       // Google Calendar-style fields
       location: data.location || undefined,
@@ -129,7 +139,7 @@ export function useCalendarEvents() {
       eventType: data.eventType || 'default',
 
       // Archiving support
-      isArchived: data.isArchived || false,
+      isArchived: isArchived,
       folderName: data.folderName || undefined,
     };
   };
@@ -149,13 +159,14 @@ export function useCalendarEvents() {
 
       const eventsQuery = query(
         collection(db, 'calendar_events'),
-        where('userId', '==', user.uid),
-        where('isArchived', '==', false),
-        orderBy('startsAt', 'asc')
+        where('userId', '==', user.uid)
       );
 
       const snapshot = await getDocs(eventsQuery);
-      const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
+      const eventsList = snapshot.docs
+        .map(doc => convertFirebaseEvent(doc))
+        .filter(event => !event.isArchived)
+        .sort((a, b) => (a.startsAt || '').localeCompare(b.startsAt || ''));
       console.log(`Fetched ${eventsList.length} events from Firebase`);
       setEvents(eventsList);
       setLoading(false);
@@ -182,13 +193,14 @@ export function useCalendarEvents() {
 
     const eventsQuery = query(
       collection(db, 'calendar_events'),
-      where('userId', '==', user.uid),
-      where('isArchived', '==', false),
-      orderBy('startsAt', 'asc')
+      where('userId', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
-      const eventsList = snapshot.docs.map(doc => convertFirebaseEvent(doc));
+      const eventsList = snapshot.docs
+        .map(doc => convertFirebaseEvent(doc))
+        .filter(event => !event.isArchived)
+        .sort((a, b) => (a.startsAt || '').localeCompare(b.startsAt || ''));
       setEvents(eventsList);
       setLoading(false);
       setError(null);
@@ -323,6 +335,9 @@ export function useCalendarEvents() {
         hasReminder: event.hasReminder || false,
         userId: user.uid,
         todoId: event.todoId || null,
+        // Write both for compatibility and to avoid missing field in future indexes
+        startAt: Timestamp.fromDate(startsAt),
+        endAt: Timestamp.fromDate(endsAt),
         startsAt: Timestamp.fromDate(startsAt),
         endsAt: Timestamp.fromDate(endsAt),
         createdAt: serverTimestamp(),
@@ -449,6 +464,8 @@ export function useCalendarEvents() {
         hasAlarm: event.hasAlarm || false,
         hasReminder: event.hasReminder || false,
         todoId: event.todoId || null,
+        startAt: Timestamp.fromDate(startsAt),
+        endAt: Timestamp.fromDate(endsAt),
         startsAt: Timestamp.fromDate(startsAt),
         endsAt: Timestamp.fromDate(endsAt),
 

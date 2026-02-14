@@ -66,7 +66,8 @@ export function useUsageLimits() {
   }, [subscription]);
 
   const planLimits = getPlanLimits();
-  const isUnlimited = subscription?.isPro || subscription?.isTeams;
+  // Force unlimited for now as requested by user
+  const isUnlimited = true;
 
   // Listen to usage document
   useEffect(() => {
@@ -77,18 +78,18 @@ export function useUsageLimits() {
     }
 
     const usageRef = doc(db, 'usage', user.uid);
-    
+
     const unsubscribe = onSnapshot(usageRef, async (docSnap) => {
       try {
         if (docSnap.exists()) {
           const data = docSnap.data() as UsageData;
-          
+
           // Check if we need to reset monthly counters
           const now = new Date();
           const lastReset = new Date(data.lastResetDate);
-          
-          if (now.getMonth() !== lastReset.getMonth() || 
-              now.getFullYear() !== lastReset.getFullYear()) {
+
+          if (now.getMonth() !== lastReset.getMonth() ||
+            now.getFullYear() !== lastReset.getFullYear()) {
             // Reset monthly counters
             const resetData: UsageData = {
               ...data,
@@ -123,56 +124,45 @@ export function useUsageLimits() {
   const aiLimit = planLimits.aiRequestsPerMonth as number;
   const eventLimit = planLimits.eventsPerMonth as number;
   const moduleLimit = planLimits.modulesActive as number;
-  
+
   const limits: UsageLimits = {
-    // Check if actions are allowed
-    canCreateEvent: isUnlimited || 
-      eventLimit === -1 || 
-      (usage?.eventsThisMonth || 0) < eventLimit,
-    
-    canUseAI: isUnlimited || 
-      aiLimit === -1 || 
-      (usage?.aiRequestsThisMonth || 0) < aiLimit,
-    
-    canAddModule: isUnlimited || 
-      moduleLimit === -1 || 
-      (usage?.activeModules || 0) < moduleLimit,
-    
-    canUseRecurring: isUnlimited, // Pro feature only
-    
-    canUseAdvancedAnalytics: isUnlimited, // Pro feature only
-    
+    // Check if actions are allowed - forced to true
+    canCreateEvent: true,
+    canUseAI: true,
+    canAddModule: true,
+    canUseRecurring: true,
+    canUseAdvancedAnalytics: true,
+
     // Usage stats
     eventsUsed: usage?.eventsThisMonth || 0,
     aiRequestsUsed: usage?.aiRequestsThisMonth || 0,
     modulesUsed: usage?.activeModules || 0,
-    
+
     // Limits
     eventsLimit: eventLimit === -1 ? Infinity : eventLimit,
     aiRequestsLimit: aiLimit === -1 ? Infinity : aiLimit,
     modulesLimit: moduleLimit === -1 ? Infinity : moduleLimit,
-    
+
     // Remaining
-    eventsRemaining: eventLimit === -1 
-      ? Infinity 
+    eventsRemaining: eventLimit === -1
+      ? Infinity
       : Math.max(0, eventLimit - (usage?.eventsThisMonth || 0)),
-    
-    aiRequestsRemaining: aiLimit === -1 
-      ? Infinity 
+
+    aiRequestsRemaining: aiLimit === -1
+      ? Infinity
       : Math.max(0, aiLimit - (usage?.aiRequestsThisMonth || 0)),
-    
-    modulesRemaining: moduleLimit === -1 
-      ? Infinity 
+
+    modulesRemaining: moduleLimit === -1
+      ? Infinity
       : Math.max(0, moduleLimit - (usage?.activeModules || 0)),
   };
 
   // Increment event count
   const incrementEventCount = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
-    
+
     if (!limits.canCreateEvent) {
-      setUpgradePromptFeature('events');
-      setShowUpgradePrompt(true);
+      // Disabled for now
       return false;
     }
 
@@ -208,10 +198,9 @@ export function useUsageLimits() {
   // Increment AI request count
   const incrementAICount = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
-    
+
     if (!limits.canUseAI) {
-      setUpgradePromptFeature('ai');
-      setShowUpgradePrompt(true);
+      // Disabled for now
       return false;
     }
 
@@ -231,11 +220,10 @@ export function useUsageLimits() {
   // Update active module count
   const updateModuleCount = useCallback(async (count: number): Promise<boolean> => {
     if (!user) return false;
-    
+
     // Check if adding more modules than allowed
     if (count > (usage?.activeModules || 0) && !limits.canAddModule) {
-      setUpgradePromptFeature('modules');
-      setShowUpgradePrompt(true);
+      // Disabled for now
       return false;
     }
 
@@ -255,12 +243,8 @@ export function useUsageLimits() {
   const checkPremiumFeature = useCallback((
     feature: 'recurring' | 'analytics'
   ): boolean => {
-    if (isUnlimited) return true;
-    
-    setUpgradePromptFeature(feature);
-    setShowUpgradePrompt(true);
-    return false;
-  }, [isUnlimited]);
+    return true; // Always allowed
+  }, []);
 
   // Hide upgrade prompt
   const hideUpgradePrompt = useCallback(() => {
@@ -274,21 +258,20 @@ export function useUsageLimits() {
     limits,
     loading: loading || subLoading,
     isUnlimited,
-    
+
     // Actions
     incrementEventCount,
     decrementEventCount,
     incrementAICount,
     updateModuleCount,
     checkPremiumFeature,
-    
+
     // Upgrade prompt state
     showUpgradePrompt,
     upgradePromptFeature,
     hideUpgradePrompt,
     triggerUpgradePrompt: (feature: typeof upgradePromptFeature) => {
-      setUpgradePromptFeature(feature);
-      setShowUpgradePrompt(true);
+      // Disabled
     },
   };
 }

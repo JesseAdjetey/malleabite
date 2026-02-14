@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.processAIRequest = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -201,7 +201,7 @@ exports.processAIRequest = (0, https_1.onRequest)({
         console.log('Authenticated user:', authenticatedUserId);
         // Parse request body
         const requestData = req.body.data || req.body;
-        const { message, userId, imageData, context: clientContext } = requestData;
+        const { message, userId, context: clientContext } = requestData;
         if (!message || !userId) {
             res.status(400).json({
                 error: { message: 'Missing required fields: message and userId', status: 'INVALID_ARGUMENT' }
@@ -297,216 +297,77 @@ exports.processAIRequest = (0, https_1.onRequest)({
         catch (dbError) {
             console.warn('Could not fetch alarms:', dbError);
         }
-        // Build conversation history string
+        // Build conversation history string (if needed for context fallback)
         const conversationHistory = clientContext?.conversationHistory || [];
-        const historyString = conversationHistory.length > 0
-            ? conversationHistory.map(m => `${m.role === 'user' ? 'User' : 'Mally'}: ${m.content}`).join('\n')
+        const historySummary = conversationHistory.length > 0
+            ? conversationHistory.map((m) => `${m.role === 'user' ? 'User' : 'Mally'}: ${m.content}`).join('\n')
             : 'No previous conversation.';
         // Build available calendars context for multi-account support
         const availableCalendars = clientContext?.availableCalendars || [];
         const calendarsContext = availableCalendars.length > 0
             ? availableCalendars.map((c) => `- "${c.name}" (ID: ${c.id})${c.isDefault ? ' [Default]' : ''}${c.isGoogle ? ' [Google Calendar]' : ''}`).join('\n')
             : '- "My Calendar" (ID: default) [Default]';
-        // Generate AI response with Gemini (using flash model for free tier efficiency)
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
-            generationConfig: {
-                temperature: 0.7,
-                topP: 0.9,
-                topK: 40,
-                maxOutputTokens: 1024, // Optimize for free tier
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const systemPrompt = `
+        You are Mally, a highly intelligent and PROACTIVE scheduling assistant for Malleabite.
+        Current Time: ${clientContext?.currentTime || new Date().toISOString()}
+        User Timezone: ${clientContext?.timeZone || 'UTC'}
+        
+        GOAL: Manage the user's calendar and productivity with elite precision.
+        
+        CORE CAPABILITIES:
+        1. CONVERSATIONAL MEMORY (CRITICAL):
+           - You have access to the conversation history.
+           - ALWAYS resolve pronouns like "this", "it", "that", or "the event" by checking the CONVERSATION HISTORY first.
+           - If the user says "change it to 3pm", find the last discussed event in history and apply the change to THAT event.
+           - Do NOT ask for details (title, time) if they were provided earlier in the chat.
+        
+        2. PROACTIVE PLANNING:
+           - Analyze EXISTING DATA below to find conflicts or free slots.
+           - Suggest specific times rather than asking questions.
+        
+        EXISTING DATA:
+        CALENDAR: ${eventsContext}
+        TODOS: ${todosContext}
+        PRIORITIES: ${eisenhowerContext}
+        ALARMS: ${alarmsContext}
+        CALENDARS: ${calendarsContext}
+        HISTORY_SUMMARY: ${historySummary}
+        
+        RULES:
+        - CONFLICTS: If a requested time is busy, mention the conflict and suggest a free alternative.
+        - RECURRENCE: Use "isRecurring: true" and specify "recurrenceRule". For irregular routines, create multiple actions.
+        - DURATION: Default to 1 hour if not specified. Never return start == end.
+        - FORMAT: Return ONLY a raw JSON object (no markdown).
+        
+        JSON STRUCTURE:
+        {
+          "response": "Explain your reasoning and what you've done.",
+          "actionRequired": boolean,
+          "intent": "scheduling" | "task_management" | "query" | "general",
+          "actions": [
+            { "type": "create_event", "data": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": bool, "recurrenceRule": {...} } },
+            { "type": "update_event", "data": { "eventId": "...", "start": "ISO", "end": "ISO", "title": "..." } },
+            { "type": "create_todo", "data": { "text": "...", "listName": "..." } },
+            { "type": "create_alarm", "data": { "title": "...", "time": "HH:mm" } }
+          ]
+        }
+      `;
+        // Format history for Gemini chat session
+        const history = clientContext?.history || [];
+        const formattedHistory = history.map((h) => ({
+            role: h.role === 'user' ? 'user' : 'model',
+            parts: [{ text: h.parts }]
+        }));
+        const chat = model.startChat({
+            history: formattedHistory,
+            systemInstruction: {
+                role: "system",
+                parts: [{ text: systemPrompt }]
             }
         });
-        const systemPrompt = `
-You are Mally, an intelligent and proactive productivity assistant for a calendar app called Malleabite.
-Current Date/Time: ${clientContext?.currentTime || new Date().toISOString()}
-User Timezone: ${clientContext?.timeZone || 'UTC'}
-
-YOUR CAPABILITIES - USE THEM PROACTIVELY:
-1. CALENDAR EVENTS: Create, update, delete calendar events (including recurring events)
-2. TODO LISTS: Create named todo lists, add todos to specific lists, complete, delete todos
-3. EISENHOWER MATRIX: Add, update, delete priority items (4 quadrants for prioritization)
-4. ALARMS: Create, update, delete alarms and link them to events or todos
-5. REMINDERS: Create, update, delete reminders with custom times and sounds
-6. RECURRING EVENTS: Create events that repeat daily, weekly, monthly, or yearly
-7. QUERY: Answer questions about the user's schedule, todos, priorities, alarms, or reminders
-
-CRITICAL - BE A SMART PROACTIVE PLANNER:
-When users ask you to "help plan", "organize my schedule", "set up a routine", or similar planning requests:
-1. NEVER ask for specific times - BE PROACTIVE and suggest reasonable times yourself!
-2. TAKE ACTION IMMEDIATELY - don't ask clarifying questions unless truly necessary
-3. BE PROACTIVE - choose reasonable times based on common sense:
-   - Morning routines: 6-9 AM
-   - Work/study sessions: 9 AM - 5 PM
-   - Lunch: 12-1 PM
-   - Exercise/gym: 6-7 AM or 5-7 PM (popular fitness times)
-   - Evening activities: 6-9 PM
-   - Sleep/wind down: 9-11 PM
-4. ALWAYS CREATE MULTIPLE EVENTS when user asks for multiple things
-5. For recurring activities, CREATE EACH AS A SEPARATE RECURRING EVENT with appropriate times
-6. When user says "plan" or "help me" - JUST DO IT with sensible defaults
-
-COMPLEX RECURRING PATTERNS - DIFFERENT DAYS/TIMES:
-When user wants different times on different days (e.g., "gym Monday 5pm, Tuesday 6pm, Wednesday 7pm"):
-- DO NOT create a single recurring event with daysOfWeek
-- Instead, CREATE SEPARATE RECURRING EVENTS for each day/time combination
-- Example: "gym Mon 5pm, Tue 6pm, Wed 7pm" = 3 separate weekly recurring events:
-  1. Gym - recurring weekly on Monday at 17:00
-  2. Gym - recurring weekly on Tuesday at 18:00  
-  3. Gym - recurring weekly on Wednesday at 19:00
-
-MULTIPLE EVENTS - VERY IMPORTANT:
-When user requests multiple activities, ALWAYS return MULTIPLE actions. Use this format:
-{
-  "response": "Your message explaining all events being created",
-  "actionRequired": true,
-  "intent": "create_multiple_events",
-  "actions": [
-    { "type": "create_event", "data": { ... first event ... } },
-    { "type": "create_event", "data": { ... second event ... } },
-    { "type": "create_event", "data": { ... third event ... } }
-  ]
-}
-
-PROACTIVE ACTION TRIGGERS:
-- "add X to my list" or "remind me to X" → Use create_todo
-- "create a list for X" or "new list called X" → Use create_todo_list
-- "set alarm for X" or "wake me up at X" → Use create_alarm  
-- "set reminder for X" or "remind me at X" → Use create_reminder
-- "important", "urgent", "must do" → Suggest create_eisenhower
-- "schedule X" or "create meeting" → Use create_event
-- "delete", "remove", "cancel" → Use appropriate delete action
-- "done", "finished", "completed" about a todo → Use complete_todo
-- "plan my day/week", "help me schedule", "set up routine" → Create multiple events with smart defaults IMMEDIATELY
-
-RECURRING EVENT PATTERNS:
-- Daily: "every day", "daily" → { frequency: "daily", interval: 1 }
-- Weekly same time: "every week", "weekly" → { frequency: "weekly", daysOfWeek: [X] }
-- Weekdays: "every weekday", "Mon-Fri" → { frequency: "weekly", daysOfWeek: [1,2,3,4,5] }
-- Monthly: "every month", "monthly" → { frequency: "monthly", dayOfMonth: X }
-- Yearly: "every year", "annually" → { frequency: "yearly" }
-- DIFFERENT TIMES ON DIFFERENT DAYS: Create SEPARATE events for each day/time pair!
-
-USER'S CURRENT DATA:
-
-=== CALENDAR EVENTS ===
-${eventsContext}
-
-=== TODO LIST ===
-${todosContext}
-
-=== EISENHOWER MATRIX (Priority Items) ===
-${eisenhowerContext}
-
-=== ALARMS ===
-${alarmsContext}
-
-=== AVAILABLE CALENDARS ===
-${calendarsContext}
-When the user specifies which calendar to add an event to (e.g., "add to my work calendar", "put it in Google Calendar"), use the matching calendarId or calendarName in the event data.
-If no calendar is specified, use the default calendar.
-
-=== CONVERSATION HISTORY ===
-${historyString}
-
-HANDLING CONFIRMATIONS:
-When user says "yes", "yeah", "sure", "ok", "do it", "sounds good":
-1. Look at PREVIOUS message to find what action was suggested
-2. Set intent to "confirmation" 
-3. Set actionRequired to true
-4. Include the FULL action object with ALL data from previous suggestion
-
-INSTRUCTIONS:
-1. Analyze user's message AND conversation history to understand intent
-2. BE SMART about planning - don't always ask for times, suggest reasonable defaults
-3. For multiple requests, create multiple actions in the "actions" array
-4. For CREATION actions, prepare the action and explain what you'll create
-5. For DELETION/UPDATE, ask confirmation unless user says "delete" or "remove"
-6. For todo completion, execute immediately when user says "done" or "completed"
-7. Be conversational and helpful - explain what you're doing
-
-Return JSON with this structure (no markdown, just raw JSON):
-For SINGLE action:
-{
-  "response": "Your friendly response",
-  "actionRequired": true or false,
-  "intent": "create_event" | "update_event" | "delete_event" | "create_todo" | ... | "query" | "confirmation" | "general",
-  "action": { "type": "...", "data": { ... } }
-}
-
-For MULTIPLE actions:
-{
-  "response": "Your friendly response explaining all the events/items you're creating",
-  "actionRequired": true,
-  "intent": "create_multiple_events",
-  "actions": [
-    { "type": "create_event", "data": { ... } },
-    { "type": "create_event", "data": { ... } }
-  ]
-}
-
-ACTION DATA FORMATS:
-- create_event: { title: string, start: ISO datetime, end: ISO datetime, description: string (ALWAYS generate a short 1-2 sentence description for the event - be helpful and contextual), calendarId?: string, calendarName?: string, isRecurring?: boolean, recurrenceRule?: { frequency, interval?, daysOfWeek?, dayOfMonth?, monthOfYear?, endDate?, count? } }
-- update_event: { eventId: string, title?: string, start?: ISO datetime, end?: ISO datetime, description?: string, calendarId?: string }
-- delete_event: { eventId: string }
-- create_todo_list: { name: string, color?: string }
-- create_todo: { text: string, listId?: string }
-- complete_todo: { todoId: string }
-- delete_todo: { todoId: string }
-- create_eisenhower: { text: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
-- update_eisenhower: { itemId: string, quadrant: "urgent_important" | "not_urgent_important" | "urgent_not_important" | "not_urgent_not_important" }
-- delete_eisenhower: { itemId: string }
-- create_alarm: { title: string, time: ISO datetime, linkedEventId?: string, linkedTodoId?: string, repeatDays?: number[] }
-- update_alarm: { alarmId: string, title?: string, time?: ISO datetime }
-- delete_alarm: { alarmId: string }
-- link_alarm: { alarmId: string, linkedEventId?: string, linkedTodoId?: string }
-- create_reminder: { title: string, reminderTime: ISO datetime, description?: string, eventId?: string, soundId?: string }
-- update_reminder: { reminderId: string, title?: string, reminderTime?: ISO datetime, description?: string }
-- delete_reminder: { reminderId: string }
-
-RECURRENCE EXAMPLES:
-- Daily: { frequency: "daily", interval: 1 }
-- Weekdays (Mon-Fri): { frequency: "weekly", daysOfWeek: [1, 2, 3, 4, 5] }
-- Weekly on Mon/Wed/Fri: { frequency: "weekly", daysOfWeek: [1, 3, 5] }
-- Monthly on 15th: { frequency: "monthly", dayOfMonth: 15 }
-
-QUADRANT MEANINGS:
-- urgent_important = Do First (crisis, deadlines, emergencies)
-- not_urgent_important = Schedule (goals, planning, growth)
-- urgent_not_important = Delegate (interruptions, some meetings)
-- not_urgent_not_important = Eliminate (time wasters, distractions)
-
-Notes:
-- Only include "action" field if actionRequired is true
-- Default event duration is 1 hour if not specified
-- Default alarm time is 15 minutes before linked event if not specified
-- Match item IDs carefully from the user's existing data when updating/deleting
-- ALWAYS generate a short, helpful description for every event (1-2 sentences max). Examples:
-  * "Prayer" → "Daily spiritual practice and reflection time"
-  * "Gym" → "Workout session to stay active and healthy"
-  * "Meeting with John" → "Catch up and discuss project updates"
-  * "Dentist appointment" → "Regular dental checkup and cleaning"
-`;
-        // Prepare the content parts for Gemini
-        const contentParts = [];
-        // Add image if provided
-        if (imageData && imageData.dataUrl && imageData.mimeType) {
-            // Extract base64 data from data URL
-            const base64Data = imageData.dataUrl.split(',')[1];
-            contentParts.push({
-                inlineData: {
-                    mimeType: imageData.mimeType,
-                    data: base64Data
-                }
-            });
-            contentParts.push({ text: `[User uploaded an image]\n\nUser message: ${message}\n\nPlease analyze the image and respond appropriately. If the image contains calendar-related information (schedules, events, dates), help create events from it. If it contains tasks or todo lists, help organize them.` });
-        }
-        else {
-            contentParts.push({ text: `User message: ${message}` });
-        }
-        const result = await model.generateContent([systemPrompt, ...contentParts]);
+        const result = await chat.sendMessage(message);
         const responseText = result.response.text();
-        console.log('Gemini raw response:', responseText);
         // Clean up and parse JSON response
         let aiResult;
         try {
@@ -524,70 +385,115 @@ Notes:
                 intent: 'general'
             };
         }
-        // Build response
-        const response = {
-            success: true,
-            response: aiResult.response,
-            actionRequired: aiResult.actionRequired || false,
-            intent: aiResult.intent || 'general',
-            action: null,
-            actions: null, // Support for multiple actions
-            eventData: null, // Keep for backward compatibility
-            conflicts: []
-        };
-        // Handle multiple actions array (for complex recurring events with different times)
-        if (aiResult.actionRequired && aiResult.actions && Array.isArray(aiResult.actions) && aiResult.actions.length > 0) {
-            response.actions = aiResult.actions;
-            console.log('Multiple actions detected:', aiResult.actions.length);
-        }
-        // If action required, prepare action data
-        if (aiResult.actionRequired && aiResult.action) {
-            response.action = aiResult.action;
-            // Also populate eventData for backward compatibility with create_event
-            if (aiResult.action.type === 'create_event' && aiResult.action.data) {
-                const actionData = aiResult.action.data;
-                const startDate = new Date(actionData.start);
-                const endDate = new Date(actionData.end);
-                response.eventData = {
-                    title: actionData.title,
-                    startsAt: startDate.toISOString(),
-                    endsAt: endDate.toISOString(),
-                    description: actionData.description || 'Created by Mally AI',
-                    color: '#3b82f6',
-                    // Include recurring event properties
-                    isRecurring: actionData.isRecurring || false,
-                    recurrenceRule: actionData.recurrenceRule || undefined,
+        // Build standardized response
+        const rawActions = aiResult.actions || aiResult.operations || [];
+        const finalActions = rawActions.map((op) => {
+            const type = op.type;
+            const data = op.data || op.event || op;
+            if (type === 'create_event') {
+                return {
+                    type: 'create_event',
+                    data: {
+                        title: data.title,
+                        start: data.start || data.startsAt,
+                        end: data.end || data.endsAt,
+                        description: data.description || 'Created by Mally AI',
+                        isRecurring: data.isRecurring || false,
+                        recurrenceRule: data.recurrenceRule || null
+                    }
                 };
             }
-        }
-        // Legacy support: if suggestedEvent exists, convert to new format
-        if (aiResult.actionRequired && aiResult.suggestedEvent && !aiResult.action) {
-            const startDate = new Date(aiResult.suggestedEvent.start);
-            const endDate = new Date(aiResult.suggestedEvent.end);
-            response.action = {
-                type: 'create_event',
-                data: {
-                    title: aiResult.suggestedEvent.title,
-                    start: startDate.toISOString(),
-                    end: endDate.toISOString(),
-                    description: aiResult.suggestedEvent.description || 'Created by Mally AI'
-                }
-            };
-            response.eventData = {
-                title: aiResult.suggestedEvent.title,
-                startsAt: startDate.toISOString(),
-                endsAt: endDate.toISOString(),
-                description: aiResult.suggestedEvent.description || 'Created by Mally AI',
-                color: '#3b82f6'
-            };
-        }
-        res.json({ result: response });
+            // ... add other mappings as needed, but keep it minimal for now
+            return op;
+        });
+        res.json({
+            result: {
+                success: true,
+                response: aiResult.response,
+                actionRequired: aiResult.actionRequired || finalActions.length > 0,
+                actions: finalActions,
+                intent: aiResult.intent || 'general'
+            }
+        });
     }
     catch (error) {
         console.error('Error processing AI request:', error);
         res.status(500).json({
             error: { message: 'An error occurred while processing your request', status: 'INTERNAL' }
         });
+    }
+});
+/**
+ * Audio transcription using Gemini
+ */
+exports.transcribeAudio = (0, https_1.onRequest)({
+    region: 'us-central1',
+    secrets: [geminiApiKey]
+}, async (req, res) => {
+    // CORS headers
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    try {
+        const { audioData } = req.body.data || req.body;
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
+            res.json({ result: { success: true, transcript: "Mock transcript (API Key missing)" } });
+            return;
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const result = await model.generateContent([
+            {
+                inlineData: {
+                    mimeType: "audio/wav",
+                    data: audioData
+                }
+            },
+            { text: "Transcribe this audio exactly as spoken. Return only the text." }
+        ]);
+        res.json({
+            result: {
+                success: true,
+                transcript: result.response.text()
+            }
+        });
+    }
+    catch (error) {
+        console.error('Transcription Error:', error);
+        res.status(500).json({ error: 'Failed to transcribe audio' });
+    }
+});
+/**
+ * Helper to create calendar event directly (for testing/bypass)
+ */
+exports.createCalendarEvent = (0, https_1.onRequest)({ region: 'us-central1' }, async (req, res) => {
+    // CORS headers
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.status(204).send('');
+        return;
+    }
+    try {
+        const { eventData, userId } = req.body.data || req.body;
+        const db = admin.firestore();
+        const docRef = await db.collection('calendar_events').add({
+            ...eventData,
+            userId: userId,
+            created_at: admin.firestore.Timestamp.now(),
+            updated_at: admin.firestore.Timestamp.now()
+        });
+        res.json({ result: { success: true, eventId: docRef.id } });
+    }
+    catch (error) {
+        console.error('Create Event Error:', error);
+        res.status(500).json({ error: 'Failed to create event' });
     }
 });
 //# sourceMappingURL=index.js.map

@@ -1,17 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Clock, Bell, Loader2 } from 'lucide-react';
-import { FirestoreService, COLLECTIONS, timestampFromDate } from '@/integrations/firebase/firestore';
-import { useAuth } from '@/contexts/AuthContext.firebase';
-import { toast } from 'sonner';
-
-interface Alarm {
-  id: string;
-  title: string;
-  alarmTime: any; // Firestore Timestamp
-  isActive: boolean;
-}
+import { useAlarms } from '@/hooks/use-alarms';
 
 interface AlarmsModuleProps {
   title?: string;
@@ -30,31 +21,12 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
   isMinimized = false,
   isDragging = false
 }) => {
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { alarms, loading, addAlarm, deleteAlarm, toggleAlarm } = useAlarms();
   const [newAlarmTitle, setNewAlarmTitle] = useState('');
   const [newAlarmTime, setNewAlarmTime] = useState('08:00');
-  const { user } = useAuth();
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribe = FirestoreService.subscribeToCollection<Alarm>(
-      COLLECTIONS.ALARMS,
-      (docs) => {
-        setAlarms(docs);
-        setLoading(false);
-      },
-      [{ field: 'userId', operator: '==', value: user.uid }],
-      'alarmTime',
-      'asc'
-    );
-
-    return () => unsubscribe();
-  }, [user]);
-
-  const addAlarm = async () => {
-    if (newAlarmTitle.trim() && user) {
+  const handleAddAlarm = async () => {
+    if (newAlarmTitle.trim()) {
       const alarmTime = new Date();
       const [hours, minutes] = newAlarmTime.split(':');
       alarmTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
@@ -64,39 +36,35 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
         alarmTime.setDate(alarmTime.getDate() + 1);
       }
 
-      await FirestoreService.create(COLLECTIONS.ALARMS, {
-        userId: user.uid,
-        title: newAlarmTitle,
-        alarmTime: timestampFromDate(alarmTime),
-        isActive: true
-      });
-
+      await addAlarm(newAlarmTitle, alarmTime);
       setNewAlarmTitle('');
-      toast.success('Alarm created');
     }
   };
 
-  const toggleAlarm = async (id: string, currentStatus: boolean) => {
-    await FirestoreService.update<Alarm>(COLLECTIONS.ALARMS, id, {
-      isActive: !currentStatus
-    });
+  const handleToggle = async (id: string, enabled: boolean) => {
+    await toggleAlarm(id, !enabled);
   };
 
-  const deleteAlarm = async (id: string) => {
-    await FirestoreService.delete(COLLECTIONS.ALARMS, id);
-    toast.success('Alarm deleted');
+  const handleDelete = async (id: string) => {
+    await deleteAlarm(id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      addAlarm();
+      handleAddAlarm();
     }
   };
 
-  const formatAlarmTime = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatAlarmTime = (time: string | Date): string => {
+    if (typeof time === 'string') {
+      // If it's already in HH:MM format, return as-is
+      if (time.includes(':') && time.length <= 8) return time;
+      // Otherwise parse as ISO string
+      const date = new Date(time);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    // It's a Date object
+    return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -120,18 +88,18 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
               className="flex items-center gap-2 bg-white/5 p-2 rounded-lg mb-2"
             >
               <div
-                className={`w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${alarm.isActive ? 'bg-primary' : 'bg-secondary'}`}
-                onClick={() => toggleAlarm(alarm.id, alarm.isActive)}
+                className={`w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${alarm.enabled ? 'bg-primary' : 'bg-secondary'}`}
+                onClick={() => alarm.id && handleToggle(alarm.id, alarm.enabled)}
               />
               <div className="flex flex-col flex-1">
                 <span className="text-sm">{alarm.title}</span>
                 <span className="text-xs opacity-70 flex items-center gap-1">
                   <Clock size={12} />
-                  {formatAlarmTime(alarm.alarmTime)}
+                  {formatAlarmTime(alarm.time)}
                 </span>
               </div>
               <button
-                onClick={() => deleteAlarm(alarm.id)}
+                onClick={() => alarm.id && handleDelete(alarm.id)}
                 className="text-destructive/70 hover:text-destructive"
               >
                 ×
@@ -159,7 +127,7 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
           />
         </div>
         <button
-          onClick={addAlarm}
+          onClick={handleAddAlarm}
           className="bg-primary px-3 py-1 w-full rounded-md hover:bg-primary/80 transition-colors"
         >
           <span className="flex items-center justify-center gap-1 text-sm">

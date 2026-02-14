@@ -106,7 +106,7 @@ const CalendarFilterModule: React.FC<CalendarFilterModuleProps> = ({
               onCheckedChange={() => setAllVisible(!allVisible)}
               className="h-4 w-4"
             />
-            <span className="text-sm font-medium">All Calendars</span>
+            <span className="text-sm font-medium text-foreground">All Calendars</span>
           </div>
           <Button 
             variant="ghost" 
@@ -135,7 +135,7 @@ const CalendarFilterModule: React.FC<CalendarFilterModuleProps> = ({
                   className="w-3 h-3 rounded-full flex-shrink-0" 
                   style={{ backgroundColor: account.color }}
                 />
-                <span className="text-sm flex-1 truncate">{account.name}</span>
+                <span className="text-sm flex-1 truncate text-foreground">{account.name}</span>
                 {account.isGoogle && (
                   <Calendar className="h-3 w-3 text-muted-foreground" />
                 )}

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'eisenhower' | 'invites' | 'archives' | 'templates' | 'calendars';
+import { ModuleType } from '@/lib/store';
 
 interface ModuleSelectorProps {
   onSelect: (moduleType: ModuleType) => void;
@@ -44,60 +44,60 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect, existingModul
 
       <div className="grid grid-cols-2 gap-2">
         {!isModuleAdded('todo') && (
-        <button
-          onClick={() => handleSelect('todo')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Todo List
-        </button>
+          <button
+            onClick={() => handleSelect('todo')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
+          >
+            Todo List
+          </button>
         )}
         {!isModuleAdded('pomodoro') && (
-        <button
-          onClick={() => handleSelect('pomodoro')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Pomodoro Timer
-        </button>
+          <button
+            onClick={() => handleSelect('pomodoro')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
+          >
+            Pomodoro Timer
+          </button>
         )}
         {!isModuleAdded('alarms') && (
-        <button
-          onClick={() => handleSelect('alarms')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Alarms
-        </button>
+          <button
+            onClick={() => handleSelect('alarms')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
+          >
+            Alarms
+          </button>
         )}
         {!isModuleAdded('eisenhower') && (
-        <button
-          onClick={() => handleSelect('eisenhower')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Eisenhower Matrix
-        </button>
+          <button
+            onClick={() => handleSelect('eisenhower')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
+          >
+            Eisenhower Matrix
+          </button>
         )}
         {!isModuleAdded('invites') && (
-        <button
-          onClick={() => handleSelect('invites')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Event Invites
-        </button>
+          <button
+            onClick={() => handleSelect('invites')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
+          >
+            Event Invites
+          </button>
         )}
         {!isModuleAdded('templates') && (
-        <button
-          onClick={() => handleSelect('templates')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-blue-500/30"
-        >
-          Templates
-        </button>
+          <button
+            onClick={() => handleSelect('templates')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-blue-500/30"
+          >
+            Templates
+          </button>
         )}
         {!isModuleAdded('calendars') && (
-        <button
-          onClick={() => handleSelect('calendars')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-green-500/30"
-        >
-          Calendars
-        </button>
+          <button
+            onClick={() => handleSelect('calendars')}
+            className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-green-500/30"
+          >
+            Calendars
+          </button>
         )}
       </div>
     </div>

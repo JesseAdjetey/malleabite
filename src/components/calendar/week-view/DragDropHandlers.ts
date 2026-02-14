@@ -106,7 +106,7 @@ export const handleDrop = (
     
     // Get description without time part
     const descriptionParts = data.description?.split('|') || [];
-    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : data.title || '';
+    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
     
     // Check if this is a recurring event instance (has recurrenceParentId or synthetic ID with underscore)
     const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));

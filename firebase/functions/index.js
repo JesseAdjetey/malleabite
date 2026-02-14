@@ -44,7 +44,7 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  const { message, userId, context: clientContext } = data;
+  const { message, userId, context: clientContext, history = [] } = data;
 
   if (!process.env.GEMINI_API_KEY) {
     console.warn('GEMINI_API_KEY is missing');
@@ -80,143 +80,145 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
 
     console.log(`Fetched ${events.length} events for AI context`);
     const eventsContext = formatEventsForAI(events);
+    console.log(`MallyAI: Processing request. History: ${history.length} messages. Message: "${message}"`);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const systemPrompt = `
-      You are Mally, an intelligent and PROACTIVE scheduling assistant.
+      You are Mally, a highly intelligent and PROACTIVE scheduling assistant.
       Current Time: ${clientContext?.currentTime || new Date().toISOString()}
       User Timezone: ${clientContext?.timeZone || 'UTC'}
       
-      Your goal is to help the user manage their calendar intelligently and boost productivity.
-      BE PROACTIVE: Don't just ask the user what time they want. Analyze their calendar and SUGGEST optimal times.
+      GOAL: Manage the user's calendar with elite precision and productivity.
       
-      EXISTING EVENTS (use these to detect conflicts and find free slots):
+      CORE CAPABILITIES:
+      1. POMODORO TIMER CONTROL (HIGHEST PRIORITY):
+         - IF user says "start pomodoro", "start timer", "focus now", or similar -> your PRIMARY job is to control the timer.
+         - ACTION: { "type": "start_pomodoro", "data": {} }
+         - ACTION: { "type": "stop_pomodoro", "data": {} } (for stop/pause)
+         - DO NOT create calendar events for these commands. Only create events if the user explicitly says "schedule" or gives a future time.
+         - "start pomodoro" = I want to work NOW (timer).
+         - "schedule pomodoro" = I want to work LATER (calendar).
+
+      2. CONVERSATIONAL MEMORY (CRITICAL):
+         - ALWAYS resolve words like "this", "it", "that", or "the event" by looking at the RECENT CONVERSATION HISTORY.
+         - If you just created an event and the user says "make it recurring", "it" refers to the event you JUST created.
+         - Do NOT ask for details (title, time) if they were provided earlier in the chat.
+      
+      3. PROACTIVE PLANNING:
+         - Analyze EXISTING EVENTS below to find conflicts or free slots.
+         - Suggest specific times rather than asking questions.
+      
+      EXISTING EVENTS:
       ${eventsContext || 'No events scheduled yet.'}
       
-      CRITICAL RULES:
+      RULES:
+      - CONFLICTS: If a requested time is busy, mention the conflict and suggest a free alternative.
+      - RECURRENCE: Use "isRecurring: true" and specify "recurrenceRule". For irregular routines, create multiple "create_event" operations.
+      - DURATION: Default to 1 hour if not specified. Never return start == end.
+      - FORMAT: Return ONLY a raw JSON object (no markdown).
       
-      1. PROACTIVE PLANNING: When the user asks to "plan", "schedule", or "help me with my day":
-         - Analyze their existing events and find FREE time slots.
-         - SUGGEST specific times instead of asking "what time do you want?".
-         - Example: "I see you're free from 2pm-4pm. How about scheduling your meeting then?"
-      
-      2. CONFLICT DETECTION (MANDATORY before any scheduling):
-         - ALWAYS check EXISTING EVENTS before suggesting or creating any event.
-         - If a time slot is partially or fully taken, you MUST:
-           a) Mention the conflict: "That time conflicts with [Event Name] from [time]."
-           b) Suggest an alternative free slot: "How about [alternative time] instead?"
-           c) Offer to move the existing event if the user insists: "I can move [Event Name] to [new time] to make room."
-         - NEVER create an event that conflicts without explicitly mentioning it.
-      
-      3. IRREGULAR RECURRING EVENTS (VERY IMPORTANT):
-         - If the user wants a routine at DIFFERENT TIMES on DIFFERENT DAYS (e.g., "Gym: Mon 5pm, Tue 6pm, Wed 7pm"):
-           - You MUST create MULTIPLE separate "create_event" operations.
-           - Each event should have its own recurrence rule for that specific day.
-           - Example for "Gym Mon 5pm, Tue 6pm, Wed 7pm":
-             * Operation 1: create_event for Monday at 5pm, recurrence: weekly on Monday
-             * Operation 2: create_event for Tuesday at 6pm, recurrence: weekly on Tuesday
-             * Operation 3: create_event for Wednesday at 7pm, recurrence: weekly on Wednesday
-         - Do NOT try to cram different times into a single event.
-      
-      4. TODO LISTS: 
-         - To create a new list: use "create_todo_list" with "name".
-         - To add to a list: use "create_todo" with "text" and "listId" or "listName".
-      
-      5. ALARMS: To set an alarm: use "create_alarm" with "title" and "time" (ISO string or HH:mm).
-      
-      6. POMODORO: To control timer: use "start_pomodoro" or "stop_pomodoro".
-      
-      7. EVENT DURATION: Every event MUST have a duration. If the user doesn't specify an end time, assume a duration of 1 hour. NEVER return the same time for "start" and "end".
-      
-      8. MOVING EVENTS: To move an existing event, use "move_event" with the event's ID, newStart, and newEnd.
-      
-      9. RESPONSE FORMAT: Return a JSON object with this structure:
+      JSON STRUCTURE:
       {
-        "response": "Natural language response explaining your reasoning, conflicts found, and suggestions.",
+        "response": "Explain your reasoning and what you've done.",
         "actionRequired": boolean,
-        "operations": [
-          { "type": "create_event", "event": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": true/false, "recurrenceRule": { "frequency": "weekly", "daysOfWeek": [1] } } },
-          { "type": "move_event", "eventId": "ID", "newStart": "ISO", "newEnd": "ISO" },
-          { "type": "create_todo_list", "name": "String" },
-          { "type": "create_todo", "text": "String", "listName": "String" },
-          { "type": "create_alarm", "title": "String", "time": "String" },
-          { "type": "archive_calendar", "folderName": "String" },
-          { "type": "start_pomodoro" },
-          { "type": "stop_pomodoro" }
-        ],
-        "intent": "scheduling" | "query" | "general" | "task_management" | "timer_control"
+        "intent": "scheduling" | "task_management" | "pomodoro_control" | "query" | "general",
+        "actions": [
+          { "type": "create_event", "data": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": bool, "recurrenceRule": {...} } },
+          { "type": "move_event", "data": { "eventId": "...", "newStart": "ISO", "newEnd": "ISO" } },
+          { "type": "create_todo", "data": { "text": "...", "listName": "..." } },
+          { "type": "create_alarm", "data": { "title": "...", "time": "HH:mm" } },
+          { "type": "start_pomodoro", "data": {} },
+          { "type": "stop_pomodoro", "data": {} }
+        ]
       }
-      
-      IMPORTANT: Return ONLY the JSON object, NO markdown formatting.
     `;
 
-    const result = await model.generateContent([
-      systemPrompt,
-      message
-    ]);
+    // Format history for Gemini SDK
+    // Gemini expects: history: [{ role: 'user', parts: [{ text: 'hi' }] }, { role: 'model', parts: [{ text: 'hello' }] }]
+    const formattedHistory = history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.parts }]
+    }));
+
+    // Start chat with history
+    const chat = model.startChat({
+      history: formattedHistory,
+      systemInstruction: {
+        role: "system",
+        parts: [{ text: systemPrompt }]
+      }
+    });
+
+    const result = await chat.sendMessage(message);
 
     const responseText = result.response.text();
     const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const aiResult = JSON.parse(cleanJson);
 
-    // Construct final response data
-    const finalActions = (aiResult.operations || []).map(op => {
-      if (op.type === 'create_event') {
-        const event = op.event;
+    // Support both new 'actions' format and legacy 'operations' format
+    const rawActions = aiResult.actions || aiResult.operations || [];
+
+    // Construct final response data formatted for the frontend
+    const finalActions = rawActions.map(op => {
+      // Normalize operation structure
+      const type = op.type;
+      const data = op.data || op.event || op;
+
+      if (type === 'create_event') {
         return {
           type: 'create_event',
           data: {
-            title: event.title,
-            start: event.start,
-            end: event.end,
-            description: event.description || `Created by Mally AI`,
-            isRecurring: event.isRecurring || false,
-            recurrenceRule: event.recurrenceRule || null,
-            _originalMessage: message // Pass for localized parsing in frontend if needed
+            title: data.title,
+            start: data.start || data.startsAt,
+            end: data.end || data.endsAt,
+            description: data.description || `Created by Mally AI`,
+            isRecurring: data.isRecurring || false,
+            recurrenceRule: data.recurrenceRule || null,
+            _originalMessage: message
           }
         };
-      } else if (op.type === 'move_event' || op.type === 'update_event') {
+      } else if (type === 'move_event' || type === 'update_event') {
         return {
           type: 'update_event',
           data: {
-            eventId: op.eventId,
-            start: op.newStart || op.start,
-            end: op.newEnd || op.end,
-            title: op.title // Optional: AI might rename it too
+            eventId: data.eventId,
+            start: data.newStart || data.start || data.startsAt,
+            end: data.newEnd || data.end || data.endsAt,
+            title: data.title
           }
         };
-      } else if (op.type === 'create_todo_list') {
+      } else if (type === 'create_todo_list') {
         return {
           type: 'create_todo_list',
-          data: { name: op.name }
+          data: { name: data.name }
         };
-      } else if (op.type === 'add_todo_to_list') {
+      } else if (type === 'create_todo' || type === 'add_todo_to_list') {
         return {
           type: 'create_todo',
-          data: { text: op.text, listName: op.listName }
+          data: { text: data.text || data.content, listName: data.listName }
         };
-      } else if (op.type === 'create_alarm') {
+      } else if (type === 'create_alarm') {
         return {
           type: 'create_alarm',
-          data: { title: op.title, time: op.time }
+          data: { title: data.title, time: data.time }
         };
-      } else if (op.type === 'archive_calendar') {
-        return { type: 'archive_calendar', data: { folderName: op.folderName || 'Archived Calendar' } };
-      } else if (op.type === 'start_pomodoro') {
-        return { type: 'start_pomodoro', data: {} };
-      } else if (op.type === 'stop_pomodoro') {
-        return { type: 'stop_pomodoro', data: {} };
+      } else if (type === 'archive_calendar') {
+        return { type: 'archive_calendar', data: { folderName: data.folderName || 'Archived Calendar' } };
+      } else if (type === 'start_pomodoro' || type === 'stop_pomodoro') {
+        return { type: type, data: {} };
       }
       return op;
     });
 
+    console.log(`MallyAI: Response generated. Intent: ${aiResult.intent}, Actions: ${finalActions.length}`);
+
     return {
       success: true,
       response: aiResult.response,
-      actionRequired: aiResult.actionRequired,
+      actionRequired: aiResult.actionRequired || finalActions.length > 0,
       actions: finalActions,
-      intent: aiResult.intent
+      intent: aiResult.intent || 'general'
     };
 
   } catch (error) {

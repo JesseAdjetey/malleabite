@@ -19,22 +19,23 @@ import {
   Minimize2,
   Volume2,
   VolumeX,
+  Zap,
+  Star,
+  Code2,
+  Cpu,
+  Fingerprint,
+  AlertTriangle,
+  CheckSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { FirebaseFunctions } from "@/integrations/firebase/functions";
-import { CalendarEventType } from "@/lib/stores/types";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
-import { useTodos } from "@/hooks/use-todos";
-import { useTodoLists } from "@/hooks/use-todo-lists";
-import { useEisenhower } from "@/hooks/use-eisenhower";
-import { useAlarms } from "@/hooks/use-alarms";
-import { useReminders } from "@/hooks/use-reminders";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
+import { useMallyActions } from "@/hooks/use-mally-actions";
+import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proactive-suggestions";
 import { logger } from "@/lib/logger";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
-import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +72,40 @@ interface BottomMallyAIProps {
   onScheduleEvent?: (event: any) => Promise<any>;
 }
 
+const DoodleBackground = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+    {/* Abstract shapes and icons */}
+    <div className="absolute top-[10%] left-[5%] opacity-[0.03] rotate-12">
+      <Bot size={120} />
+    </div>
+    <div className="absolute bottom-[20%] right-[5%] opacity-[0.03] -rotate-12">
+      <Fingerprint size={140} />
+    </div>
+
+    {/* Floating elements - Right side */}
+    <div className="absolute top-[20%] right-[15%] opacity-10">
+      <Sparkles className="text-purple-300 w-6 h-6 animate-pulse" style={{ animationDuration: '3s' }} />
+    </div>
+    <div className="absolute top-[40%] right-[8%] opacity-[0.07] rotate-45">
+      <Zap className="text-purple-300 w-10 h-10" />
+    </div>
+    <div className="absolute bottom-[30%] right-[12%] opacity-[0.05]">
+      <Code2 className="text-white w-8 h-8" />
+    </div>
+
+    {/* Floating elements - Left side */}
+    <div className="absolute top-[30%] left-[10%] opacity-[0.07] -rotate-12">
+      <Cpu className="text-purple-300 w-10 h-10" />
+    </div>
+    <div className="absolute bottom-[40%] left-[8%] opacity-10">
+      <Star className="text-white w-5 h-5 animate-pulse" style={{ animationDuration: '4s' }} />
+    </div>
+    <div className="absolute top-[15%] left-[20%] opacity-[0.04]">
+      <div className="w-16 h-16 rounded-full border-2 border-white/20 border-dashed animate-[spin_10s_linear_infinite]" />
+    </div>
+  </div>
+);
+
 export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
   onScheduleEvent,
 }) => {
@@ -88,51 +123,109 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
     fileName: string;
     mimeType: string;
   } | null>(null);
-  
-  // Draggable left edge position (percentage from left)
-  const [leftPosition, setLeftPosition] = useState(25); // Start at 25% from left
-  const [isDragging, setIsDragging] = useState(false);
+
+  // Fixed full-width layout
   const containerRef = useRef<HTMLDivElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+
+
+
   const { user } = useAuth();
-  const { addEvent, removeEvent, updateEvent, events } = useCalendarEvents();
-  const { addTodo, toggleTodo, deleteTodo, todos } = useTodos();
-  const { createList, lists } = useTodoLists();
-  const { addItem: addEisenhowerItem } = useEisenhower();
-  const { addAlarm } = useAlarms();
-  const { addReminder } = useReminders();
   const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
-  const calendarAccounts = useCalendarFilterStore(state => state.accounts);
   const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
+  const {
+    executeAction,
+    buildContext,
+    events,
+    todos,
+    lists,
+    activeListId,
+  } = useMallyActions({ onScheduleEvent });
+
+  const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos });
+  const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
+
+  // MIGRATION: Effect to move old todos to new list
+  useEffect(() => {
+    const migrateLegacyTodos = async () => {
+      // Dynamic import to avoid bundling legacy hook code if possible, or just use raw firestore
+      const { collection, getDocs, query, where, addDoc, deleteDoc, doc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('@/integrations/firebase/config');
+
+      if (!user?.uid) return;
+
+      try {
+        const legacyQuery = query(collection(db, 'todos'), where('userId', '==', user.uid));
+        const snapshot = await getDocs(legacyQuery);
+
+        if (!snapshot.empty) {
+          console.log(`Found ${snapshot.size} legacy todos to migrate...`);
+          let migratedCount = 0;
+
+          // Get a target list ID
+          let targetListId = activeListId;
+          if (!targetListId && lists.length > 0) targetListId = lists[0].id;
+
+          for (const docSnapshot of snapshot.docs) {
+            const data = docSnapshot.data();
+
+            // Add to new collection
+            await addDoc(collection(db, 'todo_items'), {
+              text: data.text || 'Untitled Task',
+              completed: data.completed || false,
+              listId: targetListId, // Fallback to first list or null (will need handling)
+              userId: user.uid,
+              createdAt: data.created_at || serverTimestamp(),
+              migratedFrom: 'legacy_todos'
+            });
+
+            // Delete old doc
+            await deleteDoc(doc(db, 'todos', docSnapshot.id));
+            migratedCount++;
+          }
+
+          if (migratedCount > 0) {
+            toast.success(`Migrated ${migratedCount} old tasks to your new list!`);
+          }
+        }
+      } catch (e) {
+        console.error("Migration failed", e);
+      }
+    };
+
+    // Run migration after a short delay to let things load
+    const timer = setTimeout(migrateLegacyTodos, 3000);
+    return () => clearTimeout(timer);
+  }, [user?.uid, lists, activeListId]);
 
   // Text-to-speech function with premium voice selection
   const speak = useCallback((text: string) => {
     if (isMuted || !window.speechSynthesis) return;
-    
+
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
-    
+
     // Clean up text for speech (remove markdown, emojis, etc.)
     const cleanText = text
       .replace(/[*_`#]/g, '')
       .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links but keep text
       .replace(/[😊🎉✨💪🔔⏰📅✅❌]/g, '') // Remove common emojis
       .trim();
-    
+
     if (!cleanText) return;
-    
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 0.95; // Slightly slower for clarity
     utterance.pitch = 1.05; // Slightly higher for friendliness
     utterance.volume = 1.0;
-    
+
     // Get all available voices
     const voices = window.speechSynthesis.getVoices();
-    
+
     // Premium voice priority list (best quality voices)
     const premiumVoiceNames = [
       // Google's Neural/WaveNet voices (highest quality)
@@ -157,10 +250,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
       'Victoria',
       'Fiona',
     ];
-    
+
     // Find the best available voice
     let selectedVoice: SpeechSynthesisVoice | null = null;
-    
+
     // First try exact matches from premium list
     for (const name of premiumVoiceNames) {
       const voice = voices.find(v => v.name === name || v.name.includes(name));
@@ -169,76 +262,40 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
         break;
       }
     }
-    
+
     // Fallback: prefer any Google or Microsoft Neural voice
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => 
-        v.name.includes('Google') || 
+      selectedVoice = voices.find(v =>
+        v.name.includes('Google') ||
         v.name.includes('Natural') ||
         v.name.includes('Neural')
       ) || null;
     }
-    
+
     // Fallback: any English female voice (generally more pleasant for assistants)
     if (!selectedVoice) {
-      selectedVoice = voices.find(v => 
-        v.lang.startsWith('en') && 
-        (v.name.toLowerCase().includes('female') || 
-         v.name.includes('Zira') || 
-         v.name.includes('Hazel'))
+      selectedVoice = voices.find(v =>
+        v.lang.startsWith('en') &&
+        (v.name.toLowerCase().includes('female') ||
+          v.name.includes('Zira') ||
+          v.name.includes('Hazel'))
       ) || null;
     }
-    
+
     // Final fallback: any English voice
     if (!selectedVoice) {
       selectedVoice = voices.find(v => v.lang.startsWith('en')) || null;
     }
-    
+
     if (selectedVoice) {
       utterance.voice = selectedVoice;
       console.log('Using voice:', selectedVoice.name);
     }
-    
+
     window.speechSynthesis.speak(utterance);
   }, [isMuted]);
 
-  // Handle drag to resize
-  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
 
-  const handleDrag = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!isDragging) return;
-    
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const windowWidth = window.innerWidth;
-    const newPosition = (clientX / windowWidth) * 100;
-    
-    // Clamp between 10% and 70%
-    setLeftPosition(Math.max(10, Math.min(70, newPosition)));
-  }, [isDragging]);
-
-  const handleDragEnd = useCallback(() => {
-    setIsDragging(false);
-  }, []);
-
-  // Add/remove drag listeners
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleDrag);
-      window.addEventListener('mouseup', handleDragEnd);
-      window.addEventListener('touchmove', handleDrag);
-      window.addEventListener('touchend', handleDragEnd);
-    }
-    
-    return () => {
-      window.removeEventListener('mousemove', handleDrag);
-      window.removeEventListener('mouseup', handleDragEnd);
-      window.removeEventListener('touchmove', handleDrag);
-      window.removeEventListener('touchend', handleDragEnd);
-    };
-  }, [isDragging, handleDrag, handleDragEnd]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -300,15 +357,19 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
   // Send message to AI
   const handleSendMessage = async (text?: string) => {
     const messageText = text || inputText.trim();
-    console.log('handleSendMessage called:', { messageText, uploadedImage: !!uploadedImage });
-    
+    console.log('MallyAI: handleSendMessage', {
+      messageText,
+      currentMessagesCount: messages.length,
+      hasImage: !!uploadedImage
+    });
+
     if (!messageText && !uploadedImage) {
       console.log('No message text or image, returning');
       return;
     }
 
     console.log('Adding user message');
-    
+
     // Add user message
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -335,19 +396,29 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
 
     try {
       // Build context
-      const context = {
-        events: events.slice(0, 20),
-        todos: todos.slice(0, 20),
-        lists: lists,
-        currentDate: new Date().toISOString(),
-        availableCalendars: calendarAccounts,
-      };
+      const context = buildContext();
+
+      // Prepare history for Gemini (limited to last 10 messages for token efficiency)
+      const messageHistory = messages
+        .filter(m => !m.isLoading && m.text !== "Thinking...")
+        .slice(-10)
+        .map(m => ({
+          role: (m.sender === 'user' ? 'user' : 'model') as 'user' | 'model',
+          parts: m.text || ""
+        }));
+
+      console.log('MallyAI: Sending request', {
+        historyLength: messageHistory.length,
+        contextEvents: context.events.length,
+        contextTodos: context.todos.length
+      });
 
       // Call Firebase function
       const response = await FirebaseFunctions.processScheduling({
         userMessage: messageText,
         userId: user?.uid || '',
         context: JSON.stringify(context),
+        history: messageHistory,
         imageData: uploadedImage ? {
           dataUrl: uploadedImage.dataUrl,
           mimeType: uploadedImage.mimeType,
@@ -359,15 +430,15 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
 
       // Process response and execute actions
       const aiResponse = response.message || "I couldn't process that request.";
-      
+
       console.log('AI Response:', response);
-      
+
       // Execute actions if present (support both single action and multiple actions)
       if (response.action) {
         console.log('Single action found:', response.action);
         await executeAction(response.action);
       }
-      
+
       // Handle multiple actions array
       if ((response as any).actions && Array.isArray((response as any).actions)) {
         console.log('Multiple actions found:', (response as any).actions);
@@ -377,8 +448,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
       }
 
       // Update with AI response
-      setMessages(prev => prev.map(m => 
-        m.id === loadingId 
+      setMessages(prev => prev.map(m =>
+        m.id === loadingId
           ? { ...m, text: aiResponse, isLoading: false }
           : m
       ));
@@ -398,117 +469,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
       ));
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Execute AI action
-  const executeAction = async (action: { type: string; data: any }) => {
-    try {
-      console.log('Executing action:', action);
-      switch (action.type) {
-        // EVENT ACTIONS
-        case 'create_event':
-          // Transform AI response format to addEvent format
-          const eventData = {
-            title: action.data.title,
-            startsAt: action.data.start || action.data.startsAt,
-            endsAt: action.data.end || action.data.endsAt,
-            description: action.data.description || '',
-            color: action.data.color || '#3b82f6',
-            isRecurring: action.data.isRecurring || false,
-            recurrenceRule: action.data.recurrenceRule,
-            calendarId: action.data.calendarId,
-          };
-          console.log('Creating event with data:', eventData);
-          
-          if (onScheduleEvent) {
-            await onScheduleEvent(eventData);
-          } else {
-            const result = await addEvent(eventData as any);
-            console.log('Add event result:', result);
-          }
-          toast.success(`Event "${action.data.title}" created`);
-          break;
-          
-        case 'update_event':
-          if (action.data.eventId) {
-            const updateData: any = { id: action.data.eventId };
-            if (action.data.title) updateData.title = action.data.title;
-            if (action.data.start) updateData.startsAt = action.data.start;
-            if (action.data.end) updateData.endsAt = action.data.end;
-            if (action.data.description) updateData.description = action.data.description;
-            await updateEvent(updateData);
-            toast.success('Event updated');
-          }
-          break;
-          
-        case 'delete_event':
-          if (action.data.eventId) {
-            await removeEvent(action.data.eventId);
-            toast.success('Event deleted');
-          }
-          break;
-          
-        // TODO ACTIONS
-        case 'create_todo':
-          await addTodo(action.data.text || action.data.title, action.data.listId);
-          toast.success(`Todo "${action.data.text || action.data.title}" added`);
-          break;
-          
-        case 'create_todo_list':
-          if (createList) {
-            await createList(action.data.name);
-            toast.success(`Todo list "${action.data.name}" created`);
-          }
-          break;
-          
-        case 'complete_todo':
-          if (action.data.todoId) {
-            await toggleTodo(action.data.todoId);
-            toast.success('Todo completed');
-          }
-          break;
-          
-        case 'delete_todo':
-          if (action.data.todoId) {
-            await deleteTodo(action.data.todoId);
-            toast.success('Todo deleted');
-          }
-          break;
-          
-        // EISENHOWER MATRIX ACTIONS
-        case 'create_eisenhower':
-          if (addEisenhowerItem) {
-            await addEisenhowerItem(action.data.text, action.data.quadrant);
-            toast.success('Priority item added to Eisenhower Matrix');
-          }
-          break;
-          
-        // ALARM ACTIONS
-        case 'create_alarm':
-          await addAlarm(action.data.title || 'Alarm', new Date(action.data.time));
-          toast.success('Alarm set');
-          break;
-          
-        // REMINDER ACTIONS
-        case 'create_reminder':
-          await addReminder({
-            title: action.data.title,
-            reminderTime: action.data.reminderTime,
-            description: action.data.description,
-            eventId: action.data.eventId,
-          });
-          toast.success('Reminder set');
-          break;
-          
-        default:
-          console.log('Unknown action type:', action.type);
-          break;
-      }
-    } catch (error) {
-      console.error('Action execution error:', error);
-      logger.error('BottomMallyAI', 'Action execution failed', error as Error);
-      toast.error('Failed to execute action');
     }
   };
 
@@ -554,14 +514,14 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
     } else {
       setIsRecording(true);
       pauseWakeWord?.();
-      
+
       // Start speech recognition
       if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-        
+
         recognition.onresult = (event: any) => {
           const transcript = event.results[0][0].transcript;
           setInputText(transcript);
@@ -570,18 +530,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
           // Auto-send after voice input
           setTimeout(() => handleSendMessage(transcript), 100);
         };
-        
+
         recognition.onerror = () => {
           setIsRecording(false);
           resumeWakeWord?.();
           toast.error('Voice recognition failed');
         };
-        
+
         recognition.onend = () => {
           setIsRecording(false);
           resumeWakeWord?.();
         };
-        
+
         recognition.start();
       } else {
         toast.error('Speech recognition not supported');
@@ -637,27 +597,16 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
             exit={{ opacity: 0, y: 100 }}
             className={cn(
               "fixed z-50 flex flex-col",
-              isMobile ? "left-2 right-2 bottom-[72px] rounded-2xl" : "right-4 bottom-4 rounded-2xl",
-              "backdrop-blur-3xl"
+              isMobile ? "left-2 right-2 bottom-[72px]" : "left-4 right-4 bottom-4",
+              "rounded-2xl backdrop-blur-3xl"
             )}
             style={{
-              ...(!isMobile ? { left: `calc(${leftPosition}% + 16px)` } : {}),
               maxHeight: isMobile ? "70vh" : "60vh",
             }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
           >
-            {/* Drag handle on left edge - desktop only */}
-            {!isMobile && (
-              <div
-                onMouseDown={handleDragStart}
-                onTouchStart={handleDragStart}
-                className={cn(
-                  "absolute left-0 top-4 bottom-4 w-1.5 cursor-ew-resize z-50 rounded-full",
-                  "hover:bg-purple-500/30 transition-colors",
-                  isDragging && "bg-purple-500/40"
-                )}
-              />
-            )}
+            <DoodleBackground />
+
 
             {/* Minimize button - top right */}
             <button
@@ -668,220 +617,278 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
               <Minimize2 className="h-4 w-4" />
             </button>
 
-        {/* Messages area - shows chat history */}
-        <AnimatePresence>
-        {messages.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 max-h-[40vh] scrollbar-hide">
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={cn(
-                  "flex gap-2",
-                  message.sender === "user" ? "justify-end" : "justify-start"
-                )}
-              >
-                {message.sender === "ai" && (
-                  <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-4 w-4 text-white" />
+            {/* Messages area - shows chat history */}
+            <AnimatePresence>
+              {messages.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex-1 overflow-y-auto px-4 py-3 max-h-[40vh] scrollbar-hide">
+                    <div className="space-y-3 max-w-4xl mx-auto w-full">
+                      {messages.map((message) => (
+                        <motion.div
+                          key={message.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={cn(
+                            "flex gap-2",
+                            message.sender === "user" ? "justify-end" : "justify-start"
+                          )}
+                        >
+                          {message.sender === "ai" && (
+                            <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
+                              <Bot className="h-4 w-4 text-white" />
+                            </div>
+                          )}
+                          <div
+                            className={cn(
+                              "max-w-[75%] px-3 py-2 rounded-2xl text-sm",
+                              message.sender === "user"
+                                ? "bg-purple-600 text-white rounded-br-md"
+                                : message.isError
+                                  ? "bg-red-500/20 text-red-200 border border-red-500/30 rounded-bl-md"
+                                  : "bg-white/10 text-foreground border border-white/10 rounded-bl-md"
+                            )}
+                          >
+                            {message.image && (
+                              <img
+                                src={message.image.dataUrl}
+                                alt="Uploaded"
+                                className="max-w-full h-auto rounded-lg mb-2 max-h-32"
+                              />
+                            )}
+                            {message.isLoading ? (
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>{message.text}</span>
+                              </div>
+                            ) : (
+                              <span className="whitespace-pre-wrap">{message.text}</span>
+                            )}
+                          </div>
+                          {message.sender === "user" && (
+                            <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
+                              <User className="h-4 w-4 text-white" />
+                            </div>
+                          )}
+                        </motion.div>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
                   </div>
-                )}
-                <div
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Quick action chips */}
+            <div className="px-4 py-2 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-2 max-w-4xl mx-auto w-full">
+                {quickActions.map((action) => (
+                  <button
+                    key={action.id}
+                    onClick={() => handleQuickAction(action)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
+                      "bg-white/5 hover:bg-white/10 border border-white/10",
+                      "text-muted-foreground hover:text-foreground",
+                      "transition-all whitespace-nowrap flex-shrink-0"
+                    )}
+                    title={action.label}
+                  >
+                    {action.icon}
+                    <span className="hidden sm:inline">{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Proactive suggestion banner */}
+            <AnimatePresence>
+              {activeSuggestion && (
+                <motion.div
+                  key={activeSuggestion.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.2 }}
+                  className="px-4 pb-2"
+                >
+                  <div className="max-w-4xl mx-auto w-full">
+                  <div className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
+                    "bg-purple-500/10 border",
+                    activeSuggestion.priority === 'high'
+                      ? "border-purple-400/40"
+                      : "border-purple-500/20"
+                  )}>
+                    <span className="text-purple-400 shrink-0">
+                      {activeSuggestion.iconName === 'AlertTriangle' && <AlertTriangle size={12} />}
+                      {activeSuggestion.iconName === 'Bell' && <Bell size={12} />}
+                      {activeSuggestion.iconName === 'Clock' && <Clock size={12} />}
+                      {activeSuggestion.iconName === 'Calendar' && <Calendar size={12} />}
+                      {activeSuggestion.iconName === 'CheckSquare' && <CheckSquare size={12} />}
+                      {activeSuggestion.iconName === 'Zap' && <Zap size={12} />}
+                    </span>
+                    <button
+                      className="flex-1 text-left text-foreground hover:text-foreground/80 transition-colors"
+                      onClick={() => {
+                        setInputText(activeSuggestion.prompt);
+                        dismissSuggestion(activeSuggestion.id);
+                      }}
+                    >
+                      {activeSuggestion.message}
+                    </button>
+                    {proactiveSuggestions.length > 1 && (
+                      <button
+                        onClick={nextSuggestion}
+                        className="text-muted-foreground hover:text-foreground shrink-0 font-mono"
+                      >
+                        {proactiveIndex + 1}/{proactiveSuggestions.length}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => dismissSuggestion(activeSuggestion.id)}
+                      className="text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Input area */}
+            <div className="px-4 pb-5 pt-3">
+              {/* Image preview */}
+              {uploadedImage && (
+                <div className="relative inline-block mb-2">
+                  <img
+                    src={uploadedImage.dataUrl}
+                    alt="Upload preview"
+                    className="h-16 rounded-lg border border-white/20"
+                  />
+                  <button
+                    onClick={() => setUploadedImage(null)}
+                    className="absolute -top-1 -right-1 p-0.5 bg-red-500 rounded-full"
+                  >
+                    <X className="h-3 w-3 text-white" />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 max-w-4xl mx-auto w-full">
+                {/* Image upload button */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ImageIcon className="h-5 w-5" />
+                </button>
+
+                {/* Text input */}
+                <div className="flex-1 relative">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    onFocus={() => setIsExpanded(true)}
+                    placeholder="Ask Mally anything..."
+                    className={cn(
+                      "w-full px-4 py-2.5 rounded-full",
+                      "bg-white/5 border border-white/10",
+                      "text-foreground placeholder:text-muted-foreground",
+                      "focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50",
+                      "transition-all"
+                    )}
+                    disabled={isLoading}
+                  />
+                </div>
+
+                {/* Voice button */}
+                <button
+                  onClick={toggleRecording}
+                  disabled={isLoading}
                   className={cn(
-                    "max-w-[75%] px-3 py-2 rounded-2xl text-sm",
-                    message.sender === "user"
-                      ? "bg-purple-600 text-white rounded-br-md"
-                      : message.isError
-                      ? "bg-red-500/20 text-red-200 border border-red-500/30 rounded-bl-md"
-                      : "bg-white/10 text-foreground border border-white/10 rounded-bl-md"
+                    "p-2.5 rounded-full transition-all",
+                    isRecording
+                      ? "bg-red-500 text-white animate-pulse"
+                      : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {message.image && (
-                    <img
-                      src={message.image.dataUrl}
-                      alt="Uploaded"
-                      className="max-w-full h-auto rounded-lg mb-2 max-h-32"
-                    />
+                  <Mic className="h-5 w-5" />
+                </button>
+
+                {/* Mute/Unmute button */}
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className={cn(
+                    "p-2.5 rounded-full transition-all",
+                    isMuted
+                      ? "bg-white/5 text-red-400 hover:bg-white/10"
+                      : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
                   )}
-                  {message.isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{message.text}</span>
+                  title={isMuted ? "Unmute AI voice" : "Mute AI voice"}
+                >
+                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
+
+                {/* Send button */}
+                <button
+                  onClick={() => {
+                    console.log('Send button clicked, inputText:', inputText);
+                    handleSendMessage();
+                  }}
+                  disabled={(!inputText.trim() && !uploadedImage) || isLoading}
+                  className={cn(
+                    "p-2.5 rounded-full transition-all",
+                    inputText.trim() || uploadedImage
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "bg-white/5 text-muted-foreground"
+                  )}
+                >
+                  <Send className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Recording indicator */}
+            <AnimatePresence>
+              {isRecording && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4"
+                >
+                  <div className="flex items-center gap-2 px-4 py-2 bg-red-500/90 text-white rounded-full shadow-lg">
+                    <div className="flex space-x-1">
+                      <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
+                      <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <div className="w-1 h-5 bg-white rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                      <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                      <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
                     </div>
-                  ) : (
-                    <span className="whitespace-pre-wrap">{message.text}</span>
-                  )}
-                </div>
-                {message.sender === "user" && (
-                  <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-                    <User className="h-4 w-4 text-white" />
+                    <span className="text-sm font-medium">Listening...</span>
                   </div>
-                )}
-              </motion.div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
-        </AnimatePresence>
-
-        {/* Quick action chips */}
-        <div className="px-4 py-2 overflow-x-auto scrollbar-hide">
-          <div className="flex gap-2">
-            {quickActions.map((action) => (
-              <button
-                key={action.id}
-                onClick={() => handleQuickAction(action)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
-                  "bg-white/5 hover:bg-white/10 border border-white/10",
-                  "text-muted-foreground hover:text-foreground",
-                  "transition-all whitespace-nowrap flex-shrink-0"
-                )}
-                title={action.label}
-              >
-                {action.icon}
-                <span className="hidden sm:inline">{action.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Input area */}
-        <div className="px-4 pb-5 pt-3">
-          {/* Image preview */}
-          {uploadedImage && (
-            <div className="relative inline-block mb-2">
-              <img
-                src={uploadedImage.dataUrl}
-                alt="Upload preview"
-                className="h-16 rounded-lg border border-white/20"
-              />
-              <button
-                onClick={() => setUploadedImage(null)}
-                className="absolute -top-1 -right-1 p-0.5 bg-red-500 rounded-full"
-              >
-                <X className="h-3 w-3 text-white" />
-              </button>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            {/* Image upload button */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ImageIcon className="h-5 w-5" />
-            </button>
-
-            {/* Text input */}
-            <div className="flex-1 relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                onFocus={() => setIsExpanded(true)}
-                placeholder="Ask Mally anything..."
-                className={cn(
-                  "w-full px-4 py-2.5 rounded-full",
-                  "bg-white/5 border border-white/10",
-                  "text-foreground placeholder:text-muted-foreground",
-                  "focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50",
-                  "transition-all"
-                )}
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Voice button */}
-            <button
-              onClick={toggleRecording}
-              disabled={isLoading}
-              className={cn(
-                "p-2.5 rounded-full transition-all",
-                isRecording
-                  ? "bg-red-500 text-white animate-pulse"
-                  : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Mic className="h-5 w-5" />
-            </button>
-
-            {/* Mute/Unmute button */}
-            <button
-              onClick={() => setIsMuted(!isMuted)}
-              className={cn(
-                "p-2.5 rounded-full transition-all",
-                isMuted
-                  ? "bg-white/5 text-red-400 hover:bg-white/10"
-                  : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
-              )}
-              title={isMuted ? "Unmute AI voice" : "Mute AI voice"}
-            >
-              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </button>
-
-            {/* Send button */}
-            <button
-              onClick={() => {
-                console.log('Send button clicked, inputText:', inputText);
-                handleSendMessage();
-              }}
-              disabled={(!inputText.trim() && !uploadedImage) || isLoading}
-              className={cn(
-                "p-2.5 rounded-full transition-all",
-                inputText.trim() || uploadedImage
-                  ? "bg-purple-600 hover:bg-purple-700 text-white"
-                  : "bg-white/5 text-muted-foreground"
-              )}
-            >
-              <Send className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Recording indicator */}
-        <AnimatePresence>
-          {isRecording && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4"
-            >
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-500/90 text-white rounded-full shadow-lg">
-                <div className="flex space-x-1">
-                  <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
-                  <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                  <div className="w-1 h-5 bg-white rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                  <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                  <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
-                </div>
-                <span className="text-sm font-medium">Listening...</span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-      )}
-    </AnimatePresence>
+      </AnimatePresence>
     </>
   );
 };

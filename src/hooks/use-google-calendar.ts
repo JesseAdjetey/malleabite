@@ -19,6 +19,8 @@ interface GoogleCalendar {
   primary?: boolean;
 }
 
+const SYNC_ENABLED_KEY = 'malleabite_google_sync_enabled';
+
 export function useGoogleCalendar() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -27,6 +29,9 @@ export function useGoogleCalendar() {
   const [selectedCalendar, setSelectedCalendar] = useState<string>('primary');
   const [error, setError] = useState<string | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncEnabled, setSyncEnabledState] = useState<boolean>(() => {
+    try { return localStorage.getItem(SYNC_ENABLED_KEY) === 'true'; } catch { return false; }
+  });
 
   // Check connection status on mount
   useEffect(() => {
@@ -163,6 +168,56 @@ export function useGoogleCalendar() {
     }
   }, [isConnected, selectedCalendar]);
 
+  // Persist sync preference to localStorage
+  const setSyncEnabled = useCallback((enabled: boolean) => {
+    setSyncEnabledState(enabled);
+    try { localStorage.setItem(SYNC_ENABLED_KEY, String(enabled)); } catch { /* ignore */ }
+  }, []);
+
+  // Push a single local event to Google Calendar (upsert)
+  const pushEventToGoogle = useCallback(async (
+    event: CalendarEventType
+  ): Promise<string | null> => {
+    if (!isConnected) return null;
+    try {
+      const googleEvent = await createGoogleCalendarEvent(event, selectedCalendar);
+      logger.info('GoogleCalendar', `Pushed event to Google: ${event.title}`);
+      return googleEvent.id;
+    } catch (err) {
+      logger.error('GoogleCalendar', 'Failed to push event to Google', err as Error);
+      return null;
+    }
+  }, [isConnected, selectedCalendar]);
+
+  // Export all local events that haven't been synced to Google yet
+  const exportAllToGoogle = useCallback(async (
+    localEvents: CalendarEventType[],
+    updateEventFn: (id: string, updates: Partial<CalendarEventType>) => Promise<any>
+  ): Promise<number> => {
+    if (!isConnected) throw new Error('Not connected to Google Calendar');
+
+    setIsSyncing(true);
+    setError(null);
+    let count = 0;
+
+    try {
+      const unsynced = localEvents.filter(e => !e.googleEventId && e.source !== 'google' && !e.isArchived);
+      for (const event of unsynced) {
+        const googleId = await pushEventToGoogle(event);
+        if (googleId) {
+          await updateEventFn(event.id, { googleEventId: googleId });
+          count++;
+        }
+      }
+      setLastSyncTime(new Date());
+      logger.info('GoogleCalendar', `Exported ${count} events to Google Calendar`);
+    } finally {
+      setIsSyncing(false);
+    }
+
+    return count;
+  }, [isConnected, pushEventToGoogle]);
+
   return {
     isConnected,
     isConnecting,
@@ -172,11 +227,15 @@ export function useGoogleCalendar() {
     setSelectedCalendar,
     error,
     lastSyncTime,
+    syncEnabled,
+    setSyncEnabled,
     connect,
     disconnect,
     importEvents,
     exportEvent,
     syncEvent,
     deleteEvent,
+    pushEventToGoogle,
+    exportAllToGoogle,
   };
 }

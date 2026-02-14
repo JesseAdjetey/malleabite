@@ -70,35 +70,13 @@ export function getFeatureAccess(
   const usage = currentUsage || {};
 
   return {
-    canCreateEvent: !hasReachedLimit(
-      usage.eventsThisMonth || 0,
-      limits.eventsPerMonth
-    ),
-    
-    canUseModule: (moduleId: string) => {
-      // Free users can only use first 3 modules
-      if (planId === 'FREE') {
-        const allowedModules = ['pomodoro', 'eisenhower', 'time-tracking'];
-        return allowedModules.includes(moduleId);
-      }
-      return true; // Pro and Teams have unlimited
-    },
-    
-    canMakeAIRequest: !hasReachedLimit(
-      usage.aiRequestsThisMonth || 0,
-      limits.aiRequestsPerMonth
-    ),
-    
-    canCreateTemplate: !hasReachedLimit(
-      usage.customTemplates || 0,
-      limits.customTemplates
-    ),
-    
-    canInviteTeamMember: subscription?.isTeams ?? false,
-    
-    canAccessAnalytics: planId === 'FREE' ? 'basic' : 'advanced',
-    
-    canAccessPrioritySupport: subscription?.isPro || subscription?.isTeams || false,
+    canCreateEvent: true,
+    canUseModule: (moduleId: string) => true,
+    canMakeAIRequest: true,
+    canCreateTemplate: true,
+    canInviteTeamMember: true,
+    canAccessAnalytics: 'advanced',
+    canAccessPrioritySupport: true,
   };
 }
 

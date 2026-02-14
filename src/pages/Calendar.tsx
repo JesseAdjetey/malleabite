@@ -14,17 +14,20 @@ import MobileNavigation from '@/components/MobileNavigation';
 import { motion } from 'framer-motion';
 import { eventSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
+import dayjs from 'dayjs';
+import { useGoogleCalendar } from '@/hooks/use-google-calendar';
 
 const Calendar = () => {
-  const { addEvent } = useCalendarEvents();
+  const { addEvent, updateEvent } = useCalendarEvents();
+  const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
   const navigate = useNavigate();
-  
+
   // Initialize stores on client side
   useEffect(() => {
     // Hydrate zustand stores if needed
     const view = useViewStore.getState();
     const date = useDateStore.getState();
-    
+
     // Any other initialization needed
   }, []);
 
@@ -32,32 +35,54 @@ const Calendar = () => {
   const handleScheduleEvent = async (event: CalendarEventType): Promise<any> => {
     try {
       logger.debug('Calendar', 'MallyAI event scheduling attempt', event);
-      
+
       if (!event || !event.title) {
         logger.warn('Calendar', 'Invalid event data received', { event });
         toast.error("Invalid event data received");
         return { success: false, error: "Invalid event data" };
       }
-      
-      // Transform ISO datetime strings to the format addEvent expects
-      // The AI sends full ISO strings like "2026-02-06T05:00:00Z"
-      // We need to parse these and pass to addEvent which handles the conversion
+
+      // Transform ISO datetime strings to handle multiple requirements:
+      // 1. Zod schema validation requires "HH:MM" strings for startsAt/endsAt
+      // 2. addEvent parsing logic requires description to start with "HH:MM - HH:MM | "
+      // 3. The Date object needs to be set correctly
+
       let startsAt = event.startsAt;
       let endsAt = event.endsAt;
       let eventDate = event.date;
-      
+      let description = event.description || '';
+
       // If startsAt is an ISO datetime string, parse it
       if (typeof startsAt === 'string' && startsAt.includes('T')) {
-        const startDate = new Date(startsAt);
-        eventDate = eventDate || startDate;
-        // Keep the ISO string - addEvent handles this format
+        // Use imported dayjs to handle parsing
+        const startDayjs = dayjs(startsAt);
+        const endDayjs = dayjs(endsAt);
+
+        // Helper to format as HH:MM
+        const formatTime = (d: any) => {
+          return d.format('HH:mm');
+        };
+
+        const startTimeStr = formatTime(startDayjs);
+        const endTimeStr = formatTime(endDayjs);
+
+        // Update to HH:MM format for validation
+        startsAt = startTimeStr;
+        endsAt = endTimeStr;
+
+        // For validation, date must be a Date object. 
+        // Our updated useCalendarEvents hook now handles Date objects correctly for string interpolation.
+        eventDate = startDayjs.toDate();
+
+        // Prepend time to description for addEvent parsing logic
+        description = `${startTimeStr} - ${endTimeStr} | ${description}`;
       }
-      
+
       // Ensure the event has all required fields before passing to addEvent
       const formattedEvent: CalendarEventType = {
         id: event.id || crypto.randomUUID(),
         title: event.title,
-        description: event.description || '',
+        description: description,
         date: eventDate,
         startsAt: startsAt,
         endsAt: endsAt,
@@ -71,26 +96,34 @@ const Calendar = () => {
         recurrenceRule: event.recurrenceRule,
         calendarId: event.calendarId,
       };
-      
-      logger.debug('Calendar', 'Formatted event ready for addEvent', { 
+
+      logger.debug('Calendar', 'Formatted event ready for addEvent', {
         title: formattedEvent.title,
         startsAt: formattedEvent.startsAt,
-        endsAt: formattedEvent.endsAt
+        endsAt: formattedEvent.endsAt,
+        description: formattedEvent.description
       });
-      
-      // Use the addEvent function from the hook - skip Zod validation for AI events
-      // The addEvent function handles the ISO datetime format properly
+
+      // Use the addEvent function from the hook
       const result = await addEvent(formattedEvent);
-      
+
       if (result.success) {
         logger.info('Calendar', 'Event successfully added', { title: event.title });
         toast.success(`Event "${event.title}" scheduled successfully`);
+
+        // Auto-sync to Google Calendar if enabled
+        if (syncEnabled && formattedEvent.source !== 'google') {
+          const googleId = await pushEventToGoogle({ ...formattedEvent, id: result.data?.id || '' });
+          if (googleId && result.data?.id) {
+            await updateEvent(result.data.id, { googleEventId: googleId });
+          }
+        }
       } else {
         const errorMessage = result.error || 'Unknown error';
         logger.error('Calendar', `Failed to add event: ${event.title}`, new Error(String(errorMessage)));
         toast.error('Failed to schedule event');
       }
-      
+
       return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -264,8 +264,8 @@ export const handleDrop = (
     const newEndTime = formatMinutesAsTime(newEndMinutes);
 
     // Get description without time part
-    const descriptionParts = data.description.split('|');
-    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
+    const descriptionParts = (data.description || '').split('|');
+    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
 
     // Create the updated event
     const updatedEvent = {

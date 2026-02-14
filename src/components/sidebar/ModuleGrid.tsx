@@ -4,7 +4,6 @@ import { useSidebarStore } from '@/lib/store';
 import ModuleRenderer from './ModuleRenderer';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
 import { ModuleInstance } from '@/lib/stores/types';
-import SavedModulesManager from './SavedModulesManager';
 
 interface ModuleGridProps {
   modules: ModuleInstance[];
@@ -121,9 +120,6 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
 
   return (
     <div className="flex flex-col">
-      {/* Saved Modules Manager */}
-      <SavedModulesManager pageIndex={pageIndex} />
-      
       {/* Module Grid */}
       <div 
         ref={containerRef} 

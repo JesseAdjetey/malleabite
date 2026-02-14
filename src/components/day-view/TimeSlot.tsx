@@ -170,7 +170,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       
       // Get description without time part
       const descriptionParts = (data.description || '').split('|');
-      const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.title || '');
+      const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
       
       // Use the selected date from the calendar view (or fall back to event's date)
       const targetDate = selectedDate.format('YYYY-MM-DD');

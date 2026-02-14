@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
+import {
+  doc,
+  getDoc,
+  setDoc,
   onSnapshot,
   serverTimestamp,
   Timestamp
@@ -49,7 +49,7 @@ export function useSubscription() {
         try {
           if (docSnap.exists()) {
             const data = docSnap.data() as SubscriptionData;
-            
+
             // Convert Firestore Timestamps to Dates
             const currentPeriodEnd = data.currentPeriodEnd instanceof Timestamp
               ? data.currentPeriodEnd.toDate()
@@ -72,7 +72,7 @@ export function useSubscription() {
           } else {
             // No subscription document - create free tier
             await createFreeSubscription(user.uid);
-            
+
             // After creating, fetch it
             const newDocSnap = await getDoc(subscriptionRef);
             if (newDocSnap.exists()) {
@@ -82,18 +82,18 @@ export function useSubscription() {
                 : new Date(data.currentPeriodEnd);
 
               setSubscription({
-                planId: 'FREE',
+                planId: 'PRO',
                 status: 'active',
-                currentPeriodEnd,
+                currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
                 cancelAtPeriodEnd: false,
                 isActive: true,
-                isFree: true,
-                isPro: false,
+                isFree: false,
+                isPro: true,
                 isTeams: false,
               });
             }
           }
-          
+
           setError(null);
         } catch (err) {
           console.error('Error loading subscription:', err);
@@ -124,7 +124,7 @@ export function useSubscription() {
 // Helper function to create a free subscription for new users
 async function createFreeSubscription(userId: string): Promise<void> {
   const subscriptionRef = doc(db, COLLECTIONS.SUBSCRIPTIONS, userId);
-  
+
   // Set period to 1 year from now (free tier doesn't expire)
   const now = new Date();
   const oneYearFromNow = new Date(now);

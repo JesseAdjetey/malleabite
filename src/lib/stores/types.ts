@@ -37,7 +37,7 @@ export type CalendarEventType = {
   endsAt: string; // ISO string format
 
   // Optional date field for backward compatibility
-  date?: string; // Derived from startsAt for backward compatibility
+  date?: string | Date; // Derived from startsAt for backward compatibility
 
   // Additional fields for UI display
   timeStart?: string; // Derived from startsAt
@@ -83,6 +83,10 @@ export type CalendarEventType = {
   eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
   focusTimeDeclineMessage?: string;
 
+  // Google Calendar 2-way sync
+  googleEventId?: string;  // Google Calendar event ID for sync correlation
+  source?: 'malleabite' | 'google';  // Where the event originated
+
   // Archiving support
   isArchived?: boolean;
   folderName?: string;
@@ -113,4 +117,10 @@ export interface RecurrenceRule {
   monthOfYear?: number; // 1-12 (for yearly)
   endDate?: string; // ISO string - when recurrence ends
   count?: number; // Number of occurrences
+
+  // Added for compatibility with Firebase/Google Calendar schema
+  until?: string; // ISO string (alias for endDate)
+  byDay?: string[]; // ["MO", "TU"] etc
+  byMonth?: number[]; // [1, 2] etc
+  byMonthDay?: number[]; // [1, 15] etc
 }

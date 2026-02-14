@@ -13,6 +13,7 @@ import { ConsentBanner } from '@/components/legal/ConsentBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { Loader2 } from 'lucide-react';
+import { useNotificationManager } from '@/hooks/use-notification-manager';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
@@ -38,7 +39,11 @@ const PageLoader = () => (
 const AppRoutes = () => {
   const location = useLocation();
   const isAuthPage = location.pathname === '/auth';
-  
+
+  // Global notification manager for alarms and reminders
+  // Must be inside AuthProvider to access useAuth
+  useNotificationManager();
+
   return (
     <ThemeProvider isAuthPage={isAuthPage}>
       <Suspense fallback={<PageLoader />}>

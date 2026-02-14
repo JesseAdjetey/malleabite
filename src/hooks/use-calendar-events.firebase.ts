@@ -1,12 +1,13 @@
 // Firebase version of useCalendarEvents hook
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  FirestoreService, 
-  CalendarEvent, 
-  COLLECTIONS, 
+import {
+  FirestoreService,
+  CalendarEvent,
+  COLLECTIONS,
   timestampFromDate,
   timestampToDate
 } from '@/integrations/firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
@@ -21,6 +22,30 @@ interface FirebaseActionResponse {
   error?: Error | unknown;
   diagnosticMessage?: string;
 }
+
+
+// Helper to recursively remove undefined values
+// This is critical for Firestore which throws errors on undefined values in nested objects (like recurrenceRule)
+const removeUndefinedDeep = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+
+  // Preserve Date objects and Firestore Timestamps
+  if (obj instanceof Date || obj instanceof Timestamp) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedDeep).filter(v => v !== undefined);
+  }
+
+  const result: any = {};
+  Object.keys(obj).forEach(key => {
+    const val = removeUndefinedDeep(obj[key]);
+    if (val !== undefined) {
+      result[key] = val;
+    }
+  });
+  return result;
+};
 
 export function useCalendarEvents() {
   const [events, setEvents] = useState<CalendarEventType[]>([]);
@@ -46,13 +71,13 @@ export function useCalendarEvents() {
     const startDate = timestampToDate(firebaseEvent.startAt);
     const endDate = timestampToDate(firebaseEvent.endAt);
     const eventDate = dayjs(startDate).format('YYYY-MM-DD');
-    
+
     const descriptionWithTime = formatDescription(
       startDate.toISOString(),
       endDate.toISOString(),
       firebaseEvent.description || ''
     );
-    
+
     return {
       id: firebaseEvent.id,
       title: firebaseEvent.title,
@@ -66,7 +91,7 @@ export function useCalendarEvents() {
       startsAt: startDate.toISOString(),
       endsAt: endDate.toISOString(),
       date: eventDate,
-      
+
       // Google Calendar-style fields
       location: firebaseEvent.location || undefined,
       meetingUrl: firebaseEvent.meetingUrl || undefined,
@@ -76,7 +101,7 @@ export function useCalendarEvents() {
       visibility: firebaseEvent.visibility || 'public',
       status: firebaseEvent.status || 'confirmed',
       timeZone: firebaseEvent.timeZone || undefined,
-      
+
       // Recurring event fields
       isRecurring: firebaseEvent.isRecurring || false,
       recurrenceRule: firebaseEvent.recurrenceRule ? {
@@ -90,7 +115,7 @@ export function useCalendarEvents() {
       } : undefined,
       recurrenceParentId: firebaseEvent.recurrenceParentId || undefined,
       recurrenceExceptions: firebaseEvent.recurrenceExceptions || undefined,
-      
+
       // Attendees and reminders
       attendees: firebaseEvent.attendees?.map(a => ({
         email: a.email,
@@ -104,9 +129,13 @@ export function useCalendarEvents() {
         minutes: r.minutes,
       })) || undefined,
       useDefaultReminders: firebaseEvent.useDefaultReminders ?? true,
-      
+
       // Event type
       eventType: firebaseEvent.eventType || 'default',
+
+      // Google Calendar sync
+      googleEventId: firebaseEvent.googleEventId || undefined,
+      source: (firebaseEvent.source as 'malleabite' | 'google') || undefined,
     };
   };
 
@@ -115,19 +144,19 @@ export function useCalendarEvents() {
     try {
       setLoading(true);
       setError(null);
-      
+
       logger.debug('useCalendarEvents', 'Fetching events', {
         hasUser: !!user,
         userId: user?.uid
       });
-      
+
       if (!user) {
         logger.warn('useCalendarEvents', 'No authenticated user, clearing events');
         setEvents([]);
         setLoading(false);
         return;
       }
-      
+
       // Query Firebase Firestore
       const firebaseEvents = await FirestoreService.query<CalendarEvent>(
         COLLECTIONS.CALENDAR_EVENTS,
@@ -135,15 +164,15 @@ export function useCalendarEvents() {
         'startAt', // Order by start time
         'asc'
       );
-      
+
       logger.info('useCalendarEvents', 'Fetched calendar events', {
         count: firebaseEvents.length
       });
-      
+
       // Transform Firebase events to CalendarEventType
       const transformedEvents = firebaseEvents.map(transformFirebaseEvent);
       setEvents(transformedEvents);
-      
+
     } catch (err: any) {
       logger.error('useCalendarEvents', 'Fetch events error', err);
       errorHandler.handleFirestoreError(err);
@@ -160,7 +189,7 @@ export function useCalendarEvents() {
       hasUser: !!user,
       eventTitle: event.title
     });
-    
+
     if (!user) {
       logger.error('useCalendarEvents', 'No authenticated user', new Error('User not authenticated'));
       errorHandler.handleError(
@@ -170,12 +199,12 @@ export function useCalendarEvents() {
       );
       return { success: false };
     }
-    
+
     try {
       // Validate event data
       const validation = eventSchema.safeParse(event);
       if (!validation.success) {
-        const errorMessage = validation.error.errors.map(e => 
+        const errorMessage = validation.error.errors.map(e =>
           `${e.path.join('.')}: ${e.message}`
         ).join(', ');
         logger.warn('useCalendarEvents', 'Event validation failed', {
@@ -184,27 +213,35 @@ export function useCalendarEvents() {
         toast.error(`Invalid event data: ${errorMessage}`);
         return { success: false, error: new Error(errorMessage) };
       }
-      
+
       logger.debug('useCalendarEvents', 'Processing event', {
         date: event.date,
         hasDescription: !!event.description
       });
-      
+
       // Parse the time range from description (e.g., "09:00 - 10:00 | Description")
       const timeRange = extractTimeString(event.description);
-      
+
       const [startTime, endTime] = timeRange.split('-').map(t => t.trim());
-      
-      const eventDate = event.date || dayjs().format('YYYY-MM-DD');
-      
+
+      // Handle event.date being a Date object or string/undefined
+      const eventDate = event.date instanceof Date
+        ? dayjs(event.date).format('YYYY-MM-DD')
+        : (event.date || dayjs().format('YYYY-MM-DD'));
+
       // Create Date objects by combining date and time
       const startDateTime = dayjs(`${eventDate} ${startTime}`).toDate();
-      const endDateTime = dayjs(`${eventDate} ${endTime}`).toDate();
-      
+      let endDateTime = dayjs(`${eventDate} ${endTime}`).toDate();
+
+      // Ensure end time is after start time (default to 1 hour if same or before)
+      if (isNaN(endDateTime.getTime()) || endDateTime <= startDateTime) {
+        endDateTime = dayjs(startDateTime).add(1, 'hour').toDate();
+      }
+
       // Extract the actual description part
       const descriptionParts = event.description.split('|');
       const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
-      
+
       // Prepare Firebase event data
       const firebaseEvent: Omit<CalendarEvent, 'id' | 'createdAt' | 'updatedAt'> = {
         title: event.title,
@@ -218,7 +255,7 @@ export function useCalendarEvents() {
         hasAlarm: event.hasAlarm || false,
         hasReminder: event.hasReminder || false,
         todoId: event.todoId,
-        
+
         // Google Calendar-style fields
         location: event.location || undefined,
         meetingUrl: event.meetingUrl || undefined,
@@ -228,7 +265,7 @@ export function useCalendarEvents() {
         visibility: event.visibility || 'public',
         status: event.status || 'confirmed',
         timeZone: event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-        
+
         // Recurring event fields
         isRecurring: event.isRecurring || false,
         recurrenceRule: event.recurrenceRule ? {
@@ -242,7 +279,7 @@ export function useCalendarEvents() {
         } : undefined,
         recurrenceParentId: event.recurrenceParentId || undefined,
         recurrenceExceptions: event.recurrenceExceptions || undefined,
-        
+
         // Attendees and reminders
         attendees: event.attendees?.map(a => ({
           email: a.email,
@@ -256,44 +293,47 @@ export function useCalendarEvents() {
           minutes: r.minutes,
         })) || undefined,
         useDefaultReminders: event.useDefaultReminders ?? true,
-        
-        // Event type
         eventType: event.eventType || 'default',
+
+        // Google Calendar sync tracking
+        googleEventId: event.googleEventId || undefined,
+        source: event.source || 'malleabite',
       };
-      
+
       logger.debug('useCalendarEvents', 'Inserting event to Firebase', {
         title: firebaseEvent.title
       });
-      
+
       // Insert into Firebase
+      // Use removeUndefinedDeep to ensure no undefined values are sent to Firestore (nested or otherwise)
       const docRef = await FirestoreService.create<CalendarEvent>(
-        COLLECTIONS.CALENDAR_EVENTS, 
-        firebaseEvent
+        COLLECTIONS.CALENDAR_EVENTS,
+        removeUndefinedDeep(firebaseEvent)
       );
-      
+
       logger.info('useCalendarEvents', 'Event created successfully', {
         docId: docRef.id
       });
-      
+
       // Refresh events to show the new one
       await fetchEvents();
-      
+
       toast.success('Event created successfully!');
-      return { 
-        success: true, 
+      return {
+        success: true,
         data: { id: docRef.id },
         diagnosticMessage: 'Event inserted successfully into Firebase'
       };
-      
+
     } catch (err: any) {
       logger.error('useCalendarEvents', 'Add event error', err);
-      
+
       errorHandler.handleFirestoreError(err);
       const errorMessage = err.message || 'Failed to create event';
       setError(errorMessage);
-      
-      return { 
-        success: false, 
+
+      return {
+        success: false,
         error: err,
         diagnosticMessage: `Firebase insert error: ${errorMessage}`
       };
@@ -315,7 +355,7 @@ export function useCalendarEvents() {
 
       // Transform updates to Firebase format
       const firebaseUpdates: Partial<CalendarEvent> = {};
-      
+
       if (updates.title) firebaseUpdates.title = updates.title;
       if (updates.color) firebaseUpdates.color = updates.color;
       if (updates.isLocked !== undefined) firebaseUpdates.isLocked = updates.isLocked;
@@ -323,7 +363,7 @@ export function useCalendarEvents() {
       if (updates.hasAlarm !== undefined) firebaseUpdates.hasAlarm = updates.hasAlarm;
       if (updates.hasReminder !== undefined) firebaseUpdates.hasReminder = updates.hasReminder;
       if (updates.todoId) firebaseUpdates.todoId = updates.todoId;
-      
+
       // Google Calendar-style fields
       if (updates.location !== undefined) firebaseUpdates.location = updates.location || undefined;
       if (updates.meetingUrl !== undefined) firebaseUpdates.meetingUrl = updates.meetingUrl || undefined;
@@ -333,7 +373,7 @@ export function useCalendarEvents() {
       if (updates.visibility !== undefined) firebaseUpdates.visibility = updates.visibility;
       if (updates.status !== undefined) firebaseUpdates.status = updates.status;
       if (updates.timeZone !== undefined) firebaseUpdates.timeZone = updates.timeZone;
-      
+
       // Recurring event fields
       if (updates.isRecurring !== undefined) firebaseUpdates.isRecurring = updates.isRecurring;
       if (updates.recurrenceRule !== undefined) {
@@ -349,7 +389,7 @@ export function useCalendarEvents() {
       }
       if (updates.recurrenceParentId !== undefined) firebaseUpdates.recurrenceParentId = updates.recurrenceParentId;
       if (updates.recurrenceExceptions !== undefined) firebaseUpdates.recurrenceExceptions = updates.recurrenceExceptions;
-      
+
       // Attendees and reminders
       if (updates.attendees !== undefined) {
         firebaseUpdates.attendees = updates.attendees?.map(a => ({
@@ -369,16 +409,20 @@ export function useCalendarEvents() {
       if (updates.useDefaultReminders !== undefined) firebaseUpdates.useDefaultReminders = updates.useDefaultReminders;
       if (updates.eventType !== undefined) firebaseUpdates.eventType = updates.eventType;
 
+      // Google Calendar sync tracking
+      if (updates.googleEventId !== undefined) firebaseUpdates.googleEventId = updates.googleEventId;
+      if (updates.source !== undefined) firebaseUpdates.source = updates.source;
+
       // Handle description and time updates
       if (updates.description) {
         const timeRange = extractTimeString(updates.description);
         if (timeRange) {
           const [startTime, endTime] = timeRange.split('-').map(t => t.trim());
           const eventDate = updates.date || dayjs().format('YYYY-MM-DD');
-          
+
           firebaseUpdates.startAt = timestampFromDate(dayjs(`${eventDate} ${startTime}`).toDate());
           firebaseUpdates.endAt = timestampFromDate(dayjs(`${eventDate} ${endTime}`).toDate());
-          
+
           // Extract actual description
           const descriptionParts = updates.description.split('|');
           firebaseUpdates.description = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
@@ -388,12 +432,12 @@ export function useCalendarEvents() {
       await FirestoreService.update<CalendarEvent>(
         COLLECTIONS.CALENDAR_EVENTS,
         eventId,
-        firebaseUpdates
+        removeUndefinedDeep(firebaseUpdates)
       );
 
       // Refresh events
       await fetchEvents();
-      
+
       toast.success('Event updated successfully!');
       return { success: true };
 
@@ -418,7 +462,7 @@ export function useCalendarEvents() {
 
       // Refresh events
       await fetchEvents();
-      
+
       toast.success('Event deleted successfully!');
       return { success: true };
 

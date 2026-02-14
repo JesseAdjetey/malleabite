@@ -137,19 +137,30 @@ export async function fetchGoogleCalendarEvents(
   return data.items || [];
 }
 
-// Convert Google event to Malleabite format
-export function googleEventToMalleabite(event: GoogleCalendarEvent): Partial<CalendarEventType> {
-  const startDateTime = event.start.dateTime || event.start.date;
-  const endDateTime = event.end.dateTime || event.end.date;
+// Convert Google event to Malleabite format.
+// Produces the format expected by useCalendarEvents.addEvent:
+//   description = "HH:mm - HH:mm | actual description"
+//   date = Date object, startsAt / endsAt = "HH:mm" strings
+export function googleEventToMalleabite(
+  event: GoogleCalendarEvent,
+  calendarId?: string
+): Partial<CalendarEventType> {
+  const startRaw = event.start.dateTime || event.start.date;
+  const endRaw = event.end.dateTime || event.end.date;
   const isAllDay = !event.start.dateTime;
 
+  const startDayjs = dayjs(startRaw);
+  const endDayjs = endRaw ? dayjs(endRaw) : startDayjs.add(1, 'hour');
+
+  const startHHMM = startDayjs.format('HH:mm');
+  const endHHMM = endDayjs.format('HH:mm');
+
   return {
-    id: `google_${event.id}`,
     title: event.summary || 'Untitled Event',
-    description: event.description || '',
-    date: dayjs(startDateTime).format('YYYY-MM-DD'),
-    startsAt: dayjs(startDateTime!).format('HH:mm'),
-    endsAt: endDateTime ? dayjs(endDateTime).format('HH:mm') : dayjs(startDateTime!).add(1, 'hour').format('HH:mm'),
+    description: `${startHHMM} - ${endHHMM} | ${event.description || ''}`,
+    date: startDayjs.toDate(),
+    startsAt: startHHMM,
+    endsAt: endHHMM,
     color: googleColorToMalleabite(event.colorId),
     isLocked: false,
     isTodo: false,
@@ -158,6 +169,9 @@ export function googleEventToMalleabite(event: GoogleCalendarEvent): Partial<Cal
     isAllDay,
     location: event.location,
     timeZone: event.start.timeZone,
+    calendarId: calendarId || 'google',
+    googleEventId: event.id,
+    source: 'google',
   };
 }
 
@@ -293,5 +307,5 @@ export async function importFromGoogleCalendar(
   
   logger.info('GoogleCalendar', `Imported ${googleEvents.length} events`);
   
-  return googleEvents.map(googleEventToMalleabite);
+  return googleEvents.map(e => googleEventToMalleabite(e, calendarId));
 }

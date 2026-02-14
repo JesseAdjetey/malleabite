@@ -14,6 +14,10 @@ export interface SchedulingRequest {
     mimeType: string;
   };
   context?: any;
+  history?: Array<{
+    role: 'user' | 'model';
+    parts: string;
+  }>;
 }
 
 export interface SchedulingResponse {
@@ -44,6 +48,10 @@ export interface SchedulingResponse {
       [key: string]: any;
     };
   } | null;
+  actions?: Array<{
+    type: string;
+    data: any;
+  }>;
   error?: string;
 }
 
@@ -68,14 +76,14 @@ export class FirebaseFunctions {
       if (!currentUser) {
         throw new Error('User must be authenticated');
       }
-      
+
       // Force token refresh to ensure it's valid
       const token = await currentUser.getIdToken(true);
       console.log('Auth token obtained:', token ? 'YES' : 'NO', 'User:', currentUser.uid);
-      
+
       // Make direct HTTP call with Authorization header
       const functionUrl = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processAIRequest';
-      
+
       const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
@@ -87,62 +95,64 @@ export class FirebaseFunctions {
             message: data.userMessage,
             userId: data.userId,
             imageData: data.imageData,
-            context: data.context
+            context: data.context,
+            history: data.history
           }
         })
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Function call failed:', response.status, errorText);
         throw new Error(`Function call failed: ${response.status}`);
       }
-      
+
       const result = await response.json();
       console.log('Function call succeeded!', result);
-      
+
       const responseData = result.result || result.data || result;
-      
+
       // Transform response to match expected format
       // Include the action field with recurring event properties
       return {
         success: responseData.success || false,
         message: responseData.response || responseData.message || 'No response from AI',
-        operations: responseData.eventData ? [{ 
-          type: 'create_event', 
+        operations: responseData.eventData ? [{
+          type: 'create_event',
           data: responseData.eventData,
-          conflicts: responseData.conflicts 
+          conflicts: responseData.conflicts
         }] : [],
         intent: responseData.intent || 'general',
         actionRequired: responseData.actionRequired || false,
-        action: responseData.action || null, // Pass through the action with recurring properties
+        action: responseData.action || null,
+        actions: responseData.actions || [],
         error: responseData.error
       };
     } catch (error: any) {
       console.error('Error calling processAIRequest function:', error);
-      
+
       // Enhanced intelligent fallback response for development
       const message = data.userMessage.toLowerCase();
-      
-      if (message.includes('schedule') || message.includes('meeting') || message.includes('event') || 
-          message.includes('appointment') || message.includes('create') || message.includes('add')) {
-        
+
+      if (message.includes('schedule') || message.includes('meeting') || message.includes('event') ||
+        message.includes('appointment') || message.includes('create') || message.includes('add')) {
+
         // Try to extract basic scheduling info for a helpful response
         let eventTitle = 'New Event';
         let timeInfo = '';
-        
+
         // Simple pattern matching for titles
         const titleMatch = message.match(/(?:schedule|create|add)\s+(?:a\s+)?(.+?)(?:\s+(?:at|for|tomorrow|today|next))/i);
         if (titleMatch) {
           eventTitle = titleMatch[1].trim();
         }
-        
+
         // Simple pattern matching for time
         const timeMatch = message.match(/(tomorrow|today|next\s+\w+|\d{1,2}\s*(?:am|pm)|\d{1,2}:\d{2}\s*(?:am|pm)|morning|afternoon|evening)/i);
         if (timeMatch) {
           timeInfo = ` ${timeMatch[1]}`;
         }
-        
+
         return {
           success: true,
           message: `I understand you want to schedule "${eventTitle}"${timeInfo}. While the AI functions are being deployed, I can still help! You can manually create this event using the calendar interface. Once the Firebase Functions are deployed, I'll be able to create events automatically with intelligent conflict detection and natural language processing.`,
@@ -150,7 +160,7 @@ export class FirebaseFunctions {
           error: undefined
         };
       }
-      
+
       if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
         return {
           success: true,
@@ -159,7 +169,7 @@ export class FirebaseFunctions {
           error: undefined
         };
       }
-      
+
       return {
         success: true,
         message: `I received your message: "${data.userMessage}". While Firebase Functions are being deployed, I'm running in development mode. I can help with scheduling requests, calendar management, and task organization. Once deployed, I'll have full AI capabilities including natural language processing and conflict detection!`,
@@ -173,12 +183,12 @@ export class FirebaseFunctions {
   static async createCalendarEvent(eventData: any, userId: string): Promise<any> {
     try {
       const createEventFn = httpsCallable(functions, 'createCalendarEvent');
-      
+
       const result = await createEventFn({
         eventData,
         userId
       });
-      
+
       return result.data;
     } catch (error: any) {
       console.error('Error calling createCalendarEvent function:', error);
@@ -198,11 +208,11 @@ export class FirebaseFunctions {
       'Set up a project review for Thursday afternoon',
       'Schedule a call with the client at 3 PM'
     ];
-    
+
     const mockTranscript = mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)];
-    
+
     console.log('Using mock transcription:', mockTranscript);
-    
+
     return {
       success: true,
       transcript: mockTranscript,
@@ -212,7 +222,7 @@ export class FirebaseFunctions {
 
   // Generic function caller for future functions
   static async callFunction<TRequest, TResponse>(
-    functionName: string, 
+    functionName: string,
     data: TRequest
   ): Promise<TResponse> {
     try {

@@ -92,7 +92,7 @@ service cloud.firestore {
 
     // Validation functions
     function validateCalendarEvent() {
-      return request.resource.data.keys().hasAll(['title', 'userId', 'createdAt', 'startsAt']) &&
+      return request.resource.data.keys().hasAll(['title', 'userId', 'createdAt', 'startAt']) &&
              request.resource.data.title is string &&
              request.resource.data.title.size() > 0;
     }

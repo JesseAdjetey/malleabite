@@ -19,8 +19,11 @@ import dayjs from 'dayjs';
 // Helper to describe recurrence pattern
 function describeRecurrence(rule?: RecurrenceRule): string {
   if (!rule) return 'regularly';
-  
-  const freq = rule.frequency.toLowerCase();
+
+  // Support both 'frequency' (standard) and 'freq' (legacy AI-generated field)
+  const rawFreq = rule.frequency || (rule as any).freq;
+  if (!rawFreq) return 'regularly';
+  const freq = rawFreq.toLowerCase();
   const interval = rule.interval || 1;
   
   if (interval === 1) {

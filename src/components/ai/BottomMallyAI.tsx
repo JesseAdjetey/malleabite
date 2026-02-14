@@ -116,7 +116,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
   const [uploadedImage, setUploadedImage] = useState<{
     dataUrl: string;

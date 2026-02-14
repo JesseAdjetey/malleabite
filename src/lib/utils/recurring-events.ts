@@ -72,22 +72,35 @@ export function generateRecurringInstances(
 /**
  * Check if a date matches the recurrence rule criteria
  */
+// Map byDay string codes to JS day numbers (0=Sun, 1=Mon, ...)
+const BY_DAY_MAP: Record<string, number> = {
+  SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6,
+};
+
 function matchesRecurrenceRule(
   date: Date,
   originalDate: Date,
   rule: RecurrenceRule
 ): boolean {
-  switch (rule.frequency) {
+  // Support both 'frequency' (standard) and 'freq' (legacy AI-generated field)
+  const frequency = rule.frequency || (rule as any).freq;
+  switch (frequency) {
     case 'daily':
       return true; // All dates match for daily
 
-    case 'weekly':
+    case 'weekly': {
+      // Check byDay string array first (e.g. ["MO","WE","FR"] from AI)
+      if (rule.byDay && rule.byDay.length > 0) {
+        const dayNums = rule.byDay.map(d => BY_DAY_MAP[d.toUpperCase()]).filter(n => n !== undefined);
+        if (dayNums.length > 0) return dayNums.includes(date.getDay());
+      }
       if (!rule.daysOfWeek || rule.daysOfWeek.length === 0) {
         // If no specific days, match the original day of week
         return date.getDay() === originalDate.getDay();
       }
       // Check if current day is in the specified days
       return rule.daysOfWeek.includes(date.getDay());
+    }
 
     case 'monthly':
       if (rule.dayOfMonth) {
@@ -115,14 +128,21 @@ function matchesRecurrenceRule(
  */
 function getNextOccurrence(currentDate: Date, rule: RecurrenceRule): Date {
   const next = new Date(currentDate);
+  // Support both 'frequency' (standard) and 'freq' (legacy AI-generated field)
+  const frequency = rule.frequency || (rule as any).freq;
 
-  switch (rule.frequency) {
+  switch (frequency) {
     case 'daily':
       next.setDate(next.getDate() + (rule.interval || 1));
       break;
 
     case 'weekly':
-      next.setDate(next.getDate() + (7 * (rule.interval || 1)));
+      // When byDay is set, step 1 day at a time so we can match each day
+      if (rule.byDay && rule.byDay.length > 1) {
+        next.setDate(next.getDate() + 1);
+      } else {
+        next.setDate(next.getDate() + (7 * (rule.interval || 1)));
+      }
       break;
 
     case 'monthly':
@@ -190,8 +210,10 @@ export function checkRecurringConflicts(
  * Format recurrence rule for display
  */
 export function formatRecurrenceRule(rule: RecurrenceRule): string {
-  const { frequency, interval = 1, daysOfWeek, dayOfMonth, monthOfYear, endDate, count } = rule;
-  
+  // Support both 'frequency' (standard) and 'freq' (legacy AI-generated field)
+  const frequency = rule.frequency || (rule as any).freq || 'weekly';
+  const { interval = 1, daysOfWeek, dayOfMonth, monthOfYear, endDate, count } = rule;
+
   let description = '';
 
   // Frequency description
@@ -201,11 +223,15 @@ export function formatRecurrenceRule(rule: RecurrenceRule): string {
     description = `every ${interval} ${frequency === 'daily' ? 'days' : frequency === 'weekly' ? 'weeks' : frequency === 'monthly' ? 'months' : 'years'}`;
   }
 
-  // Days specification
-  if (frequency === 'weekly' && daysOfWeek && daysOfWeek.length > 0) {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const days = daysOfWeek.map(d => dayNames[d]).join(', ');
-    description += ` on ${days}`;
+  // Days specification — check both daysOfWeek (numbers) and byDay (strings)
+  if (frequency === 'weekly') {
+    if (rule.byDay && rule.byDay.length > 0) {
+      description += ` on ${rule.byDay.join(', ')}`;
+    } else if (daysOfWeek && daysOfWeek.length > 0) {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const days = daysOfWeek.map(d => dayNames[d]).join(', ');
+      description += ` on ${days}`;
+    }
   }
 
   if (frequency === 'monthly' && dayOfMonth) {

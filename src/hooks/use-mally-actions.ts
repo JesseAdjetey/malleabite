@@ -76,6 +76,36 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
+  /**
+   * Parse a time value from the AI, which may be:
+   *   - A full ISO string: "2026-02-14T09:00:00Z"
+   *   - A date+time without Z: "2026-02-14T09:00:00"
+   *   - Just HH:MM: "09:00"
+   *   - HH:MM AM/PM: "9:00 AM"
+   * Returns a Date set to today (or tomorrow if already past) for bare times.
+   */
+  const parseTimeString = (raw: string): Date | null => {
+    if (!raw) return null;
+    // Full ISO or parseable datetime → try directly first
+    const direct = new Date(raw);
+    if (!isNaN(direct.getTime())) return direct;
+
+    // Try HH:MM or H:MM (24h or 12h with AM/PM)
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+    if (!match) return null;
+    let hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const ampm = match[4]?.toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+
+    const d = new Date();
+    d.setHours(hours, minutes, 0, 0);
+    // If the time has already passed today, schedule for tomorrow
+    if (d < new Date()) d.setDate(d.getDate() + 1);
+    return d;
+  };
+
   /** Resolve a page reference by name or ID, falling back to the active page. */
   const resolvePageRef = useCallback((data: { pageName?: string; pageId?: string }) => {
     if (data.pageId) {
@@ -277,7 +307,13 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
         case 'create_alarm': {
           if (!data.title || !data.time) { toast.error('Missing alarm title or time'); return false; }
           await ensureModuleVisible('alarms', 'Alarms');
-          const result = await addAlarm(data.title, new Date(data.time), {
+          // Parse the time — AI may return "09:00", "9:00 AM", or a full ISO string
+          const alarmDate = parseTimeString(data.time);
+          if (!alarmDate || isNaN(alarmDate.getTime())) {
+            toast.error('Could not parse alarm time');
+            return false;
+          }
+          const result = await addAlarm(data.title, alarmDate, {
             linkedEventId: data.linkedEventId,
             linkedTodoId: data.linkedTodoId,
             repeatDays: data.repeatDays || [],
@@ -320,10 +356,16 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
         case 'create_reminder': {
           if (!data.title || !data.reminderTime) { toast.error('Missing reminder title or time'); return false; }
           await ensureModuleVisible('alarms', 'Reminders');
+          // Parse the reminder time — AI may return "10:00", "10:00 AM", or a full ISO string
+          const reminderDate = parseTimeString(data.reminderTime);
+          if (!reminderDate || isNaN(reminderDate.getTime())) {
+            toast.error('Could not parse reminder time');
+            return false;
+          }
           const result = await addReminder({
             title: data.title,
             description: data.description,
-            reminderTime: data.reminderTime,
+            reminderTime: reminderDate.toISOString(),
             eventId: data.eventId,
             soundId: data.soundId || 'default',
           });

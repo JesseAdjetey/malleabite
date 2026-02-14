@@ -12,9 +12,10 @@ import TimeColumn from "./calendar/week-view/TimeColumn";
 import DayColumn from "./calendar/week-view/DayColumn";
 import {
   handleDragOver,
-  handleDrop as libHandleDrop,
   RecurringDropResult,
 } from "./calendar/week-view/DragDropHandlers";
+import { formatMinutesAsTime, getTimeInMinutes } from "./calendar/event-utils/touch-handlers";
+import { nanoid } from "nanoid";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
@@ -298,17 +299,102 @@ const WeekView = () => {
         return;
       }
 
-      // Pass addEvent and recurring handler to handleDrop
-      libHandleDrop(
-        e, 
-        day, 
-        hour, 
-        updateEvent, 
-        addEvent, 
-        undefined, // openEventForm
-        addRecurrenceException, // for adding exceptions
-        handleRecurringEventDrop // callback for recurring events
-      );
+      // Don't process if the event is locked
+      if (data.isLocked) {
+        toast.info("Event is locked. Unlock it first to move.");
+        return;
+      }
+
+      // Calculate precise drop time based on cursor position
+      const rect = e.currentTarget.getBoundingClientRect();
+      const relativeY = e.clientY - rect.top;
+      const hourHeight = rect.height;
+      const minutesWithinHour = Math.floor((relativeY / hourHeight) * 60);
+      const snappedMinutes = minutesWithinHour < 30 ? 0 : 30;
+      const baseHour = hour.hour();
+      const totalMinutes = baseHour * 60 + snappedMinutes;
+      const newStartTime = formatMinutesAsTime(totalMinutes);
+
+      const oldStartMinutes = getTimeInMinutes(data.timeStart);
+      const oldEndMinutes = getTimeInMinutes(data.timeEnd);
+      const durationMinutes = Math.max(oldEndMinutes - oldStartMinutes, 30);
+      const newEndMinutes = totalMinutes + durationMinutes;
+      const newEndTime = formatMinutesAsTime(newEndMinutes);
+
+      const descriptionParts = (data.description || '').split('|');
+      const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
+
+      // Check if this is a recurring event instance
+      const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));
+
+      if (isRecurringInstance) {
+        const parentId = data.recurrenceParentId || (data.id.includes('_') ? data.id.split('_')[0] : data.id);
+        const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
+        const newEvent: CalendarEventType = {
+          id: nanoid(),
+          title: data.title,
+          date: day.format('YYYY-MM-DD'),
+          description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+          color: data.color || 'bg-purple-500/70',
+          startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+          endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+          isRecurring: false,
+        };
+        handleRecurringEventDrop({ isRecurring: true, parentId, originalDate, newEvent });
+        return;
+      }
+
+      // DUPLICATE MODE: Ctrl held → create a copy
+      if (e.ctrlKey) {
+        const duplicateEvent: CalendarEventType = {
+          id: nanoid(),
+          title: data.title,
+          date: day.format('YYYY-MM-DD'),
+          description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+          color: data.color || 'bg-purple-500/70',
+          startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+          endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+          isRecurring: false,
+          isTodo: data.isTodo,
+          hasAlarm: data.hasAlarm,
+          hasReminder: data.hasReminder,
+        };
+        addEvent(duplicateEvent).then(response => {
+          if (response.success) {
+            toast.success(`Event duplicated to ${day.format("MMM D")} at ${newStartTime}`);
+          } else {
+            toast.error("Failed to duplicate event");
+          }
+        });
+        return;
+      }
+
+      // MOVE MODE: update the existing event (never add)
+      if (!data.id) {
+        toast.error("Failed to move event: missing ID");
+        return;
+      }
+
+      const realEventId = data.id.includes('_') ? data.id.split('_')[0] : data.id;
+      const updatedEvent: CalendarEventType = {
+        ...data,
+        id: realEventId,
+        date: day.format('YYYY-MM-DD'),
+        description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+        endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+      };
+
+      updateEvent(updatedEvent).then(response => {
+        if (response?.success !== false) {
+          toast.success(`Event moved to ${day.format("MMM D")} at ${newStartTime}`);
+        } else {
+          toast.error("Failed to move event");
+        }
+      }).catch(err => {
+        console.error("Error moving event:", err);
+        toast.error("Failed to move event");
+      });
     } catch (error) {
       console.error("❌ Error handling drop:", error);
       toast.error("Failed to process drop event");

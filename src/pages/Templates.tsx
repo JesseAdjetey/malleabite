@@ -14,6 +14,8 @@ import type { EventTemplate } from '@/types/template';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
+import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 const categories = [
   { id: 'all', label: 'All', emoji: '📋' },
@@ -151,7 +153,13 @@ export default function Templates() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      transition={springs.page}
+      className="min-h-screen bg-background pb-24"
+    >
       <div className="px-5 pt-6 max-w-lg mx-auto space-y-5">
 
         {/* Header */}
@@ -287,6 +295,6 @@ export default function Templates() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   );
 }

@@ -12,6 +12,8 @@ import type { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { haptics } from '@/lib/haptics';
+import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 interface QuickEvent {
   id: string;
@@ -140,7 +142,13 @@ export function QuickSchedule() {
   const isToday = dayjs(selectedDate).isSame(dayjs(), 'day');
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      transition={springs.page}
+      className="min-h-screen bg-background pb-24"
+    >
       <div className="px-5 pt-6 max-w-lg mx-auto space-y-5">
 
         {/* Header */}
@@ -415,6 +423,6 @@ export function QuickSchedule() {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

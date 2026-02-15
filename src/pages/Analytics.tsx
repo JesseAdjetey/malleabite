@@ -24,6 +24,8 @@ import TimeChart from '@/components/analytics/TimeChart';
 import { CategoryBreakdown } from '@/components/analytics/CategoryBreakdown';
 import { cn } from '@/lib/utils';
 import { haptics } from '@/lib/haptics';
+import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 export default function Analytics() {
   const { metrics, timeDistribution, loading, isSyncing } = useAnalyticsData();
@@ -105,21 +107,33 @@ export default function Analytics() {
   // Loading State
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center pb-20">
+      <motion.div
+        initial={{ opacity: 0, x: 30 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -30 }}
+        transition={springs.page}
+        className="min-h-screen bg-background flex items-center justify-center pb-20"
+      >
         <div className="text-center">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 animate-pulse">
             <BarChart2 className="h-8 w-8 text-primary" />
           </div>
           <p className="text-muted-foreground text-subheadline">Loading your analytics...</p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   // Empty State
   if (!metrics) {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <motion.div
+        initial={{ opacity: 0, x: 30 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -30 }}
+        transition={springs.page}
+        className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
+      >
         <div className="px-5 pt-6 max-w-lg mx-auto">
           <h1 className="text-large-title font-bold mb-1">Analytics</h1>
           <p className="text-subheadline text-muted-foreground mb-8">Track your productivity journey</p>
@@ -153,7 +167,7 @@ export default function Analytics() {
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -200,7 +214,13 @@ export default function Analytics() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      transition={springs.page}
+      className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
+    >
       <div className="px-5 pt-6 max-w-lg mx-auto space-y-6">
 
         {/* Header */}
@@ -364,6 +384,6 @@ export default function Analytics() {
         )}
 
       </div>
-    </div>
+    </motion.div>
   );
 }

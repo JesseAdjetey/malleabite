@@ -22,6 +22,7 @@ import dayjs from 'dayjs';
 
 import { useIsMobile } from '@/hooks/use-mobile';
 import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 const Dashboard = () => {
   const { user, signOut } = useAuth();
@@ -136,7 +137,13 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-4">
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      transition={springs.page}
+      className="min-h-screen bg-background pb-20 md:pb-4"
+    >
       {/* Header */}
       <motion.header 
         initial={{ y: -20, opacity: 0 }}
@@ -373,7 +380,7 @@ const Dashboard = () => {
         </motion.div>
       </motion.div>
 
-    </div>
+    </motion.div>
   );
 };
 

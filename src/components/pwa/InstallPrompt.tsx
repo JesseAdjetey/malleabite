@@ -4,6 +4,7 @@ import { X, Download, Share, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { isAppInstalled } from '@/lib/sw-registration';
+import { isNative } from '@/lib/platform';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -17,6 +18,9 @@ export function InstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    // Don't show install prompt inside a native app
+    if (isNative) return;
+
     // Check if already installed
     if (isAppInstalled()) {
       return;

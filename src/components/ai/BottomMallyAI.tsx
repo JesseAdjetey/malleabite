@@ -68,9 +68,7 @@ const defaultQuickActions: QuickAction[] = [
   { id: "reschedule", label: "Reschedule", icon: <Repeat size={14} />, prompt: "Reschedule " },
 ];
 
-interface BottomMallyAIProps {
-  onScheduleEvent?: (event: any) => Promise<any>;
-}
+interface BottomMallyAIProps {}
 
 const DoodleBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -106,9 +104,7 @@ const DoodleBackground = () => (
   </div>
 );
 
-export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
-  onScheduleEvent,
-}) => {
+export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const isMobile = useIsMobile();
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -144,7 +140,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
     todos,
     lists,
     activeListId,
-  } = useMallyActions({ onScheduleEvent });
+  } = useMallyActions();
 
   const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos });
   const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
@@ -603,7 +599,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = ({
             style={{
               maxHeight: isMobile ? "70vh" : "60vh",
             }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            transition={{ type: "spring", damping: 30, stiffness: 250 }}
           >
             <DoodleBackground />
 

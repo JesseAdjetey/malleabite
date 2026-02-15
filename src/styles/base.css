@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe area insets for native apps (notch, home indicator, nav bar) */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+
+  /* iOS Dynamic Type Scale */
+  --font-large-title: 2.125rem;
+  --font-title1: 1.75rem;
+  --font-title2: 1.375rem;
+  --font-title3: 1.25rem;
+  --font-headline: 1.0625rem;
+  --font-body: 1.0625rem;
+  --font-callout: 1rem;
+  --font-subheadline: 0.9375rem;
+  --font-footnote: 0.8125rem;
+  --font-caption1: 0.75rem;
+  --font-caption2: 0.6875rem;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+body {
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+}
+
 /* Light Mode (default) */
 :root {
   --primary: 261 54% 51%;
@@ -32,16 +67,23 @@
   --input: 240 5% 90%;
   --ring: 261 54% 51%;
 
-  --radius: 0.75rem;
+  --radius: 0.875rem;
+  --radius-xl: 1.25rem;
+
+  /* Separator */
+  --separator: 240 5% 88%;
+
+  /* Grouped list background (slightly elevated from page) */
+  --grouped-bg: 240 5% 97%;
 
   /* Background start color for gradient */
   --background-start: #f8f7ff;
   --background-end: #ede9fe;
-  
+
   /* Glass effects for light mode */
-  --glass-bg: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(139, 92, 246, 0.15);
-  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(139, 92, 246, 0.12);
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.06);
 }
 
 /* Dark Mode */
@@ -74,14 +116,20 @@
   --input: 215 27% 18%;
   --ring: 261 54% 61%;
 
+  /* Separator */
+  --separator: 240 3% 22%;
+
+  /* Grouped list background */
+  --grouped-bg: 240 21% 16%;
+
   /* Background start color for gradient */
   --background-start: #1a1625;
   --background-end: #0f0a1a;
-  
+
   /* Glass effects for dark mode */
-  --glass-bg: rgba(26, 22, 37, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+  --glass-bg: rgba(26, 22, 37, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
 }
 
 html {
@@ -161,34 +209,48 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Global dark scrollbar styling - must be outside @layer to override properly */
+/* Hide scrollbars on mobile (iOS-style: indicators show during scroll only) */
+@media (max-width: 768px) {
+  * {
+    scrollbar-width: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+  }
+}
+
+/* Global dark scrollbar styling for desktop - must be outside @layer to override properly */
+@media (min-width: 769px) {
 * {
   scrollbar-width: thin !important;
   scrollbar-color: #4B5563 transparent !important;
 }
-
-*::-webkit-scrollbar {
-  width: 8px !important;
-  height: 8px !important;
 }
 
-*::-webkit-scrollbar-track {
-  background: transparent !important;
-}
+@media (min-width: 769px) {
+  *::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+  }
 
-*::-webkit-scrollbar-thumb {
-  background-color: #4B5563 !important;
-  border-radius: 4px !important;
-}
+  *::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
 
-*::-webkit-scrollbar-thumb:hover {
-  background-color: #6B7280 !important;
-}
+  *::-webkit-scrollbar-thumb {
+    background-color: #4B5563 !important;
+    border-radius: 4px !important;
+  }
 
-html.dark *::-webkit-scrollbar-thumb {
-  background-color: #374151 !important;
-}
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #6B7280 !important;
+  }
 
-html.dark *::-webkit-scrollbar-thumb:hover {
-  background-color: #4B5563 !important;
+  html.dark *::-webkit-scrollbar-thumb {
+    background-color: #374151 !important;
+  }
+
+  html.dark *::-webkit-scrollbar-thumb:hover {
+    background-color: #4B5563 !important;
+  }
 }

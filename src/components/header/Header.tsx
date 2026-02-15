@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,8 @@ import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '@/hooks/use-subscription';
+import { Crown } from 'lucide-react';
+import { haptics } from '@/lib/haptics';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -38,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     bulkDuplicate,
     deselectAll
   } = useBulkSelection();
-  
+
   const { subscription } = useSubscription();
   const isPro = subscription?.isPro ?? false;
 
@@ -51,6 +53,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   const handleTodayClick = () => {
+    haptics.light();
     switch (selectedView) {
       case "Month":
         setMonth(dayjs().month());
@@ -68,6 +71,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   const handlePrevClick = () => {
+    haptics.selection();
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex - 1);
@@ -84,6 +88,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   const handleNextClick = () => {
+    haptics.selection();
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex + 1);
@@ -108,75 +113,78 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         const weekEnd = userSelectedDate.endOf('week').format("MMM D, YYYY");
         return `${weekStart} - ${weekEnd}`;
       case "Day":
-        return userSelectedDate.format("dddd, MMMM D, YYYY");
+        return userSelectedDate.format("ddd, MMM D");
       default:
         return "";
     }
   };
 
+  const handleViewChange = (view: string) => {
+    haptics.light();
+    setView(view);
+  };
+
   return (
-    <div className="glass mx-2 mt-2 rounded-xl p-2 md:p-3 flex items-center justify-between border border-gray-300 dark:border-white/10 overflow-x-auto">
-      {/* Left Side - Navigation */}
-      <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
-        {/* Home/Dashboard button - only show when not on dashboard */}
+    <div className="bg-background/80 backdrop-blur-xl border-b border-border/40 px-4 py-2 flex items-center justify-between">
+      {/* Left Side */}
+      <div className="flex items-center gap-1 flex-1 min-w-0">
+        {/* Home button — only when not on root */}
         {location.pathname !== '/' && (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => navigate('/')}
-            className="h-8 md:h-9 text-xs md:text-sm bg-white/95 text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
+            className="h-9 w-9 p-0"
           >
-            <Home className="h-4 w-4 mr-1" />
+            <Home className="h-5 w-5" />
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleTodayClick}
-          className="h-8 md:h-9 text-xs md:text-sm bg-white/95 text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
+
+        {/* Date navigation arrows */}
+        <button
+          onClick={handlePrevClick}
+          className="p-1.5 rounded-full text-muted-foreground hover:bg-accent transition-colors touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center active:scale-95"
+          aria-label="Previous"
         >
-          <span className="hidden sm:inline">Today</span>
-          <span className="sm:hidden">Now</span>
-        </Button>
+          <ChevronLeft size={20} />
+        </button>
+        <button
+          onClick={handleNextClick}
+          className="p-1.5 rounded-full text-muted-foreground hover:bg-accent transition-colors touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center active:scale-95"
+          aria-label="Next"
+        >
+          <ChevronRight size={20} />
+        </button>
 
-       
-        <div className="flex items-center gap-0.5 md:gap-1">
-          <button
-            onClick={handlePrevClick}
-            className="p-1 rounded-full text-gray-700 hover:bg-gray-200 dark:text-white dark:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
-            aria-label="Previous"
-          >
-            <ChevronLeft size={isMobile ? 20 : 18} />
-          </button>
-          <button
-            onClick={handleNextClick}
-            className="p-1 rounded-full text-gray-700 hover:bg-gray-200 dark:text-white dark:hover:bg-white/10 touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center"
-            aria-label="Next"
-          >
-            <ChevronRight size={isMobile ? 20 : 18} />
-          </button>
-        </div>
+        {/* Date display */}
+        <h1 className="text-headline text-foreground ml-1 whitespace-nowrap truncate">{formatDate()}</h1>
 
-        <h1 className="text-sm md:text-base font-semibold ml-1 md:ml-2 whitespace-nowrap truncate text-gray-800 dark:text-white">{formatDate()}</h1>
+        {/* Today — iOS style text button */}
+        <button
+          onClick={handleTodayClick}
+          className="text-subheadline text-primary font-medium ml-2 hover:opacity-70 transition-opacity touch-manipulation active:opacity-50 whitespace-nowrap"
+        >
+          Today
+        </button>
       </div>
 
-      {/* Right Side - View Selector and Settings */}
+      {/* Right Side */}
       <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-        <div className="flex gap-1 md:gap-2">
+        {/* iOS Segmented Control for view switcher */}
+        <div className="flex bg-muted/60 rounded-lg p-0.5 gap-0.5">
           {["Day", "Week", "Month"].map((view) => (
-            <Button
+            <button
               key={view}
-              variant={selectedView === view ? "default" : "outline"}
-              size="sm"
-              onClick={() => setView(view)}
-              className={`h-8 text-xs md:text-sm px-2 md:px-3 touch-manipulation min-h-[44px] md:min-h-0 ${selectedView === view
-                ? "bg-primary text-white"
-                : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100 dark:bg-white/10 dark:text-white dark:border-white/10 dark:hover:bg-white/20"
-                }`}
+              onClick={() => handleViewChange(view)}
+              className={`h-7 px-2.5 rounded-md text-xs font-medium transition-all duration-150 touch-manipulation ${
+                selectedView === view
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <span className="hidden sm:inline">{view}</span>
               <span className="sm:hidden">{view.charAt(0)}</span>
-            </Button>
+            </button>
           ))}
         </div>
 
@@ -192,11 +200,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             onDeselectAll={deselectAll}
             iconOnly
           />}
-          
-          {/* Undo/Redo Toolbar */}
+
           {!isMobile && <UndoRedoToolbar />}
-          
-          {/* Upgrade Button or Pro Badge */}
+
           {!isMobile && (
             isPro ? (
               <Badge className="bg-purple-600 text-white text-xs">
@@ -214,7 +220,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               </Button>
             )
           )}
-          
+
           {!isMobile && <SettingsNav />}
         </TooltipProvider>
       </div>

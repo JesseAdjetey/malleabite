@@ -19,7 +19,7 @@ import {
   LogOut
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import MobileNavigation from '@/components/MobileNavigation';
+
 import { useIsMobile } from '@/hooks/use-mobile';
 import { motion } from 'framer-motion';
 
@@ -161,7 +161,7 @@ const Dashboard = () => {
                 <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-violet-600 rounded-2xl blur-lg opacity-40 group-hover:opacity-70 transition-opacity" />
                 <div className="relative bg-gray-900/80 p-2 rounded-xl border border-purple-500/30">
                   <img 
-                    src="/lovable-uploads/43ff48d8-817a-40cc-ae01-ccfeb52283cd.png" 
+                    src="" 
                     alt="Malleabite" 
                     className="h-8 w-8 md:h-9 md:w-9"
                   />
@@ -373,7 +373,6 @@ const Dashboard = () => {
         </motion.div>
       </motion.div>
 
-      <MobileNavigation />
     </div>
   );
 };

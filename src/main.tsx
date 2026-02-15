@@ -4,9 +4,10 @@ import App from './App.tsx'
 import "./index.css"
 import { registerServiceWorker } from './lib/sw-registration';
 import { initSentry } from './lib/sentry';
+import { isNative } from './lib/platform';
 
-// Register service worker for PWA functionality
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA functionality (skip on native — assets are bundled)
+if (!isNative && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     registerServiceWorker().catch((error) => {
       console.error('Service worker registration failed:', error);

@@ -19,7 +19,6 @@ interface EventFormProps {
   };
   todoData?: any;
   onSave?: (event: any) => void;
-  onUseAI?: () => void;
 }
 
 const EventForm: React.FC<EventFormProps> = ({
@@ -29,7 +28,6 @@ const EventForm: React.FC<EventFormProps> = ({
   initialTime,
   todoData,
   onSave: propOnSave,
-  onUseAI,
 }) => {
   const { addEvent } = useCalendarEvents();
   const [initialEvent, setInitialEvent] = useState<CalendarEventType | undefined>(undefined);
@@ -123,17 +121,6 @@ const EventForm: React.FC<EventFormProps> = ({
     if (handleClose) handleClose();
   };
 
-  const handleUseAI = () => {
-    if (onUseAI) {
-      onUseAI();
-    } else {
-      toast({
-        title: "Mally AI",
-        description: "AI assistance is coming soon!",
-      });
-    }
-  };
-
   return (
     <Dialog
       open={open}
@@ -145,7 +132,6 @@ const EventForm: React.FC<EventFormProps> = ({
           initialEvent={initialEvent}
           onSave={handleSave}
           onCancel={handleClose}
-          onUseAI={handleUseAI}
         />
       </DialogContent>
     </Dialog>

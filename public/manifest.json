@@ -1,84 +1,102 @@
 {
-    "name": "Malleabite",
-    "short_name": "Malleabite",
-    "description": "Intelligent Productivity Platform - Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique",
-    "start_url": "/",
-    "scope": "/",
-    "display": "standalone",
-    "background_color": "#0a0a0a",
-    "theme_color": "#8b5cf6",
-    "orientation": "any",
-    "icons": [
-        {
-            "src": "/assets/logo.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/assets/logo.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/assets/logo.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
-        },
-        {
-            "src": "/assets/logo.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
-        }
-    ],
-    "categories": [
-        "productivity",
-        "utilities"
-    ],
-    "shortcuts": [
-        {
-            "name": "Open Calendar",
-            "short_name": "Calendar",
-            "description": "View your calendar",
-            "url": "/",
-            "icons": [
-                {
-                    "src": "/assets/logo.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Quick Schedule",
-            "short_name": "Quick",
-            "description": "Quick event scheduling",
-            "url": "/quick-schedule",
-            "icons": [
-                {
-                    "src": "/assets/logo.png",
-                    "sizes": "192x192"
-                }
-            ]
-        },
-        {
-            "name": "Templates",
-            "short_name": "Templates",
-            "description": "Event templates",
-            "url": "/templates",
-            "icons": [
-                {
-                    "src": "/assets/logo.png",
-                    "sizes": "192x192"
-                }
-            ]
-        }
-    ],
-    "serviceworker": {
-        "src": "/sw.js",
-        "scope": "/",
-        "update_via_cache": "none"
+  "name": "Malleabite",
+  "short_name": "Malleabite",
+  "description": "Intelligent Productivity Platform - Master your time with AI-powered scheduling, Eisenhower Matrix, and Pomodoro technique",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#8b5cf6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/icons/icon-48.webp",
+      "type": "image/png",
+      "sizes": "48x48",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-72.webp",
+      "type": "image/png",
+      "sizes": "72x72",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-96.webp",
+      "type": "image/png",
+      "sizes": "96x96",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-128.webp",
+      "type": "image/png",
+      "sizes": "128x128",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-192.webp",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-256.webp",
+      "type": "image/png",
+      "sizes": "256x256",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.webp",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
+  ],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Calendar",
+      "short_name": "Calendar",
+      "description": "View your calendar",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/assets/logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Quick Schedule",
+      "short_name": "Quick",
+      "description": "Quick event scheduling",
+      "url": "/quick-schedule",
+      "icons": [
+        {
+          "src": "/assets/logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "short_name": "Templates",
+      "description": "Event templates",
+      "url": "/templates",
+      "icons": [
+        {
+          "src": "/assets/logo.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "serviceworker": {
+    "src": "/sw.js",
+    "scope": "/",
+    "update_via_cache": "none"
+  }
 }

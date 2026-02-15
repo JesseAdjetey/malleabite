@@ -3,7 +3,7 @@ import PatternManager from '@/components/patterns/PatternManager';
 import { Button } from '@/components/ui/button';
 import { Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import MobileNavigation from '@/components/MobileNavigation';
+
 
 export default function PatternsPage() {
   const navigate = useNavigate();
@@ -25,7 +25,6 @@ export default function PatternsPage() {
         </div>
         <PatternManager />
       </div>
-      <MobileNavigation />
     </div>
   );
 }

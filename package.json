@@ -25,9 +25,26 @@
     "mally:deploy": "cd firebase/functions && npm run build && cd ../.. && firebase deploy --only functions",
     "mally:setup": "firebase functions:secrets:set GEMINI_API_KEY",
     "mally:test": "node scripts/test-mally-api.js",
-    "mally:logs": "firebase functions:log --only processAIRequest"
+    "mally:logs": "firebase functions:log --only processAIRequest",
+    "build:web": "vite build",
+    "build:mobile": "vite build && npx cap sync",
+    "cap:sync": "npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:open:android": "npx cap open android",
+    "cap:run:ios": "npx cap run ios",
+    "cap:run:android": "npx cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/app": "^8.0.1",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/ios": "^8.1.0",
+    "@capacitor/keyboard": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.1",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -95,6 +112,8 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.1.0",
     "@eslint/js": "^9.9.0",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/typography": "^0.5.15",

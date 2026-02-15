@@ -6,9 +6,9 @@ import { CalendarImportExport } from '@/components/calendar/CalendarImportExport
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { ChevronRight, LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
+import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import MobileNavigation from '@/components/MobileNavigation';
+
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from '@/components/ui/use-toast';
 import { useHeyMally } from '@/contexts/HeyMallyContext';
@@ -17,6 +17,10 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
+import { GroupedList, GroupedListHeader, GroupedListItem } from '@/components/ui/grouped-list';
+import { haptics } from '@/lib/haptics';
+import { motion, AnimatePresence } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
 
@@ -24,26 +28,27 @@ const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { 
-    isWakeWordEnabled, 
-    isListening, 
-    isSupported, 
+  const {
+    isWakeWordEnabled,
+    isListening,
+    isSupported,
     toggleWakeWord,
-    error: wakeWordError 
+    error: wakeWordError
   } = useHeyMally();
   const { subscription } = useSubscription();
   const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
-  
+
   const getThemeLabel = () => {
     switch (theme) {
-      case 'light': return 'Light mode';
-      case 'dark': return 'Dark mode';
-      case 'system': return 'System default';
+      case 'light': return 'Light';
+      case 'dark': return 'Dark';
+      case 'system': return 'System';
     }
   };
 
   const handleSignOut = async () => {
+    haptics.warning();
     try {
       await signOut();
       navigate('/auth', { replace: true });
@@ -65,465 +70,390 @@ const Settings = () => {
   const getAvatarUrl = () => (user as any)?.photoURL;
   const getUserName = () => (user as any)?.displayName || user?.email?.split('@')[0] || 'User';
 
-  // Menu Item Component
-  const MenuItem = ({ 
-    icon: Icon, 
-    label, 
-    sublabel, 
-    onClick, 
-    rightElement,
-    variant = 'default'
-  }: { 
-    icon: any; 
-    label: string; 
-    sublabel?: string;
-    onClick?: () => void;
-    rightElement?: React.ReactNode;
-    variant?: 'default' | 'danger';
-  }) => (
-    <button
-      onClick={onClick}
-      className={cn(
-        "w-full flex items-center gap-4 p-4 rounded-2xl transition-all active:scale-[0.98]",
-        "bg-white/5 hover:bg-white/10 border border-white/10",
-        variant === 'danger' && "border-red-500/20 hover:bg-red-500/10"
-      )}
+  const goTo = (section: SettingsSection) => {
+    haptics.light();
+    setActiveSection(section);
+  };
+
+  // Page wrapper with transition
+  const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -30 }}
+      transition={springs.page}
+      className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
     >
-      <div className={cn(
-        "w-10 h-10 rounded-xl flex items-center justify-center",
-        variant === 'default' ? "bg-primary/20" : "bg-red-500/20"
-      )}>
-        <Icon className={cn(
-          "h-5 w-5",
-          variant === 'default' ? "text-primary" : "text-red-400"
-        )} />
-      </div>
-      <div className="flex-1 text-left">
-        <p className={cn(
-          "font-medium",
-          variant === 'danger' && "text-red-400"
-        )}>{label}</p>
-        {sublabel && <p className="text-xs text-muted-foreground">{sublabel}</p>}
-      </div>
-      {rightElement || <ChevronRight className="h-5 w-5 text-muted-foreground" />}
-    </button>
+      {children}
+    </motion.div>
   );
 
-  // Back Button Component
+  // iOS-style back button
   const BackButton = ({ title }: { title: string }) => (
-    <div className="flex items-center gap-3 mb-6">
+    <div className="flex items-center gap-2 mb-6">
       <button
-        onClick={() => setActiveSection('main')}
-        className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+        onClick={() => { haptics.light(); setActiveSection('main'); }}
+        className="flex items-center gap-0.5 text-primary font-medium text-subheadline active:opacity-50 transition-opacity touch-manipulation"
       >
         <ChevronLeft className="h-5 w-5" />
+        <span>Settings</span>
       </button>
-      <h1 className="text-xl font-semibold">{title}</h1>
+      <div className="flex-1" />
     </div>
+  );
+
+  const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+    <h1 className="text-large-title mb-6 px-1">{children}</h1>
   );
 
   // Main Settings Menu
   if (activeSection === 'main') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
+          <h1 className="text-large-title mb-6">Settings</h1>
+
+          {/* Profile & Subscription section */}
+          <GroupedList className="mb-6">
             <button
-              onClick={() => navigate('/')}
-              className="hidden md:flex w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 items-center justify-center transition-colors"
+              onClick={() => goTo('profile')}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors active:bg-muted/60 border-b border-separator/30"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <Avatar className="h-12 w-12 border-2 border-primary/30">
+                <AvatarImage src={getAvatarUrl()} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                  {getInitials()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="text-headline truncate">{getUserName()}</div>
+                <div className="text-caption1 text-muted-foreground truncate">{user?.email}</div>
+              </div>
+              <ChevronLeft className="h-4 w-4 text-muted-foreground/50 rotate-180" />
             </button>
-            <h1 className="text-2xl font-bold">Settings</h1>
-          </div>
 
-          {/* Profile Card */}
-          <button
-            onClick={() => setActiveSection('profile')}
-            className="w-full flex items-center gap-4 p-4 mb-6 rounded-2xl bg-gradient-to-r from-primary/20 to-purple-600/20 border border-primary/30 transition-all active:scale-[0.98]"
-          >
-            <Avatar className="h-14 w-14 border-2 border-primary/50">
-              <AvatarImage src={getAvatarUrl()} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-lg font-semibold">
-                {getInitials()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-lg">{getUserName()}</p>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </button>
+            <button
+              onClick={() => { haptics.light(); navigate(isPro ? '/billing' : '/pricing'); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors active:bg-muted/60"
+            >
+              <div className={cn(
+                "w-8 h-8 rounded-lg flex items-center justify-center",
+                isPro ? "bg-purple-600" : "bg-gradient-to-br from-amber-500 to-orange-500"
+              )}>
+                <Crown className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-subheadline">{isPro ? 'Pro Plan' : 'Free Plan'}</div>
+                <div className="text-caption1 text-muted-foreground truncate">
+                  {isPro ? 'Manage subscription' : 'Upgrade for unlimited features'}
+                </div>
+              </div>
+              {!isPro && (
+                <span className="px-2 py-0.5 bg-primary text-primary-foreground text-caption2 font-semibold rounded-full">
+                  UPGRADE
+                </span>
+              )}
+            </button>
+          </GroupedList>
 
-          {/* Subscription Card */}
-          <button
-            onClick={() => navigate(isPro ? '/billing' : '/pricing')}
-            className={cn(
-              "w-full flex items-center gap-4 p-4 mb-6 rounded-2xl border transition-all active:scale-[0.98]",
-              isPro 
-                ? "bg-gradient-to-r from-purple-600/20 to-violet-600/20 border-purple-500/30"
-                : "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30"
-            )}
-          >
-            <div className={cn(
-              "w-14 h-14 rounded-xl flex items-center justify-center",
-              isPro ? "bg-purple-600" : "bg-gradient-to-br from-amber-500 to-orange-500"
-            )}>
-              <Crown className="h-7 w-7 text-white" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-lg">
-                {isPro ? 'Pro Plan' : 'Free Plan'}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {isPro ? 'Manage billing & subscription' : 'Upgrade for unlimited features'}
-              </p>
-            </div>
-            {isPro ? (
-              <CreditCard className="h-5 w-5 text-purple-400" />
-            ) : (
-              <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
-                UPGRADE
-              </span>
-            )}
-          </button>
-
-          {/* Settings Groups */}
-          <div className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">
-              Preferences
-            </p>
-            
-            <MenuItem
-              icon={Clock}
+          {/* Preferences */}
+          <GroupedListHeader>Preferences</GroupedListHeader>
+          <GroupedList className="mb-2">
+            <GroupedListItem
+              icon={<Clock className="h-4 w-4 text-blue-500" />}
+              iconBg="bg-blue-500/15"
               label="Focus Time"
               sublabel="Set your productive hours"
-              onClick={() => setActiveSection('focus')}
+              onClick={() => goTo('focus')}
             />
-
-            <MenuItem
-              icon={Palette}
+            <GroupedListItem
+              icon={<Palette className="h-4 w-4 text-purple-500" />}
+              iconBg="bg-purple-500/15"
               label="Appearance"
-              sublabel={getThemeLabel()}
-              onClick={() => setActiveSection('appearance')}
+              rightElement={<span className="text-caption1 text-muted-foreground">{getThemeLabel()}</span>}
+              onClick={() => goTo('appearance')}
             />
-
-            <MenuItem
-              icon={Mic}
+            <GroupedListItem
+              icon={<Mic className="h-4 w-4 text-green-500" />}
+              iconBg="bg-green-500/15"
               label="Voice Control"
-              sublabel={isWakeWordEnabled ? '"Hey Mally" is active' : 'Enable hands-free mode'}
-              onClick={() => setActiveSection('voice')}
+              sublabel={isWakeWordEnabled ? '"Hey Mally" is active' : 'Enable hands-free'}
+              onClick={() => goTo('voice')}
               rightElement={
                 <div className={cn(
-                  "w-2 h-2 rounded-full",
-                  isWakeWordEnabled ? "bg-green-500" : "bg-muted-foreground/30"
+                  "w-2.5 h-2.5 rounded-full",
+                  isWakeWordEnabled ? "bg-green-500" : "bg-muted-foreground/20"
                 )} />
               }
             />
-
-            <MenuItem
-              icon={FileUp}
+            <GroupedListItem
+              icon={<FileUp className="h-4 w-4 text-orange-500" />}
+              iconBg="bg-orange-500/15"
               label="Import & Export"
               sublabel="Backup or restore your data"
-              onClick={() => setActiveSection('import')}
+              onClick={() => goTo('import')}
             />
-
-            <MenuItem
-              icon={Plug2}
+            <GroupedListItem
+              icon={<Plug2 className="h-4 w-4 text-teal-500" />}
+              iconBg="bg-teal-500/15"
               label="Integrations"
               sublabel="Google Calendar, Slack & more"
-              onClick={() => setActiveSection('integrations')}
+              onClick={() => goTo('integrations')}
             />
-
-            <MenuItem
-              icon={Wrench}
+            <GroupedListItem
+              icon={<Wrench className="h-4 w-4 text-gray-500" />}
+              iconBg="bg-gray-500/15"
               label="Tools"
               sublabel="Templates, Patterns, Analytics"
-              onClick={() => setActiveSection('tools')}
+              onClick={() => goTo('tools')}
             />
-          </div>
+          </GroupedList>
 
-          {/* Sign Out */}
-          <div className="mt-8">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1 mb-2">
-              Account
-            </p>
-            <MenuItem
-              icon={LogOut}
+          {/* Account */}
+          <GroupedListHeader>Account</GroupedListHeader>
+          <GroupedList>
+            <GroupedListItem
+              icon={<LogOut className="h-4 w-4 text-destructive" />}
+              iconBg="bg-destructive/15"
               label="Sign Out"
+              destructive
+              showChevron={false}
               onClick={handleSignOut}
-              variant="danger"
-              rightElement={null}
             />
-          </div>
+          </GroupedList>
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Profile Section
   if (activeSection === 'profile') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Profile" />
+          <SectionTitle>Profile</SectionTitle>
           <UserProfile />
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Focus Time Section
   if (activeSection === 'focus') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Focus Time" />
+          <SectionTitle>Focus Time</SectionTitle>
           <FocusTimeBlocks />
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Voice Control Section
   if (activeSection === 'voice') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Voice Control" />
+          <SectionTitle>Voice Control</SectionTitle>
 
           {/* Hero Toggle */}
-          <div className="p-6 rounded-3xl bg-gradient-to-br from-primary/20 via-purple-600/10 to-transparent border border-primary/20 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-4">
+          <GroupedList className="mb-6">
+            <div className="flex items-center justify-between px-4 py-4">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center transition-colors",
-                  isWakeWordEnabled ? "bg-green-500/20" : "bg-white/10"
+                  "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                  isWakeWordEnabled ? "bg-green-500/15" : "bg-muted"
                 )}>
                   {isWakeWordEnabled ? (
                     <div className="relative">
-                      <Mic className="h-7 w-7 text-green-500" />
+                      <Mic className="h-5 w-5 text-green-500" />
                       {isListening && (
-                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-ping" />
+                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-green-500 rounded-full animate-ping" />
                       )}
                     </div>
                   ) : (
-                    <MicOff className="h-7 w-7 text-muted-foreground" />
+                    <MicOff className="h-5 w-5 text-muted-foreground" />
                   )}
                 </div>
                 <div>
-                  <p className="font-semibold text-lg">Hey Mally</p>
-                  <p className="text-sm text-muted-foreground">
+                  <div className="text-subheadline font-medium">Hey Mally</div>
+                  <div className="text-caption1 text-muted-foreground">
                     {isWakeWordEnabled ? (isListening ? 'Listening...' : 'Active') : 'Disabled'}
-                  </p>
+                  </div>
                 </div>
               </div>
               <Switch
                 checked={isWakeWordEnabled}
-                onCheckedChange={toggleWakeWord}
+                onCheckedChange={() => { haptics.medium(); toggleWakeWord(); }}
                 disabled={!isSupported}
               />
             </div>
+          </GroupedList>
 
-            {!isSupported && (
-              <div className="p-3 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
-                <p className="text-xs text-yellow-400">
-                  Voice activation requires Chrome, Edge, or Safari
-                </p>
-              </div>
-            )}
+          {!isSupported && (
+            <div className="px-4 py-3 mb-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/20">
+              <p className="text-footnote text-yellow-600 dark:text-yellow-400">
+                Voice activation requires Chrome, Edge, or Safari
+              </p>
+            </div>
+          )}
 
-            {wakeWordError && (
-              <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20">
-                <p className="text-xs text-red-400">{wakeWordError}</p>
-              </div>
-            )}
-          </div>
+          {wakeWordError && (
+            <div className="px-4 py-3 mb-4 bg-destructive/10 rounded-2xl border border-destructive/20">
+              <p className="text-footnote text-destructive">{wakeWordError}</p>
+            </div>
+          )}
 
-          {/* Instructions */}
-          <div className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
-              How it works
-            </p>
-            
+          {/* How it works */}
+          <GroupedListHeader>How it works</GroupedListHeader>
+          <GroupedList className="mb-4">
             {[
               { step: '1', text: 'Enable the toggle above' },
               { step: '2', text: 'Allow microphone access' },
               { step: '3', text: 'Say "Hey Mally" clearly' },
               { step: '4', text: 'Speak your request' },
-            ].map((item) => (
-              <div key={item.step} className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-semibold text-primary">
+            ].map((item, i) => (
+              <div key={item.step} className={cn(
+                "flex items-center gap-3 px-4 py-3",
+                i < 3 && "border-b border-separator/30"
+              )}>
+                <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-caption1 font-semibold text-primary">
                   {item.step}
                 </div>
-                <p className="text-sm">{item.text}</p>
+                <span className="text-subheadline">{item.text}</span>
               </div>
             ))}
-          </div>
-
-          {/* Tips */}
-          <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/10">
-            <p className="text-xs font-medium text-muted-foreground mb-3">Pro Tips</p>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                Works best in quiet environments
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                Keep the app tab open
-              </p>
-            </div>
-          </div>
+          </GroupedList>
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Appearance Section
   if (activeSection === 'appearance') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Appearance" />
+          <SectionTitle>Appearance</SectionTitle>
 
-          {/* Theme Selector Card */}
-          <div className="p-6 rounded-3xl bg-gradient-to-br from-primary/10 via-purple-600/5 to-transparent border border-primary/20 mb-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
-                <Palette className="h-7 w-7 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold text-lg">Theme</p>
-                <p className="text-sm text-muted-foreground">
-                  Choose how Malleabite looks
-                </p>
-              </div>
-            </div>
-            
+          <GroupedListHeader>Theme</GroupedListHeader>
+          <GroupedList className="mb-4 p-4">
             <ThemeSelector showLabel={false} size="lg" />
-          </div>
+          </GroupedList>
 
-          {/* Theme Info */}
-          <div className="p-4 rounded-2xl bg-white/5 dark:bg-white/5 border border-white/10 dark:border-white/10">
-            <p className="text-xs font-medium text-muted-foreground mb-3">About Themes</p>
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                <strong className="text-foreground">Light</strong> - Clean and bright for daytime use
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                <strong className="text-foreground">Dark</strong> - Easier on the eyes at night
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                <strong className="text-foreground">System</strong> - Matches your device settings
-              </p>
+          <GroupedListHeader>About Themes</GroupedListHeader>
+          <GroupedList>
+            <div className="px-4 py-3 border-b border-separator/30 flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-yellow-500" />
+              <span className="text-subheadline"><strong className="font-medium">Light</strong> — Clean and bright for daytime</span>
             </div>
-          </div>
+            <div className="px-4 py-3 border-b border-separator/30 flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+              <span className="text-subheadline"><strong className="font-medium">Dark</strong> — Easier on the eyes at night</span>
+            </div>
+            <div className="px-4 py-3 flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-primary" />
+              <span className="text-subheadline"><strong className="font-medium">System</strong> — Matches your device</span>
+            </div>
+          </GroupedList>
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Import/Export Section
   if (activeSection === 'import') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Import & Export" />
+          <SectionTitle>Import & Export</SectionTitle>
           <CalendarImportExport />
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Integrations Section
   if (activeSection === 'integrations') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Integrations" />
-          
+          <SectionTitle>Integrations</SectionTitle>
+
+          <p className="text-subheadline text-muted-foreground mb-4 px-1">
+            Connect your favorite services to sync events and get notifications.
+          </p>
+
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground mb-4">
-              Connect your favorite services to sync events and get notifications.
-            </p>
-            
             <GoogleCalendarSync />
             <SlackNotifications />
           </div>
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 
   // Tools Section
   if (activeSection === 'tools') {
     return (
-      <div className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden">
+      <PageWrapper>
         <div className="px-4 pt-6 max-w-lg mx-auto">
           <BackButton title="Tools" />
-          
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground mb-4">
-              Quick access to productivity tools and features.
-            </p>
-            
-            <MenuItem
-              icon={FileText}
+          <SectionTitle>Tools</SectionTitle>
+
+          <GroupedList>
+            <GroupedListItem
+              icon={<FileText className="h-4 w-4 text-blue-500" />}
+              iconBg="bg-blue-500/15"
               label="Templates"
               sublabel="Create events from saved templates"
               onClick={() => navigate('/templates')}
             />
-
-            <MenuItem
-              icon={Zap}
+            <GroupedListItem
+              icon={<Zap className="h-4 w-4 text-yellow-500" />}
+              iconBg="bg-yellow-500/15"
               label="Quick Schedule"
               sublabel="Rapidly add multiple events"
               onClick={() => navigate('/quick-schedule')}
             />
-
-            <MenuItem
-              icon={MoreHorizontal}
+            <GroupedListItem
+              icon={<MoreHorizontal className="h-4 w-4 text-purple-500" />}
+              iconBg="bg-purple-500/15"
               label="Patterns"
               sublabel="Discover scheduling patterns"
               onClick={() => navigate('/patterns')}
             />
-
-            <MenuItem
-              icon={FolderPlus}
+            <GroupedListItem
+              icon={<FolderPlus className="h-4 w-4 text-green-500" />}
+              iconBg="bg-green-500/15"
               label="Archive & Start Fresh"
               sublabel="Save and clear your calendar"
               onClick={() => navigate('/snapshots')}
             />
-
-            <MenuItem
-              icon={BarChart3}
+            <GroupedListItem
+              icon={<BarChart3 className="h-4 w-4 text-teal-500" />}
+              iconBg="bg-teal-500/15"
               label="Analytics"
               sublabel="View productivity insights"
               onClick={() => navigate('/analytics')}
             />
-
-            <MenuItem
-              icon={FolderPlus}
+            <GroupedListItem
+              icon={<FolderPlus className="h-4 w-4 text-orange-500" />}
+              iconBg="bg-orange-500/15"
               label="Calendar Archives"
               sublabel="Access archived calendars"
               onClick={() => navigate('/calendar-archives')}
             />
-          </div>
+          </GroupedList>
         </div>
-        <MobileNavigation />
-      </div>
+      </PageWrapper>
     );
   }
 

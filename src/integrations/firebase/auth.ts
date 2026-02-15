@@ -1,5 +1,5 @@
 // Firebase Authentication utilities and types
-import { 
+import {
   User as FirebaseUser,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -9,9 +9,11 @@ import {
   sendEmailVerification,
   UserCredential,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect
 } from 'firebase/auth';
 import { auth } from './config';
+import { isNative } from '@/lib/platform';
 
 export type User = FirebaseUser;
 
@@ -58,6 +60,13 @@ export const signUp = async (credentials: SignUpCredentials): Promise<UserCreden
 
 export const signInWithGoogle = async (): Promise<UserCredential> => {
   const provider = new GoogleAuthProvider();
+
+  if (isNative) {
+    // On native, use redirect flow (popup blocked in WebView)
+    // The onAuthStateChanged listener will pick up the signed-in user
+    return await signInWithRedirect(auth, provider) as unknown as UserCredential;
+  }
+
   return await signInWithPopup(auth, provider);
 };
 

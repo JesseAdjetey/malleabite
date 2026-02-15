@@ -11,7 +11,22 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontSize: {
+        'large-title': ['var(--font-large-title)', { lineHeight: '1.2', fontWeight: '700' }],
+        'title1': ['var(--font-title1)', { lineHeight: '1.25', fontWeight: '700' }],
+        'title2': ['var(--font-title2)', { lineHeight: '1.3', fontWeight: '700' }],
+        'title3': ['var(--font-title3)', { lineHeight: '1.35', fontWeight: '600' }],
+        'headline': ['var(--font-headline)', { lineHeight: '1.4', fontWeight: '600' }],
+        'ios-body': ['var(--font-body)', { lineHeight: '1.5', fontWeight: '400' }],
+        'callout': ['var(--font-callout)', { lineHeight: '1.45', fontWeight: '400' }],
+        'subheadline': ['var(--font-subheadline)', { lineHeight: '1.4', fontWeight: '400' }],
+        'footnote': ['var(--font-footnote)', { lineHeight: '1.35', fontWeight: '400' }],
+        'caption1': ['var(--font-caption1)', { lineHeight: '1.3', fontWeight: '400' }],
+        'caption2': ['var(--font-caption2)', { lineHeight: '1.2', fontWeight: '400' }],
+      },
       colors: {
+        separator: 'hsl(var(--separator))',
+        'grouped-bg': 'hsl(var(--grouped-bg))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -74,6 +89,7 @@ const config: Config = {
         }
       },
       borderRadius: {
+        'xl-ios': 'var(--radius-xl)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)'

@@ -261,10 +261,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     setIsEditing(false);
   };
 
-  const handleUseAI = () => {
-    toast.info("AI assistance coming soon!");
-  };
-
   // Format date for display
   const formattedDate = (() => {
     try {
@@ -295,7 +291,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
               initialEvent={selectedEvent}
               onSave={handleUpdate}
               onCancel={handleCancel}
-              onUseAI={handleUseAI}
             />
           ) : (
             <>

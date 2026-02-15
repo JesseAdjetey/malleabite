@@ -30,3 +30,14 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Capacitor native platform build artifacts
+ios/App/Pods/
+ios/.symlinks/
+ios/DerivedData/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/.idea/
+android/local.properties

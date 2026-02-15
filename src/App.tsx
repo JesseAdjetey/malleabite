@@ -1,5 +1,5 @@
 
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { ToastProvider } from "@/hooks/toast-context";
 import { Toaster } from "@/components/ui/toaster";
@@ -14,6 +14,10 @@ import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { Loader2 } from 'lucide-react';
 import { useNotificationManager } from '@/hooks/use-notification-manager';
+import { isNative, isAndroid } from '@/lib/platform';
+import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
+import MobileNavigation from '@/components/MobileNavigation';
+import '@/styles/ai-animations.css';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
@@ -62,6 +66,8 @@ const AppRoutes = () => {
           <Route path="/legal/terms" element={<TermsOfService />} />
         </Routes>
       </Suspense>
+      {!isAuthPage && <BottomMallyAI />}
+      {!isAuthPage && <MobileNavigation />}
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}
@@ -71,6 +77,32 @@ const AppRoutes = () => {
 };
 
 function App() {
+  // Configure native platform features (status bar, keyboard, back button)
+  useEffect(() => {
+    if (!isNative) return;
+
+    import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+      StatusBar.setStyle({ style: Style.Dark });
+      StatusBar.setBackgroundColor({ color: '#0a0a0a' });
+    }).catch(() => {});
+
+    import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
+      Keyboard.setResizeMode({ mode: KeyboardResize.Body });
+    }).catch(() => {});
+
+    if (isAndroid) {
+      import('@capacitor/app').then(({ App: CapacitorApp }) => {
+        CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+          if (canGoBack) {
+            window.history.back();
+          } else {
+            CapacitorApp.exitApp();
+          }
+        });
+      }).catch(() => {});
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <AuthProvider>

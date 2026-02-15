@@ -15,17 +15,14 @@ import { useViewStore } from "@/lib/stores/view-store";
 import { useDateStore } from "@/lib/stores/date-store";
 import { logger } from "@/lib/logger";
 import { SidebarPage } from "@/lib/stores/types";
+import { useGoogleCalendar } from "@/hooks/use-google-calendar";
+import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import dayjs from "dayjs";
 
-interface UseMallyActionsOptions {
-  onScheduleEvent?: (event: any) => Promise<any>;
-}
-
-export function useMallyActions(options: UseMallyActionsOptions = {}) {
-  const { onScheduleEvent } = options;
-
+export function useMallyActions() {
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
+  const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
 
   // Todos
   const {
@@ -169,7 +166,7 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
             }
           }
 
-          const eventData = {
+          const rawEventData = {
             title: data.title,
             startsAt: data.start || data.startsAt,
             endsAt: data.end || data.endsAt,
@@ -180,14 +177,24 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
             calendarId: data.calendarId,
           };
 
-          if (onScheduleEvent) {
-            await onScheduleEvent(eventData);
-          } else {
-            const result = await addEvent(eventData as any);
-            if (!result?.success) return false;
+          const formattedEvent = formatAIEvent(rawEventData);
+          const result = await addEvent(formattedEvent as any);
+          if (!result?.success) return false;
+
+          // Auto-sync to Google Calendar if enabled
+          if (syncEnabled && (formattedEvent as any).source !== 'google') {
+            try {
+              const googleId = await pushEventToGoogle({ ...formattedEvent, id: result.data?.id || formattedEvent.id });
+              if (googleId && result.data?.id) {
+                await updateEvent(result.data.id, { googleEventId: googleId });
+              }
+            } catch (err) {
+              logger.warn('MallyActions', 'Google Calendar sync failed', { error: err });
+            }
           }
+
           toast.success(`Event "${data.title}" created`);
-          if (eventData.startsAt) setDate(dayjs(eventData.startsAt));
+          if (rawEventData.startsAt) setDate(dayjs(rawEventData.startsAt));
           return true;
         }
 
@@ -646,7 +653,7 @@ export function useMallyActions(options: UseMallyActionsOptions = {}) {
     sendInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,
     resolvePageRef, resolveModuleIndex, ensureModuleVisible,
-    onScheduleEvent,
+    syncEnabled, pushEventToGoogle,
   ]);
 
   // ─── Context builder ───────────────────────────────────────────────────────

@@ -1,196 +1,63 @@
 
+/* Gradient shift — used for auth page and event form backgrounds */
 @keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
-
-/* Custom cursor */
-#custom-cursor {
-  position: fixed;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid rgba(139, 92, 246, 0.6);
-  pointer-events: none;
-  z-index: 9999;
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s, background-color 0.3s;
-  opacity: 0.6;
-  mix-blend-mode: screen;
-}
-
-#custom-cursor.expanded {
-  width: 40px;
-  height: 40px;
-  background-color: rgba(139, 92, 246, 0.15);
-  opacity: 0.7;
-}
-
-/* Logo gentle rotation animation */
-@keyframes gentle-rotate {
-  0% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(90deg);
-  }
-  100% {
-    transform: rotate(0deg);
-  }
-}
-
-/* Floating animation for the logo */
-@keyframes floatLogo {
-  0%, 100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-20px) scale(1.05);
-  }
-}
-
-/* Glow animation */
-@keyframes glow {
-  0%, 100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-/* Orbit animations for floating elements */
-@keyframes orbit {
-  0% {
-    transform: rotate(0deg) translateX(100px) rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg) translateX(100px) rotate(-360deg);
-  }
-}
-
-/* Bounce animation */
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-/* Spin animation */
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Pulse animation specifically for interactive elements */
-@keyframes pulse-interactive {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-}
-
-/* Dragable elements animation */
-.draggable {
-  cursor: grab;
-  transition: transform 0.2s, filter 0.2s;
-}
-
-.draggable:active {
-  cursor: grabbing;
-  transform: scale(1.1);
-}
-
-.draggable.highlight {
-  filter: drop-shadow(0 0 8px rgba(138, 43, 226, 0.8));
-  animation: pulse-interactive 2s infinite;
-}
-
-/* Interactive button effects */
-.interactive-button {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s;
-}
-
-.interactive-button:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: all 0.6s;
-}
-
-.interactive-button:hover:before {
-  left: 100%;
-}
-
-.interactive-button:active {
-  transform: scale(0.95);
-}
-
-/* Achievement unlock animation */
-@keyframes achievement-unlock {
-  0% {
-    transform: scale(0);
-    opacity: 0;
-  }
-  70% {
-    transform: scale(1.1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.achievement {
-  animation: achievement-unlock 0.6s forwards;
-}
-
-/* New AI animations from ai-animations.css */
-/* These imports are now done through direct file imports in the components that need them */
 
 /* Subtle gradient animation for event form background */
 @keyframes subtle-gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .animate-subtle-gradient {
   animation: subtle-gradient 10s ease infinite;
 }
 
-/* Button press effect */
+/* Spin animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Pulse — interactive elements */
+@keyframes pulse-interactive {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.85; }
+}
+
+/* Bounce — subtle */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* Glow — used for active indicators */
+@keyframes glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+/* Draggable elements — calendar events DnD */
+.draggable {
+  cursor: grab;
+  transition: transform 0.15s, filter 0.15s;
+}
+
+.draggable:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+.draggable.highlight {
+  filter: drop-shadow(0 0 8px rgba(138, 43, 226, 0.6));
+  animation: pulse-interactive 2s infinite;
+}
+
+/* Button press — universal iOS-like press feedback */
 .button-press {
   transition: transform 0.1s;
 }
@@ -199,12 +66,12 @@
   transform: scale(0.97);
 }
 
-/* Hover lift effect for cards */
+/* Hover lift — cards on desktop */
 .hover-lift {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .hover-lift:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
 }

@@ -1,106 +1,105 @@
 
 @layer components {
-  /* Glass effects - adjusted for both light and dark modes */
+  /* Glass effects — iOS-inspired frosted materials */
   .glass {
-    @apply backdrop-blur-md;
+    @apply backdrop-blur-xl;
   }
-  
-  /* Light mode glass - use :root:not(.dark) for better default */
+
   :root:not(.dark) .glass,
   .light .glass {
-    @apply bg-white/90 border-gray-200 border shadow-sm;
+    @apply bg-white/75 border-gray-200 border shadow-sm;
   }
-  
+
   .dark .glass {
-    @apply bg-black/25 border-white/10 shadow-md;
+    @apply bg-gray-900/60 border-white/10 shadow-md;
   }
-  
+
   .glass-sidebar {
     @apply glass border-r;
   }
-  
+
   :root:not(.dark) .glass-sidebar,
   .light .glass-sidebar {
-    @apply border-gray-200 bg-white/95;
+    @apply border-gray-200 bg-white/100;
   }
-  
+
   .dark .glass-sidebar {
     @apply border-white/10;
   }
-  
+
   .glass-card {
-    @apply glass rounded-xl border shadow-md;
+    @apply glass rounded-2xl border shadow-sm;
   }
-  
+
   :root:not(.dark) .glass-card,
   .light .glass-card {
-    @apply border-gray-200 shadow-sm bg-white/95;
+    @apply border-gray-200 shadow-sm bg-white/100;
   }
-  
+
   .dark .glass-card {
-    @apply border-white/20;
+    @apply border-white/10 shadow-none;
   }
-  
+
   .glass-input {
-    @apply border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary;
+    @apply border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-colors;
   }
-  
+
   :root:not(.dark) .glass-input,
   .light .glass-input {
-    @apply bg-white/95 border-gray-200;
+    @apply bg-white/90 border-gray-200;
   }
-  
+
   .dark .glass-input {
     @apply bg-white/10 border-white/20;
   }
-  
+
   .resizer {
-    @apply w-1 cursor-ew-resize hover:bg-primary/60 z-10;
+    @apply w-1 cursor-ew-resize hover:bg-primary/40 z-10 transition-colors;
   }
-  
+
+  /* Calendar events — refined with better radius and press state */
   .calendar-event {
-    @apply relative p-2 rounded-md cursor-pointer text-xs hover:brightness-110 transition-all h-full overflow-hidden text-white shadow-sm;
+    @apply relative p-2 rounded-lg cursor-pointer text-footnote hover:brightness-110 transition-all h-full overflow-hidden text-white shadow-sm active:scale-[0.98] ring-1 ring-black/5;
   }
-  
-  /* Light mode: add more shadow for depth */
+
   :root:not(.dark) .calendar-event,
   .light .calendar-event {
     @apply shadow-md;
   }
-  
+
   .event-lock {
     @apply absolute right-1 top-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded-full hover:bg-white/20;
   }
-  
+
   .module-container {
-    @apply glass-card mb-4 shadow-lg;
+    @apply glass-card mb-4 shadow-sm;
   }
-  
-  /* Calendar event colors - more vibrant for both modes */
+
+  /* Calendar event colors */
   .event-red {
     @apply bg-gradient-to-br from-rose-500 to-rose-600;
   }
-  
+
   .event-green {
     @apply bg-gradient-to-br from-emerald-500 to-emerald-600;
   }
-  
+
   .event-blue {
     @apply bg-gradient-to-br from-blue-500 to-blue-600;
   }
-  
+
   .event-purple {
     @apply bg-gradient-to-br from-purple-500 to-purple-600;
   }
-  
+
   .event-teal {
     @apply bg-gradient-to-br from-teal-500 to-teal-600;
   }
-  
+
   .event-orange {
     @apply bg-gradient-to-br from-orange-500 to-orange-600;
   }
-  
+
   .event-pink {
     @apply bg-gradient-to-br from-pink-500 to-pink-600;
   }

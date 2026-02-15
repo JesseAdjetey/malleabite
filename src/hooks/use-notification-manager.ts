@@ -3,6 +3,7 @@ import { useAlarms, Alarm } from './use-alarms';
 import { useReminders, Reminder } from './use-reminders';
 import { toast } from 'sonner';
 import { Timestamp } from 'firebase/firestore';
+import { isNative } from '@/lib/platform';
 
 const REMINDER_SOUNDS = [
     { id: 'default', name: 'Default', url: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
@@ -21,7 +22,14 @@ export function useNotificationManager() {
     // Request notification permission on mount
     useEffect(() => {
         console.log('[NotificationManager] Initializing...');
-        if ('Notification' in window && Notification.permission === 'default') {
+        if (isNative) {
+            // Request native notification permissions via Capacitor
+            import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                LocalNotifications.requestPermissions().then(result => {
+                    console.log('[NotificationManager] Native permission:', result.display);
+                });
+            });
+        } else if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
                     console.log('[NotificationManager] Notification permission granted');
@@ -57,14 +65,27 @@ export function useNotificationManager() {
         // Play sound
         playSound(soundId);
 
-        // Show browser notification
-        if ('Notification' in window && Notification.permission === 'granted') {
+        if (isNative) {
+            // Use Capacitor LocalNotifications on native
+            import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                LocalNotifications.schedule({
+                    notifications: [{
+                        title,
+                        body,
+                        id: Date.now(),
+                        schedule: { at: new Date() },
+                        extra: { type: 'alarm' },
+                    }],
+                });
+            });
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+            // Show browser notification on web
             const notification = new Notification(title, {
                 body,
                 icon: '/favicon.ico',
                 badge: '/favicon.ico',
                 requireInteraction: true,
-                tag: `alarm-${Date.now()}` // Unique tag to prevent grouping
+                tag: `alarm-${Date.now()}`
             });
 
             notification.onclick = () => {
@@ -74,10 +95,10 @@ export function useNotificationManager() {
             };
         }
 
-        // Also show toast notification as fallback
+        // Also show toast notification as fallback (works everywhere)
         toast.message(title, {
             description: body,
-            duration: Infinity, // Stay until dismissed
+            duration: Infinity,
             action: {
                 label: 'Turn Off',
                 onClick: () => stopSound(),

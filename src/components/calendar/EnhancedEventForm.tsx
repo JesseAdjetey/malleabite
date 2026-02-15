@@ -38,7 +38,6 @@ interface EnhancedEventFormProps {
   onSave?: (event: CalendarEventType) => void;
   onClose?: () => void;
   onCancel?: () => void;
-  onUseAI?: () => void;
 }
 
 const EVENT_COLORS = [
@@ -64,7 +63,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   onSave,
   onClose,
   onCancel,
-  onUseAI
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -713,15 +711,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             </Button>
           ) : null}
           <div className="flex space-x-2">
-            <Button 
-              type="button"
-              variant="outline" 
-              onClick={onUseAI}
-              className="transition-all hover:bg-primary/20"
-            >
-              Use AI
-            </Button>
-            <Button 
+            <Button
               type="button"
               variant="outline" 
               onClick={handleCreateTodo}

@@ -58,7 +58,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   };
 
   return (
-    <div className="module-container bg-white/90 dark:bg-white/5 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-white/10 p-4 mb-4 gradient-border cursor-glow shadow-sm dark:shadow-none">
+    <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all">
       <div className="module-header flex justify-between items-center mb-3">
         {isEditing ? (
           <div className="flex items-center gap-2 flex-1">
@@ -71,7 +71,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             />
             <button 
               onClick={handleSaveTitle}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all flex items-center justify-center"
+              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all flex items-center justify-center"
             >
               <Check size={16} className="text-primary flex-shrink-0" />
             </button>
@@ -83,7 +83,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           {onTitleChange && !isMinimized && (
             <button 
               onClick={handleEditClick}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
+              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
               aria-label="Edit module title"
             >
               <Edit size={16} className="flex-shrink-0" />
@@ -92,7 +92,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           {onMinimize && (
             <button 
               onClick={onMinimize}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all flex items-center justify-center"
+              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all flex items-center justify-center"
               aria-label={isMinimized ? "Show module" : "Hide module"}
             >
               {isMinimized ? (
@@ -105,7 +105,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           {onRemove && (
             <button 
               onClick={() => setShowDeleteDialog(true)}
-              className="hover:bg-gray-200 dark:hover:bg-white/10 p-1 rounded-full transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
+              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
               aria-label="Remove module"
             >
               <Minus size={16} className="flex-shrink-0" />

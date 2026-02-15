@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
+import { isNative } from '@/lib/platform';
 import dayjs from 'dayjs';
 
 export interface OfflineEvent {
@@ -47,6 +48,22 @@ export function useOfflineMode() {
 
   // Listen for online/offline events
   useEffect(() => {
+    if (isNative) {
+      // Use Capacitor Network plugin for reliable native detection
+      import('@capacitor/network').then(({ Network }) => {
+        Network.getStatus().then(status => setIsOnline(status.connected));
+        Network.addListener('networkStatusChange', status => {
+          setIsOnline(status.connected);
+          if (status.connected) {
+            toast.success('Back online! Syncing changes...');
+          } else {
+            toast.warning('You are offline. Changes will be saved locally.');
+          }
+        });
+      });
+      return;
+    }
+
     const handleOnline = () => {
       setIsOnline(true);
       toast.success('Back online! Syncing changes...');
@@ -66,8 +83,12 @@ export function useOfflineMode() {
     };
   }, []);
 
-  // Register service worker
+  // Register service worker (skip on native — assets are bundled locally)
   useEffect(() => {
+    if (isNative) {
+      setIsServiceWorkerReady(true);
+      return;
+    }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')

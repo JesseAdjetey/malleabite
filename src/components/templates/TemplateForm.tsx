@@ -87,13 +87,10 @@ export function TemplateForm({ template, onSubmit, onCancel }: TemplateFormProps
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">
+      <div>
+        <h3 className="text-title3 font-semibold">
           {template ? 'Edit Template' : 'Create Template'}
         </h3>
-        <Button type="button" variant="ghost" size="icon" onClick={onCancel}>
-          <X className="h-4 w-4" />
-        </Button>
       </div>
 
       {/* Template Name */}

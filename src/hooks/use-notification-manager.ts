@@ -5,11 +5,11 @@ import { toast } from 'sonner';
 import { Timestamp } from 'firebase/firestore';
 import { isNative } from '@/lib/platform';
 
-const REMINDER_SOUNDS = [
-    { id: 'default', name: 'Default', url: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-    { id: 'bell', name: 'Bell', url: 'https://actions.google.com/sounds/v1/alarms/mechanic_clock_ring.ogg' },
-    { id: 'chime', name: 'Chime', url: 'https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg' },
-    { id: 'soft', name: 'Soft', url: 'https://actions.google.com/sounds/v1/alarms/gentle_walk_alarm.ogg' },
+export const REMINDER_SOUNDS = [
+    { id: 'default', name: 'Default', url: '/sounds/default-notification.mp3' },
+    { id: 'bell', name: 'Bell', url: '/sounds/bell-notification.mp3' },
+    { id: 'chime', name: 'Chime', url: '/sounds/chime-notification.mp3' },
+    { id: 'soft', name: 'Soft', url: '/sounds/soft-notification.mp3' },
 ];
 
 export function useNotificationManager() {
@@ -51,6 +51,7 @@ export function useNotificationManager() {
     }, []);
 
     const playSound = useCallback((soundId: string = 'default') => {
+        // Find sound by ID, or fallback to first one if not found or if ID is empty
         const sound = REMINDER_SOUNDS.find(s => s.id === soundId) || REMINDER_SOUNDS[0];
 
         // Stop any currently playing sound
@@ -109,20 +110,20 @@ export function useNotificationManager() {
     }, [playSound, stopSound]);
 
     const shouldTriggerAlarm = useCallback((alarm: Alarm, now: Date): boolean => {
-        console.log('[NotificationManager] Checking alarm:', {
-            id: alarm.id,
-            title: alarm.title,
-            enabled: alarm.enabled,
-            time: alarm.time,
-            currentTime: now.toISOString()
-        });
+        // console.log('[NotificationManager] Checking alarm:', {
+        //     id: alarm.id,
+        //     title: alarm.title,
+        //     enabled: alarm.enabled,
+        //     time: alarm.time,
+        //     currentTime: now.toISOString()
+        // });
 
         if (!alarm.enabled || !alarm.id) {
-            console.log('[NotificationManager] Alarm skipped - not enabled or no ID');
+            // console.log('[NotificationManager] Alarm skipped - not enabled or no ID');
             return false;
         }
         if (triggeredAlarmsRef.current.has(alarm.id)) {
-            console.log('[NotificationManager] Alarm skipped - already triggered');
+            // console.log('[NotificationManager] Alarm skipped - already triggered');
             return false;
         }
 
@@ -145,14 +146,14 @@ export function useNotificationManager() {
             alarmTime = alarm.time instanceof Date ? alarm.time : new Date(alarm.time);
         }
 
-        console.log('[NotificationManager] Alarm time parsed:', alarmTime.toISOString());
+        // console.log('[NotificationManager] Alarm time parsed:', alarmTime.toISOString());
 
         // Check if alarm time has passed and is within the last 10 minutes
         // This allows catching "missed" alarms when page loads late
         const timeDiff = now.getTime() - alarmTime.getTime();
         const shouldTrigger = timeDiff >= 0 && timeDiff < 600000;
 
-        console.log('[NotificationManager] Time diff:', timeDiff, 'ms, should trigger:', shouldTrigger);
+        // console.log('[NotificationManager] Time diff:', timeDiff, 'ms, should trigger:', shouldTrigger);
 
         return shouldTrigger;
     }, []);
@@ -192,12 +193,13 @@ export function useNotificationManager() {
             updateAlarm(alarm.id, { enabled: false });
         }
 
-        // Clear from triggered set after 2 minutes to allow re-triggering
+        // Clear from triggered set after 15 minutes to prevent re-triggering within the 10m window
+        // The window is 10 minutes, so 15 minutes is safe.
         setTimeout(() => {
             if (alarm.id) {
                 triggeredAlarmsRef.current.delete(alarm.id);
             }
-        }, 120000);
+        }, 900000);
     }, [showNotification, updateAlarm]);
 
     const triggerReminder = useCallback((reminder: Reminder) => {

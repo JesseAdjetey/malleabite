@@ -17,6 +17,7 @@ import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
+import { REMINDER_SOUNDS } from './use-notification-manager';
 
 export interface Reminder {
   id: string;
@@ -43,12 +44,7 @@ export interface ReminderFormData {
   soundId?: string;
 }
 
-const REMINDER_SOUNDS = [
-  { id: 'default', name: 'Default', url: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg' },
-  { id: 'bell', name: 'Bell', url: 'https://actions.google.com/sounds/v1/alarms/mechanic_clock_ring.ogg' },
-  { id: 'chime', name: 'Chime', url: 'https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg' },
-  { id: 'soft', name: 'Soft', url: 'https://actions.google.com/sounds/v1/alarms/gentle_walk_alarm.ogg' },
-];
+
 
 export function useReminders() {
   const [reminders, setReminders] = useState<Reminder[]>([]);

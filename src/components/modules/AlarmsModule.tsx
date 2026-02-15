@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Clock, Bell, Loader2 } from 'lucide-react';
 import { useAlarms } from '@/hooks/use-alarms';
+import { REMINDER_SOUNDS } from '@/hooks/use-notification-manager';
 
 interface AlarmsModuleProps {
   title?: string;
@@ -24,6 +25,7 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
   const { alarms, loading, addAlarm, deleteAlarm, toggleAlarm } = useAlarms();
   const [newAlarmTitle, setNewAlarmTitle] = useState('');
   const [newAlarmTime, setNewAlarmTime] = useState('08:00');
+  const [selectedSound, setSelectedSound] = useState('default');
 
   const handleAddAlarm = async () => {
     if (newAlarmTitle.trim()) {
@@ -36,8 +38,9 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
         alarmTime.setDate(alarmTime.getDate() + 1);
       }
 
-      await addAlarm(newAlarmTitle, alarmTime);
+      await addAlarm(newAlarmTitle, alarmTime, { soundId: selectedSound });
       setNewAlarmTitle('');
+      // Keep time and sound as previous selection for convenience
     }
   };
 
@@ -123,18 +126,34 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
             type="time"
             value={newAlarmTime}
             onChange={(e) => setNewAlarmTime(e.target.value)}
-            className="glass-input text-xs"
+            className="glass-input text-xs w-20"
           />
         </div>
-        <button
-          onClick={handleAddAlarm}
-          className="bg-primary px-3 py-1 w-full rounded-md hover:bg-primary/80 transition-colors"
-        >
-          <span className="flex items-center justify-center gap-1 text-sm">
-            <Bell size={14} />
-            Add Alarm
-          </span>
-        </button>
+
+        <div className="flex gap-2">
+          <select
+            value={selectedSound}
+            onChange={(e) => setSelectedSound(e.target.value)}
+            className="glass-input text-xs w-full appearance-none cursor-pointer"
+            style={{ backgroundImage: 'none' }} // Remove default arrow if needed, or keep it
+          >
+            {REMINDER_SOUNDS.map(sound => (
+              <option key={sound.id} value={sound.id} className="bg-zinc-900 text-white">
+                🔊 {sound.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleAddAlarm}
+            className="bg-primary px-3 py-1 whitespace-nowrap rounded-md hover:bg-primary/80 transition-colors flex-1"
+          >
+            <span className="flex items-center justify-center gap-1 text-sm">
+              <Bell size={14} />
+              Add
+            </span>
+          </button>
+        </div>
       </div>
     </ModuleContainer>
   );

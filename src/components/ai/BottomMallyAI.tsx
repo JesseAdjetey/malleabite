@@ -1,5 +1,6 @@
 // Bottom-fixed Mally AI component with expandable chat
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Send,
   Mic,
@@ -71,7 +72,7 @@ const defaultQuickActions: QuickAction[] = [
   { id: "reschedule", label: "Reschedule", icon: <Repeat size={14} />, prompt: "Reschedule " },
 ];
 
-interface BottomMallyAIProps {}
+interface BottomMallyAIProps { }
 
 const DoodleBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -109,6 +110,7 @@ const DoodleBackground = () => (
 
 export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const isMobile = useIsMobile();
+  const location = useLocation();
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -136,7 +138,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         }, 3000);
       }
     });
-    return () => mallyTTS.onSpeakingChange(() => {});
+    return () => mallyTTS.onSpeakingChange(() => { });
   }, [isRecording, isLoading]);
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
   const [uploadedImage, setUploadedImage] = useState<{
@@ -248,6 +250,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       inputRef.current.focus();
     }
   }, [isExpanded]);
+
+  // Auto-retract when navigating to a different page
+  useEffect(() => {
+    setIsExpanded(false);
+    setIsMinimized(true);
+    mallyTTS.stop();
+    if (isRecording) {
+      speechService.stopListening();
+      setIsRecording(false);
+      resumeWakeWord?.();
+    }
+  }, [location.pathname]);
 
   // Listen for Hey Mally activation — Siri-like voice-first flow
   useEffect(() => {
@@ -693,45 +707,45 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   className="px-4 pb-2"
                 >
                   <div className="max-w-4xl mx-auto w-full">
-                  <div className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
-                    "bg-purple-500/10 border",
-                    activeSuggestion.priority === 'high'
-                      ? "border-purple-400/40"
-                      : "border-purple-500/20"
-                  )}>
-                    <span className="text-purple-400 shrink-0">
-                      {activeSuggestion.iconName === 'AlertTriangle' && <AlertTriangle size={12} />}
-                      {activeSuggestion.iconName === 'Bell' && <Bell size={12} />}
-                      {activeSuggestion.iconName === 'Clock' && <Clock size={12} />}
-                      {activeSuggestion.iconName === 'Calendar' && <Calendar size={12} />}
-                      {activeSuggestion.iconName === 'CheckSquare' && <CheckSquare size={12} />}
-                      {activeSuggestion.iconName === 'Zap' && <Zap size={12} />}
-                    </span>
-                    <button
-                      className="flex-1 text-left text-foreground hover:text-foreground/80 transition-colors"
-                      onClick={() => {
-                        setInputText(activeSuggestion.prompt);
-                        dismissSuggestion(activeSuggestion.id);
-                      }}
-                    >
-                      {activeSuggestion.message}
-                    </button>
-                    {proactiveSuggestions.length > 1 && (
+                    <div className={cn(
+                      "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
+                      "bg-purple-500/10 border",
+                      activeSuggestion.priority === 'high'
+                        ? "border-purple-400/40"
+                        : "border-purple-500/20"
+                    )}>
+                      <span className="text-purple-400 shrink-0">
+                        {activeSuggestion.iconName === 'AlertTriangle' && <AlertTriangle size={12} />}
+                        {activeSuggestion.iconName === 'Bell' && <Bell size={12} />}
+                        {activeSuggestion.iconName === 'Clock' && <Clock size={12} />}
+                        {activeSuggestion.iconName === 'Calendar' && <Calendar size={12} />}
+                        {activeSuggestion.iconName === 'CheckSquare' && <CheckSquare size={12} />}
+                        {activeSuggestion.iconName === 'Zap' && <Zap size={12} />}
+                      </span>
                       <button
-                        onClick={nextSuggestion}
-                        className="text-muted-foreground hover:text-foreground shrink-0 font-mono"
+                        className="flex-1 text-left text-foreground hover:text-foreground/80 transition-colors"
+                        onClick={() => {
+                          setInputText(activeSuggestion.prompt);
+                          dismissSuggestion(activeSuggestion.id);
+                        }}
                       >
-                        {proactiveIndex + 1}/{proactiveSuggestions.length}
+                        {activeSuggestion.message}
                       </button>
-                    )}
-                    <button
-                      onClick={() => dismissSuggestion(activeSuggestion.id)}
-                      className="text-muted-foreground hover:text-foreground shrink-0"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                      {proactiveSuggestions.length > 1 && (
+                        <button
+                          onClick={nextSuggestion}
+                          className="text-muted-foreground hover:text-foreground shrink-0 font-mono"
+                        >
+                          {proactiveIndex + 1}/{proactiveSuggestions.length}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => dismissSuggestion(activeSuggestion.id)}
+                        className="text-muted-foreground hover:text-foreground shrink-0"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               )}

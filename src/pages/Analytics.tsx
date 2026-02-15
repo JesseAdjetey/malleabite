@@ -22,7 +22,6 @@ import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import TimeChart from '@/components/analytics/TimeChart';
 import { CategoryBreakdown } from '@/components/analytics/CategoryBreakdown';
-import MobileNavigation from '@/components/MobileNavigation';
 import { cn } from '@/lib/utils';
 import { haptics } from '@/lib/haptics';
 
@@ -113,7 +112,6 @@ export default function Analytics() {
           </div>
           <p className="text-muted-foreground text-subheadline">Loading your analytics...</p>
         </div>
-        <MobileNavigation />
       </div>
     );
   }
@@ -155,7 +153,6 @@ export default function Analytics() {
             ))}
           </div>
         </div>
-        <MobileNavigation />
       </div>
     );
   }
@@ -367,7 +364,6 @@ export default function Analytics() {
         )}
 
       </div>
-      <MobileNavigation />
     </div>
   );
 }

@@ -38,6 +38,9 @@ import { logger } from "@/lib/logger";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { mallyTTS } from "@/lib/ai/tts-service";
+import { speechService } from "@/lib/ai/speech-recognition-service";
+import { haptics } from "@/lib/haptics";
 
 interface Message {
   id: string;
@@ -109,10 +112,32 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const wasVoiceActivatedRef = useRef(false);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(() => {
+    const saved = localStorage.getItem('mally-voice-muted');
+    return saved !== null ? saved === 'true' : false; // Voice ON by default
+  });
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Wire TTS speaking state to component
+  useEffect(() => {
+    mallyTTS.onSpeakingChange((speaking) => {
+      setIsSpeaking(speaking);
+      // Auto-dismiss after voice response finishes (if voice-activated)
+      if (!speaking && wasVoiceActivatedRef.current) {
+        setTimeout(() => {
+          if (!isRecording && !isLoading) {
+            wasVoiceActivatedRef.current = false;
+            setIsExpanded(false);
+          }
+        }, 3000);
+      }
+    });
+    return () => mallyTTS.onSpeakingChange(() => {});
+  }, [isRecording, isLoading]);
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
   const [uploadedImage, setUploadedImage] = useState<{
     dataUrl: string;
@@ -198,97 +223,14 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     return () => clearTimeout(timer);
   }, [user?.uid, lists, activeListId]);
 
-  // Text-to-speech function with premium voice selection
-  const speak = useCallback((text: string) => {
-    if (isMuted || !window.speechSynthesis) return;
-
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-
-    // Clean up text for speech (remove markdown, emojis, etc.)
-    const cleanText = text
-      .replace(/[*_`#]/g, '')
-      .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links but keep text
-      .replace(/[😊🎉✨💪🔔⏰📅✅❌]/g, '') // Remove common emojis
-      .trim();
-
-    if (!cleanText) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95; // Slightly slower for clarity
-    utterance.pitch = 1.05; // Slightly higher for friendliness
-    utterance.volume = 1.0;
-
-    // Get all available voices
-    const voices = window.speechSynthesis.getVoices();
-
-    // Premium voice priority list (best quality voices)
-    const premiumVoiceNames = [
-      // Google's Neural/WaveNet voices (highest quality)
-      'Google UK English Female',
-      'Google US English',
-      // Microsoft Azure Neural voices (very high quality)
-      'Microsoft Aria Online (Natural)',
-      'Microsoft Jenny Online (Natural)',
-      'Microsoft Zira Online (Natural)',
-      'Microsoft Sonia Online (Natural)',
-      // Apple's premium voices
-      'Samantha',
-      'Karen',
-      'Moira',
-      'Tessa',
-      // Microsoft Edge voices
-      'Microsoft Zira',
-      'Microsoft Hazel',
-      'Microsoft Susan',
-      // Other good quality voices
-      'Alex',
-      'Victoria',
-      'Fiona',
-    ];
-
-    // Find the best available voice
-    let selectedVoice: SpeechSynthesisVoice | null = null;
-
-    // First try exact matches from premium list
-    for (const name of premiumVoiceNames) {
-      const voice = voices.find(v => v.name === name || v.name.includes(name));
-      if (voice) {
-        selectedVoice = voice;
-        break;
-      }
+  // Text-to-speech using Google Cloud TTS with Web Speech fallback
+  const speak = useCallback(async (text: string) => {
+    if (isMuted) return;
+    try {
+      await mallyTTS.speak({ text });
+    } catch {
+      mallyTTS.speakFallback(text);
     }
-
-    // Fallback: prefer any Google or Microsoft Neural voice
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v =>
-        v.name.includes('Google') ||
-        v.name.includes('Natural') ||
-        v.name.includes('Neural')
-      ) || null;
-    }
-
-    // Fallback: any English female voice (generally more pleasant for assistants)
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v =>
-        v.lang.startsWith('en') &&
-        (v.name.toLowerCase().includes('female') ||
-          v.name.includes('Zira') ||
-          v.name.includes('Hazel'))
-      ) || null;
-    }
-
-    // Final fallback: any English voice
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.lang.startsWith('en')) || null;
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-      console.log('Using voice:', selectedVoice.name);
-    }
-
-    window.speechSynthesis.speak(utterance);
   }, [isMuted]);
 
 
@@ -307,21 +249,51 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
   }, [isExpanded]);
 
-  // Listen for Hey Mally activation
+  // Listen for Hey Mally activation — Siri-like voice-first flow
   useEffect(() => {
     const handleHeyMallyActivation = () => {
+      wasVoiceActivatedRef.current = true;
       setIsExpanded(true);
+      haptics.medium();
+
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         text: "I'm listening...",
         sender: 'ai',
         timestamp: new Date(),
       }]);
+
+      // Auto-start recording after brief delay so user can speak immediately
+      setTimeout(async () => {
+        if (!isRecording) {
+          const available = await speechService.isAvailable();
+          if (available) {
+            setIsRecording(true);
+            pauseWakeWord?.();
+            haptics.light();
+
+            await speechService.startListening(
+              (result) => {
+                setInputText(result.transcript);
+                if (result.isFinal) {
+                  setIsRecording(false);
+                  resumeWakeWord?.();
+                  setTimeout(() => handleSendMessage(result.transcript), 100);
+                }
+              },
+              () => {
+                setIsRecording(false);
+                resumeWakeWord?.();
+              }
+            );
+          }
+        }
+      }, 400);
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, []);
+  }, [isRecording, pauseWakeWord, resumeWakeWord]);
 
   // Handle image upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -352,6 +324,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Send message to AI
   const handleSendMessage = async (text?: string) => {
+    haptics.light();
     const messageText = text || inputText.trim();
     console.log('MallyAI: handleSendMessage', {
       messageText,
@@ -432,14 +405,16 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       // Execute actions if present (support both single action and multiple actions)
       if (response.action) {
         console.log('Single action found:', response.action);
-        await executeAction(response.action);
+        const success = await executeAction(response.action);
+        if (success) haptics.success();
       }
 
       // Handle multiple actions array
       if ((response as any).actions && Array.isArray((response as any).actions)) {
         console.log('Multiple actions found:', (response as any).actions);
         for (const action of (response as any).actions) {
-          await executeAction(action);
+          const success = await executeAction(action);
+          if (success) haptics.success();
         }
       }
 
@@ -486,6 +461,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Handle quick action click
   const handleQuickAction = (action: QuickAction) => {
+    haptics.selection();
     if (action.id === 'done') {
       setIsExpanded(false);
       return;
@@ -503,46 +479,43 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   };
 
   // Toggle voice recording
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (isRecording) {
       setIsRecording(false);
       resumeWakeWord?.();
+      // On native, stopListening returns the final transcript
+      const transcript = await speechService.stopListening();
+      if (transcript) {
+        setInputText(transcript);
+        setTimeout(() => handleSendMessage(transcript), 100);
+      }
     } else {
+      const available = await speechService.isAvailable();
+      if (!available) {
+        toast.error('Speech recognition not supported on this device');
+        return;
+      }
+
       setIsRecording(true);
       pauseWakeWord?.();
+      haptics.medium();
 
-      // Start speech recognition
-      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setInputText(transcript);
-          setIsRecording(false);
-          resumeWakeWord?.();
-          // Auto-send after voice input
-          setTimeout(() => handleSendMessage(transcript), 100);
-        };
-
-        recognition.onerror = () => {
+      await speechService.startListening(
+        (result) => {
+          setInputText(result.transcript);
+          if (result.isFinal) {
+            setIsRecording(false);
+            resumeWakeWord?.();
+            setTimeout(() => handleSendMessage(result.transcript), 100);
+          }
+        },
+        (error) => {
+          console.error('[Mally] Speech recognition error:', error);
           setIsRecording(false);
           resumeWakeWord?.();
           toast.error('Voice recognition failed');
-        };
-
-        recognition.onend = () => {
-          setIsRecording(false);
-          resumeWakeWord?.();
-        };
-
-        recognition.start();
-      } else {
-        toast.error('Speech recognition not supported');
-        setIsRecording(false);
-      }
+        }
+      );
     }
   };
 
@@ -624,7 +597,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                 >
                   <div className="flex-1 overflow-y-auto px-4 py-3 max-h-[40vh] scrollbar-hide">
                     <div className="space-y-3 max-w-4xl mx-auto w-full">
-                      {messages.map((message) => (
+                      {messages.map((message, index) => (
                         <motion.div
                           key={message.id}
                           initial={{ opacity: 0, y: 10 }}
@@ -635,8 +608,15 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                           )}
                         >
                           {message.sender === "ai" && (
-                            <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
-                              <Bot className="h-4 w-4 text-white" />
+                            <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center">
+                                <Bot className="h-4 w-4 text-white" />
+                              </div>
+                              {isSpeaking && index === messages.length - 1 && (
+                                <div className="mally-speaking">
+                                  <div className="bar" /><div className="bar" /><div className="bar" /><div className="bar" /><div className="bar" />
+                                </div>
+                              )}
                             </div>
                           )}
                           <div
@@ -829,7 +809,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
                 {/* Mute/Unmute button */}
                 <button
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={() => {
+                    const newVal = !isMuted;
+                    setIsMuted(newVal);
+                    localStorage.setItem('mally-voice-muted', String(newVal));
+                  }}
                   className={cn(
                     "p-2.5 rounded-full transition-all",
                     isMuted

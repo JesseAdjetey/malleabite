@@ -196,30 +196,6 @@ export class FirebaseFunctions {
     }
   }
 
-  // Transcribe audio - uses mock transcription for development
-  // TODO: Implement actual speech-to-text when needed (e.g., using Google Cloud Speech-to-Text)
-  static async transcribeAudio(data: TranscriptionRequest): Promise<TranscriptionResponse> {
-    // For now, return mock transcriptions since we don't have a transcribeAudio cloud function deployed
-    // This allows voice input to work with sample scheduling phrases
-    const mockTranscriptions = [
-      'Schedule a meeting tomorrow at 2 PM',
-      'Create a doctor appointment for Friday morning',
-      'Add a lunch meeting with the team next week',
-      'Set up a project review for Thursday afternoon',
-      'Schedule a call with the client at 3 PM'
-    ];
-
-    const mockTranscript = mockTranscriptions[Math.floor(Math.random() * mockTranscriptions.length)];
-
-    console.log('Using mock transcription:', mockTranscript);
-
-    return {
-      success: true,
-      transcript: mockTranscript,
-      error: undefined
-    };
-  }
-
   // Generic function caller for future functions
   static async callFunction<TRequest, TResponse>(
     functionName: string,

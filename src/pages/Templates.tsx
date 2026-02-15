@@ -11,7 +11,6 @@ import {
 import { useTemplates } from '@/hooks/use-templates';
 import { TemplateForm } from '@/components/templates/TemplateForm';
 import type { EventTemplate } from '@/types/template';
-import MobileNavigation from '@/components/MobileNavigation';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
@@ -288,8 +287,6 @@ export default function Templates() {
           />
         </DialogContent>
       </Dialog>
-
-      <MobileNavigation />
     </div>
   );
 }

@@ -21,11 +21,9 @@ export type {
 
 // Cloud Functions
 export * from './functions';
-export type { 
-  SchedulingRequest, 
-  SchedulingResponse, 
-  TranscriptionRequest, 
-  TranscriptionResponse 
+export type {
+  SchedulingRequest,
+  SchedulingResponse,
 } from './functions';
 
 // Re-export Firebase types that are commonly used

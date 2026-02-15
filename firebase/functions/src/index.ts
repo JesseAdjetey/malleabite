@@ -10,6 +10,9 @@ export {
   createPortalSession,
 } from './stripe-webhooks';
 
+// Export TTS (Text-to-Speech) handler
+export { synthesizeSpeech } from './tts';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 

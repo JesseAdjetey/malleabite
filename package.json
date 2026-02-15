@@ -35,6 +35,7 @@
     "cap:run:android": "npx cap run android"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.1.0",

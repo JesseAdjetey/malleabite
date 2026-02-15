@@ -10,7 +10,6 @@ import dayjs from 'dayjs';
 import type { EventTemplate } from '@/types/template';
 import type { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
-import MobileNavigation from '@/components/MobileNavigation';
 import { cn } from '@/lib/utils';
 import { haptics } from '@/lib/haptics';
 
@@ -416,8 +415,6 @@ export function QuickSchedule() {
           </div>
         )}
       </div>
-
-      <MobileNavigation />
     </div>
   );
 }

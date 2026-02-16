@@ -209,5 +209,6 @@ export const useInvites = () => {
     respondToInvite,
     deleteInvite,
     clearError,
+    fetchInvites: async () => { }, // No-op since we use real-time listeners
   };
 };

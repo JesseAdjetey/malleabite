@@ -122,9 +122,8 @@ const SideBar = () => {
         ref={sidebarContentRef}
         className="flex-1 overflow-y-auto p-3"
       >
-        <ModuleSelector 
-          onSelect={handleAddModule} 
-          existingModules={activePage?.modules?.map(m => m.type) || []}
+        <ModuleSelector
+          onSelect={handleAddModule}
         />
 
         {/* Module container - uses grid for two columns or flex for one column */}

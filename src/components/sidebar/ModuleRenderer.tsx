@@ -58,19 +58,19 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     case 'pomodoro':
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
-          <PomodoroModule {...moduleProps} />
+          <PomodoroModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'alarms': // Updated to use the new RemindersModule
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
-          <RemindersModule {...moduleProps} />
+          <RemindersModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'eisenhower':
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
-          <EisenhowerModule {...moduleProps} />
+          <EisenhowerModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'invites':

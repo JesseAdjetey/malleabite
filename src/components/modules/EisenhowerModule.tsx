@@ -24,6 +24,7 @@ interface EisenhowerModuleProps {
   onMinimize?: () => void;
   isMinimized?: boolean;
   isDragging?: boolean;
+  instanceId?: string;
 }
 
 const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
@@ -32,13 +33,14 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   onTitleChange,
   onMinimize,
   isMinimized,
-  isDragging
+  isDragging,
+  instanceId
 }) => {
   const [focusedQuadrant, setFocusedQuadrant] = useState<QuadrantType>(null);
   const [newItemText, setNewItemText] = useState('');
   const [submitStatus, setSubmitStatus] = useState<{ success?: boolean; message?: string } | null>(null);
   const [dragOverQuadrant, setDragOverQuadrant] = useState<QuadrantType>(null);
-  const { items, loading, error, addItem, removeItem, updateQuadrant, lastResponse } = useEisenhower();
+  const { items, loading, error, addItem, removeItem, updateQuadrant, lastResponse } = useEisenhower(instanceId);
   const { user } = useAuth();
 
   const quadrantConfig: Record<EisenhowerItem['quadrant'], QuadrantConfig> = {
@@ -155,7 +157,7 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
     const isDragOver = dragOverQuadrant === focusedQuadrant;
 
     return (
-      <div 
+      <div
         className={cn(
           `rounded-lg p-3 h-64 ${config.className} transition-all duration-150`,
           isDragOver && 'ring-2 ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.4)]'
@@ -222,8 +224,8 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               <div className="text-xs text-gray-500 dark:text-gray-400 text-center pt-2">No items in this quadrant</div>
             ) : (
               quadrantItems.map(item => (
-                <div 
-                  key={item.id} 
+                <div
+                  key={item.id}
                   className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white cursor-grab active:cursor-grabbing select-none"
                   draggable={true}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
@@ -293,9 +295,9 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               onClick={() => setFocusedQuadrant(quadrantType)}
             >
               <div className={`text-xs font-semibold mb-1 ${quadrantType === 'urgent_important' ? 'text-red-600 dark:text-red-400' :
-                  quadrantType === 'not_urgent_important' ? 'text-yellow-600 dark:text-yellow-400' :
-                    quadrantType === 'urgent_not_important' ? 'text-blue-600 dark:text-blue-400' :
-                      'text-green-600 dark:text-green-400'
+                quadrantType === 'not_urgent_important' ? 'text-yellow-600 dark:text-yellow-400' :
+                  quadrantType === 'urgent_not_important' ? 'text-blue-600 dark:text-blue-400' :
+                    'text-green-600 dark:text-green-400'
                 }`}>
                 {config.title}
               </div>

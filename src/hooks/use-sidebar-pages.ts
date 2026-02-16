@@ -1,14 +1,14 @@
 // Hook for managing sidebar pages (polymorphic page containers)
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   orderBy,
   serverTimestamp,
   getDocs
@@ -92,7 +92,7 @@ export function useSidebarPages() {
       }
 
       setPages(pagesData);
-      
+
       // Set active page to default or first page if not set
       if (!activePageId) {
         const defaultPage = pagesData.find(p => p.isDefault) || pagesData[0];
@@ -100,7 +100,7 @@ export function useSidebarPages() {
           setActivePageId(defaultPage.id);
         }
       }
-      
+
       setLoading(false);
     }, (error) => {
       console.error('Error fetching sidebar pages:', error);
@@ -169,15 +169,15 @@ export function useSidebarPages() {
 
     try {
       const page = pages.find(p => p.id === pageId);
-      
+
       await deleteDoc(doc(db, 'sidebar_pages', pageId));
-      
+
       // If we deleted the active page or the default page, switch to another
       if (activePageId === pageId || page?.isDefault) {
         const remainingPages = pages.filter(p => p.id !== pageId);
         const newActivePage = remainingPages[0];
         setActivePageId(newActivePage?.id || null);
-        
+
         // If we deleted the default page, mark the first remaining page as default
         if (page?.isDefault && newActivePage) {
           await updateDoc(doc(db, 'sidebar_pages', newActivePage.id), {
@@ -185,7 +185,7 @@ export function useSidebarPages() {
           });
         }
       }
-      
+
       toast.success('Page deleted');
       return { success: true };
     } catch (err) {
@@ -212,13 +212,18 @@ export function useSidebarPages() {
         }
       }
 
+      // For pomodoro modules, assign a unique instance ID
+      if (['pomodoro', 'eisenhower', 'alarms'].includes(module.type) && !module.instanceId) {
+        moduleToAdd.instanceId = crypto.randomUUID();
+      }
+
       const updatedModules = [...page.modules, moduleToAdd];
-      
+
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
         updatedAt: serverTimestamp()
       });
-      
+
       return { success: true };
     } catch (err) {
       console.error('Error adding module to page:', err);
@@ -236,12 +241,12 @@ export function useSidebarPages() {
       if (!page) return { success: false };
 
       const updatedModules = page.modules.filter((_, idx) => idx !== moduleIndex);
-      
+
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
         updatedAt: serverTimestamp()
       });
-      
+
       return { success: true };
     } catch (err) {
       console.error('Error removing module from page:', err);
@@ -260,12 +265,12 @@ export function useSidebarPages() {
 
       const updatedModules = [...page.modules];
       updatedModules[moduleIndex] = { ...updatedModules[moduleIndex], ...updates };
-      
+
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
         updatedAt: serverTimestamp()
       });
-      
+
       return { success: true };
     } catch (err) {
       console.error('Error updating module:', err);
@@ -284,12 +289,12 @@ export function useSidebarPages() {
       const modules = [...page.modules];
       const [movedModule] = modules.splice(fromIndex, 1);
       modules.splice(toIndex, 0, movedModule);
-      
+
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules,
         updatedAt: serverTimestamp()
       });
-      
+
       return { success: true };
     } catch (err) {
       console.error('Error reordering modules:', err);
@@ -310,12 +315,12 @@ export function useSidebarPages() {
         ...updatedModules[moduleIndex],
         minimized: !updatedModules[moduleIndex].minimized
       };
-      
+
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
         updatedAt: serverTimestamp()
       });
-      
+
       return { success: true };
     } catch (err) {
       console.error('Error toggling module minimized:', err);

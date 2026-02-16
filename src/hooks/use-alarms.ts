@@ -1,13 +1,13 @@
 // Hook for managing alarms with Firebase integration
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
   doc,
   serverTimestamp,
   Timestamp
@@ -32,7 +32,7 @@ export interface Alarm {
   updatedAt?: Timestamp;
 }
 
-export function useAlarms() {
+export function useAlarms(instanceId?: string) {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +46,16 @@ export function useAlarms() {
       return;
     }
 
+    const constraints: any[] = [
+      where('userId', '==', user.uid)
+    ];
+    if (instanceId) {
+      constraints.push(where('moduleInstanceId', '==', instanceId));
+    }
+
     const alarmsQuery = query(
       collection(db, 'alarms'),
-      where('userId', '==', user.uid)
+      ...constraints
     );
 
     const unsubscribe = onSnapshot(alarmsQuery, (snapshot) => {
@@ -68,11 +75,11 @@ export function useAlarms() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, instanceId]);
 
   // Add alarm
   const addAlarm = async (
-    title: string, 
+    title: string,
     time: string | Date,
     options?: {
       linkedEventId?: string;
@@ -101,6 +108,9 @@ export function useAlarms() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
+      if (instanceId) {
+        newAlarm.moduleInstanceId = instanceId;
+      }
 
       // Only add optional fields if they're defined
       if (options?.linkedEventId) {

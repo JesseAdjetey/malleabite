@@ -14,6 +14,7 @@ interface PomodoroModuleProps {
   onMinimize?: () => void;
   isMinimized?: boolean;
   isDragging?: boolean;
+  instanceId?: string;
 }
 
 const PomodoroModule: React.FC<PomodoroModuleProps> = ({
@@ -22,17 +23,28 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   onTitleChange,
   onMinimize,
   isMinimized = false,
-  isDragging = false
+  isDragging = false,
+  instanceId
 }) => {
   const {
-    focusTime, setFocusTime,
-    breakTime, setBreakTime,
-    focusTarget, setFocusTarget,
-    timeLeft, setTimeLeft,
-    isActive, toggleTimer, resetTimer,
-    timerMode, completedFocusTime, cycles,
+    getInstance, ensureInstance,
+    setFocusTime, setBreakTime, setFocusTarget,
+    setTimeLeft, toggleTimer, resetTimer,
     tick, completeCycle
   } = usePomodoroStore();
+
+  // Ensure instance exists on mount
+  useEffect(() => {
+    ensureInstance(instanceId);
+  }, [instanceId, ensureInstance]);
+
+  // Read instance state
+  const instance = getInstance(instanceId);
+  const {
+    focusTime, breakTime, focusTarget,
+    timeLeft, isActive, timerMode,
+    completedFocusTime, cycles
+  } = instance;
 
   const [showSettings, setShowSettings] = useState(false);
 
@@ -49,7 +61,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
-        tick();
+        tick(instanceId);
       }, 1000);
     } else if (timeLeft === 0 && isActive) {
       // Timer finished
@@ -86,7 +98,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
       const sessionType = timerMode === 'focus' ? 'Focus' : 'Break';
       const bodyText = timerMode === 'focus' ? 'Take a break now.' : 'Time to focus again.';
 
-      completeCycle();
+      completeCycle(instanceId);
 
       // Notification
       if ('Notification' in window && Notification.permission === 'granted') {
@@ -99,7 +111,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isActive, timeLeft, timerMode, tick, completeCycle]);
+  }, [isActive, timeLeft, timerMode, tick, completeCycle, instanceId]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -108,16 +120,16 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   };
 
   const handleFocusTimeChange = (value: number[]) => {
-    setFocusTime(value[0]);
+    setFocusTime(value[0], instanceId);
   };
 
   const handleBreakTimeChange = (value: number[]) => {
-    setBreakTime(value[0]);
+    setBreakTime(value[0], instanceId);
   };
 
   const handleTargetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const target = parseInt(e.target.value) || 0;
-    setFocusTarget(target);
+    setFocusTarget(target, instanceId);
   };
 
   const toggleSettings = () => {
@@ -174,14 +186,14 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         {/* Control buttons */}
         <div className="flex gap-3 mb-4">
           <Button
-            onClick={toggleTimer}
+            onClick={() => toggleTimer(instanceId)}
             className="bg-primary px-4 py-1 rounded-md hover:bg-primary/80 transition-colors flex items-center gap-2"
           >
             {isActive ? <Pause size={16} className="flex-shrink-0" /> : <Play size={16} className="flex-shrink-0" />}
             <span>{isActive ? 'Pause' : 'Start'}</span>
           </Button>
           <Button
-            onClick={resetTimer}
+            onClick={() => resetTimer(instanceId)}
             className="bg-secondary px-4 py-1 rounded-md hover:bg-secondary/80 transition-colors flex items-center gap-2 text-white"
           >
             <RotateCcw size={16} className="flex-shrink-0" />

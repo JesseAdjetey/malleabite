@@ -53,9 +53,7 @@ export function useMallyActions() {
   const {
     startTimer, pauseTimer, resetTimer,
     setFocusTime, setBreakTime, setFocusTarget,
-    isActive: isPomodoroActive,
-    timerMode: pomodoroMode,
-    timeLeft: pomodoroTimeLeft,
+    getInstance: getPomodoroInstance,
   } = usePomodoroStore();
 
   // Templates & Invites
@@ -186,7 +184,7 @@ export function useMallyActions() {
             try {
               const googleId = await pushEventToGoogle({ ...formattedEvent, id: result.data?.id || formattedEvent.id });
               if (googleId && result.data?.id) {
-                await updateEvent(result.data.id, { googleEventId: googleId });
+                await updateEvent({ ...formattedEvent, id: result.data.id, googleEventId: googleId } as any);
               }
             } catch (err) {
               logger.warn('MallyActions', 'Google Calendar sync failed', { error: err });
@@ -478,14 +476,6 @@ export function useMallyActions() {
           }
           if (!data.moduleType) { toast.error('Module type is required'); return false; }
 
-          // Singleton guard (only todo allows multiple instances)
-          if (data.moduleType !== 'todo') {
-            if (pg.modules.some(m => m.type === data.moduleType)) {
-              toast.info(`A ${data.moduleType} module is already on this page`);
-              return true;
-            }
-          }
-
           const defaultTitles: Record<string, string> = {
             todo: 'Tasks', pomodoro: 'Focus Timer', alarms: 'Alarms',
             reminders: 'Reminders', eisenhower: 'Priorities', invites: 'Invites',
@@ -678,13 +668,13 @@ export function useMallyActions() {
       })),
     })),
     todoLists: lists.map(l => ({ id: l.id, name: (l as any).name, isActive: l.id === activeListId })),
-    pomodoro: { isActive: isPomodoroActive, mode: pomodoroMode, timeLeft: pomodoroTimeLeft },
+    pomodoro: (() => { const p = getPomodoroInstance(); return { isActive: p.isActive, mode: p.timerMode, timeLeft: p.timeLeft }; })(),
     eisenhowerItems,
     events: events.slice(0, 20),
     todos: todos.slice(0, 30),
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
-    isPomodoroActive, pomodoroMode, pomodoroTimeLeft,
+    getPomodoroInstance,
     eisenhowerItems, events, todos,
   ]);
 

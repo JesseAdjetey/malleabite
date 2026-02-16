@@ -1,15 +1,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  updateDoc, 
-  doc, 
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  doc,
   serverTimestamp,
   Timestamp
 } from 'firebase/firestore';
@@ -34,7 +34,7 @@ interface EisenhowerResponse {
   error?: any;
 }
 
-export function useEisenhower() {
+export function useEisenhower(instanceId?: string) {
   const [items, setItems] = useState<EisenhowerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,17 +46,24 @@ export function useEisenhower() {
     try {
       setLoading(true);
       setError(null);
-      
+
       if (!user) {
         setItems([]);
         setLoading(false);
         return;
       }
-      
-      const itemsQuery = query(
-        collection(db, 'eisenhower_items'),
+
+      const constraints: any[] = [
         where('userId', '==', user.uid),
         orderBy('created_at', 'desc')
+      ];
+      if (instanceId) {
+        constraints.splice(1, 0, where('moduleInstanceId', '==', instanceId));
+      }
+
+      const itemsQuery = query(
+        collection(db, 'eisenhower_items'),
+        ...constraints
       );
 
       const unsubscribe = onSnapshot(
@@ -75,7 +82,7 @@ export function useEisenhower() {
               event_id: data.event_id
             });
           });
-          
+
           setItems(itemsData);
           setLoading(false);
         },
@@ -107,19 +114,22 @@ export function useEisenhower() {
       }
 
       console.log('Adding new Eisenhower item:', text, 'to quadrant:', quadrant);
-      
-      const newItem = {
+
+      const newItem: any = {
         text: text.trim(),
         quadrant,
         userId: user.uid,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp()
       };
-      
+      if (instanceId) {
+        newItem.moduleInstanceId = instanceId;
+      }
+
       const docRef = await addDoc(collection(db, 'eisenhower_items'), newItem);
-      
+
       console.log('Item successfully added with ID:', docRef.id);
-      
+
       const response = {
         success: true,
         message: 'Item added successfully',
@@ -143,10 +153,10 @@ export function useEisenhower() {
   const removeItem = async (id: string) => {
     try {
       if (!user) return;
-      
+
       console.log('Removing Eisenhower item:', id);
       await deleteDoc(doc(db, 'eisenhower_items', id));
-      
+
     } catch (err: any) {
       console.error('Error removing Eisenhower item:', err);
       toast.error('Failed to remove item');
@@ -157,14 +167,14 @@ export function useEisenhower() {
   const updateQuadrant = async (id: string, quadrant: EisenhowerItem['quadrant']) => {
     try {
       if (!user) return;
-      
+
       console.log('Updating Eisenhower item quadrant:', id, 'to', quadrant);
-      
+
       await updateDoc(doc(db, 'eisenhower_items', id), {
         quadrant,
         updated_at: serverTimestamp()
       });
-      
+
     } catch (err: any) {
       console.error('Error updating Eisenhower item quadrant:', err);
       toast.error('Failed to update item');
@@ -191,7 +201,7 @@ export function useEisenhower() {
         unsubscribe();
       }
     };
-  }, [user, fetchItems]);
+  }, [user, instanceId]);
 
   return {
     items,

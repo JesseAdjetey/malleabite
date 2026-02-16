@@ -49,7 +49,7 @@ export const useInvites = () => {
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (snapshot) => {
         const invites = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -57,7 +57,7 @@ export const useInvites = () => {
           createdAt: doc.data().createdAt?.toDate()?.toISOString() || new Date().toISOString(),
           updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || new Date().toISOString(),
         })) as Invite[];
-        
+
         setSentInvites(invites);
         setLoading(false);
       },
@@ -84,7 +84,7 @@ export const useInvites = () => {
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, 
+    const unsubscribe = onSnapshot(q,
       (snapshot) => {
         const invites = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -92,7 +92,7 @@ export const useInvites = () => {
           createdAt: doc.data().createdAt?.toDate()?.toISOString() || new Date().toISOString(),
           updatedAt: doc.data().updatedAt?.toDate()?.toISOString() || new Date().toISOString(),
         })) as Invite[];
-        
+
         setReceivedInvites(invites);
         setLoading(false);
       },
@@ -121,11 +121,11 @@ export const useInvites = () => {
         senderEmail: user.email || '',
         recipientId: '', // Will be filled when recipient accepts
         recipientEmail,
-        eventId: event.id,
-        eventTitle: event.title,
-        eventDate: event.date,
-        eventStartTime: event.startsAt,
-        eventEndTime: event.endsAt,
+        eventId: event.id || '',
+        eventTitle: event.title || 'Untitled Event',
+        eventDate: event.date?.toString() || event.startsAt || new Date().toISOString(),
+        eventStartTime: event.startsAt || new Date().toISOString(),
+        eventEndTime: event.endsAt || new Date().toISOString(),
         status: 'pending' as const,
         message: message || '',
         createdAt: serverTimestamp(),
@@ -133,17 +133,17 @@ export const useInvites = () => {
       };
 
       const docRef = await addDoc(collection(db, 'invites'), inviteData);
-      
+
       toast.success(`Invite sent to ${recipientEmail}`);
-      
-      return { 
-        success: true, 
-        data: { 
-          id: docRef.id, 
+
+      return {
+        success: true,
+        data: {
+          id: docRef.id,
           ...inviteData,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        } as Invite 
+        } as Invite
       };
     } catch (error) {
       console.error('Error sending invite:', error);

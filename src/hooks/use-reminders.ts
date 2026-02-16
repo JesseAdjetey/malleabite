@@ -46,7 +46,7 @@ export interface ReminderFormData {
 
 
 
-export function useReminders() {
+export function useReminders(instanceId?: string) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
@@ -62,10 +62,17 @@ export function useReminders() {
     try {
       console.log('Setting up Firebase subscription for reminders for user:', user.uid);
 
-      const remindersQuery = query(
-        collection(db, 'reminders'),
+      const constraints: any[] = [
         where('userId', '==', user.uid),
         orderBy('reminderTime', 'asc')
+      ];
+      if (instanceId) {
+        constraints.splice(1, 0, where('moduleInstanceId', '==', instanceId));
+      }
+
+      const remindersQuery = query(
+        collection(db, 'reminders'),
+        ...constraints
       );
 
       const unsubscribe = onSnapshot(
@@ -106,7 +113,7 @@ export function useReminders() {
       toast.error('Failed to fetch reminders');
       setLoading(false);
     }
-  }, [user]);
+  }, [user, instanceId]);
 
   // Add a new reminder
   const addReminder = async (data: ReminderFormData): Promise<{ success: boolean, error?: any }> => {
@@ -118,7 +125,7 @@ export function useReminders() {
     try {
       // Format the data for insertion - reminderTime must be a Firestore Timestamp
       const reminderTimeDate = data.reminderTime ? new Date(data.reminderTime) : new Date();
-      const reminderData = {
+      const reminderData: any = {
         userId: user.uid,
         title: data.title,
         description: data.description || null,
@@ -130,6 +137,9 @@ export function useReminders() {
         isActive: true,
         createdAt: serverTimestamp()
       };
+      if (instanceId) {
+        reminderData.moduleInstanceId = instanceId;
+      }
 
       const docRef = await addDoc(collection(db, 'reminders'), reminderData);
 
@@ -253,7 +263,7 @@ export function useReminders() {
         unsubscribe();
       }
     };
-  }, [user, fetchReminders]);
+  }, [user, instanceId]);
 
   return {
     reminders,

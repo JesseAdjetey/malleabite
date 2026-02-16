@@ -40,6 +40,7 @@ interface RemindersModuleProps {
   onMinimize?: () => void;
   isMinimized?: boolean;
   isDragging?: boolean;
+  instanceId?: string;
 }
 
 const RemindersModule: React.FC<RemindersModuleProps> = ({
@@ -48,13 +49,14 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   onTitleChange,
   onMinimize,
   isMinimized = false,
-  isDragging = false
+  isDragging = false,
+  instanceId
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
-  const { reminders, loading, addReminder, updateReminder, deleteReminder, toggleReminderActive, playSound, getSounds, REMINDER_SOUNDS } = useReminders();
-  const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms();
+  const { reminders, loading, addReminder, updateReminder, deleteReminder, toggleReminderActive, playSound, getSounds, REMINDER_SOUNDS } = useReminders(instanceId);
+  const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms(instanceId);
   const { events } = useCalendarEvents();
 
   // Combine reminders and alarms into a single sorted list

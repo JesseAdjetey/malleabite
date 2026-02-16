@@ -7,6 +7,7 @@ export interface ModuleInstance {
   minimized?: boolean; // New property to track minimized state
   pageId?: string; // Reference to which page this module belongs to
   listId?: string; // For todo modules - reference to the specific todo list
+  instanceId?: string; // Unique ID for stateful modules (e.g. Pomodoro) to scope state per-instance
 }
 
 export interface SidebarPage {

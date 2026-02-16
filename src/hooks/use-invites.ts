@@ -80,7 +80,7 @@ export const useInvites = () => {
 
     const q = query(
       collection(db, 'invites'),
-      where('recipientId', '==', user.uid),
+      where('recipientEmail', '==', user.email),
       orderBy('createdAt', 'desc')
     );
 

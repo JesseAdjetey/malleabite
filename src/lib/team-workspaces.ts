@@ -99,6 +99,7 @@ export async function createTeamWorkspace(
     ...team,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    memberIds: [ownerId],
     members: team.members.map(m => ({
       ...m,
       joinedAt: Timestamp.fromDate(m.joinedAt),
@@ -112,32 +113,24 @@ export async function createTeamWorkspace(
 export async function getUserTeams(userId: string): Promise<TeamWorkspace[]> {
   const teamsQuery = query(
     collection(db, TEAMS_COLLECTION),
-    where('members', 'array-contains-any', [{ id: userId }])
+    where('memberIds', 'array-contains', userId)
   );
 
-  // This query won't work as expected with array-contains-any on objects
-  // Instead, we'll query all teams and filter client-side for now
-  const snapshot = await getDocs(collection(db, TEAMS_COLLECTION));
-  
-  const teams: TeamWorkspace[] = [];
-  snapshot.forEach((doc) => {
-    const data = doc.data();
-    const isMember = data.members?.some((m: any) => m.id === userId);
-    if (isMember) {
-      teams.push({
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-        updatedAt: data.updatedAt?.toDate?.() || new Date(),
-        members: data.members?.map((m: any) => ({
-          ...m,
-          joinedAt: m.joinedAt?.toDate?.() || new Date(),
-        })) || [],
-      } as TeamWorkspace);
-    }
-  });
+  const snapshot = await getDocs(teamsQuery);
 
-  return teams;
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      createdAt: data.createdAt?.toDate?.() || new Date(),
+      updatedAt: data.updatedAt?.toDate?.() || new Date(),
+      members: data.members?.map((m: any) => ({
+        ...m,
+        joinedAt: m.joinedAt?.toDate?.() || new Date(),
+      })) || [],
+    } as TeamWorkspace;
+  });
 }
 
 // Get a specific team
@@ -260,6 +253,7 @@ export async function acceptInvite(
       ...newMember,
       joinedAt: Timestamp.fromDate(newMember.joinedAt),
     }),
+    memberIds: arrayUnion(user.id),
     updatedAt: serverTimestamp(),
   });
 
@@ -290,11 +284,13 @@ export async function removeMember(teamId: string, memberId: string): Promise<vo
   }
 
   const teamRef = doc(db, TEAMS_COLLECTION, teamId);
+  const remainingMembers = team.members.filter(m => m.id !== memberId);
   await updateDoc(teamRef, {
-    members: team.members.filter(m => m.id !== memberId).map(m => ({
+    members: remainingMembers.map(m => ({
       ...m,
       joinedAt: Timestamp.fromDate(m.joinedAt),
     })),
+    memberIds: remainingMembers.map(m => m.id),
     updatedAt: serverTimestamp(),
   });
 }

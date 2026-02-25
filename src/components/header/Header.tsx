@@ -189,7 +189,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         </div>
 
         <TooltipProvider>
-          {!isMobile && <BulkModeToggle
+          {<BulkModeToggle
             isBulkMode={isBulkMode}
             onToggle={handleToggleBulkMode}
             selectedCount={selectedCount}

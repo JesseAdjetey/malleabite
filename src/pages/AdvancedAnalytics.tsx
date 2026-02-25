@@ -17,6 +17,9 @@ import {
   Activity,
   Brain,
 } from 'lucide-react';
+import { DistributionTab } from '@/components/analytics/DistributionTab';
+import { TrendsTab } from '@/components/analytics/TrendsTab';
+import { InsightsTab } from '@/components/analytics/InsightsTab';
 
 export default function AdvancedAnalytics() {
   const {
@@ -362,62 +365,17 @@ export default function AdvancedAnalytics() {
 
         {/* Distribution Tab */}
         <TabsContent value="distribution" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Coming Soon</CardTitle>
-              <CardDescription>
-                Advanced charts and visualizations are being built
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <BarChart3 className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  Time distribution charts, category breakdowns, and heatmaps will be available soon
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <DistributionTab metrics={metrics} timeDistribution={timeDistribution} />
         </TabsContent>
 
         {/* Trends Tab */}
         <TabsContent value="trends" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Coming Soon</CardTitle>
-              <CardDescription>
-                Trend analysis and performance tracking
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <TrendingUp className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  Weekly comparisons, productivity trends, and goal tracking will be available soon
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <TrendsTab metrics={metrics} />
         </TabsContent>
 
         {/* Insights Tab */}
         <TabsContent value="insights" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Coming Soon</CardTitle>
-              <CardDescription>
-                AI-powered productivity insights
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-12">
-                <Brain className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  Personalized recommendations and productivity insights will be available soon
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <InsightsTab metrics={metrics} timeDistribution={timeDistribution} />
         </TabsContent>
       </Tabs>
       </div>

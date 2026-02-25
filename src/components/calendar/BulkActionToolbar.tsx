@@ -84,8 +84,8 @@ const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   return createPortal(
     <>
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] animate-in slide-in-from-bottom-5">
-        <Card className="glass border-2 border-primary shadow-2xl p-4">
-          <div className="flex items-center gap-4">
+        <Card className="glass border-2 border-primary shadow-2xl p-3 md:p-4 max-w-[95vw]">
+          <div className="flex items-center gap-2 md:gap-4 overflow-x-auto">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
                 <span className="text-sm font-bold text-primary">{selectedCount}</span>

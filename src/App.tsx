@@ -31,6 +31,8 @@ const PrivacyPolicy = lazy(() => import('@/pages/legal/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('@/pages/legal/TermsOfService'));
 const Pricing = lazy(() => import('@/pages/Pricing'));
 const Billing = lazy(() => import('@/pages/Billing'));
+const BookingPage = lazy(() => import('@/pages/BookingPage'));
+const AdvancedAnalytics = lazy(() => import('@/pages/AdvancedAnalytics'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -62,6 +64,8 @@ const AppRoutes = () => {
           <Route path="/patterns" element={<ProtectedRoute><PatternsPage /></ProtectedRoute>} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+<Route path="/analytics/advanced" element={<ProtectedRoute><AdvancedAnalytics /></ProtectedRoute>} />
+          <Route path="/book/:bookingPageId" element={<BookingPage />} />
           <Route path="/legal/privacy" element={<PrivacyPolicy />} />
           <Route path="/legal/terms" element={<TermsOfService />} />
         </Routes>

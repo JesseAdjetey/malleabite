@@ -237,6 +237,12 @@ export default function Analytics() {
               </div>
             )}
             <button
+              onClick={() => { haptics.light(); navigate('/analytics/advanced'); }}
+              className="w-10 h-10 rounded-xl bg-muted/60 hover:bg-muted flex items-center justify-center transition-colors active:scale-95"
+            >
+              <BarChart2 className="h-5 w-5 text-muted-foreground" />
+            </button>
+            <button
               onClick={() => { haptics.light(); handleExport('json'); }}
               className="w-10 h-10 rounded-xl bg-muted/60 hover:bg-muted flex items-center justify-center transition-colors active:scale-95"
             >

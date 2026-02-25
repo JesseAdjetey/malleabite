@@ -30,6 +30,7 @@ import { CategorySuggestions } from '@/components/categorization/CategorySuggest
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 import { useCalendars } from '@/hooks/use-calendars';
 import { RecurrenceRuleEditor } from './RecurrenceRuleEditor';
+import { FindTimeDialog } from './FindTimeDialog';
 
 interface EnhancedEventFormProps {
   event?: CalendarEventType | null;
@@ -68,6 +69,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [showFindTime, setShowFindTime] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isTodo, setIsTodo] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -414,6 +416,33 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             </Select>
           </div>
         </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mb-4 w-full"
+          onClick={() => setShowFindTime(true)}
+        >
+          <Clock className="h-4 w-4 mr-1.5" />
+          Find a Time
+        </Button>
+
+        <FindTimeDialog
+          open={showFindTime}
+          onOpenChange={setShowFindTime}
+          onSelectTime={(start, end) => {
+            setStartTime(dayjs(start).format('HH:mm'));
+            setEndTime(dayjs(end).format('HH:mm'));
+            setSelectedDate(new Date(start));
+            setShowFindTime(false);
+          }}
+          initialDuration={
+            startTime && endTime
+              ? dayjs(`2000-01-01 ${endTime}`).diff(dayjs(`2000-01-01 ${startTime}`), 'minute')
+              : 60
+          }
+        />
 
         {/* All-Day Event Toggle */}
         <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">

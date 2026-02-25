@@ -1,0 +1,648 @@
+================================================================================
+              MALLEABITE — FIREBASE & AI SYSTEM DETAILED EXPLANATION
+================================================================================
+
+Table of Contents:
+  1. Firebase Overview
+  2. Firebase Configuration & Initialization
+  3. Authentication System
+  4. Firestore Database — Collections & Data Models
+  5. Firestore Security Rules
+  6. Cloud Functions
+  7. AI System Overview — "Mally"
+  8. AI Chat Interface (BottomMallyAI)
+  9. Voice Input — Speech-to-Text & Wake Word Detection
+  10. Voice Output — Text-to-Speech
+  11. AI Actions Engine (use-mally-actions)
+  12. AI Scheduling Optimizer
+  13. Proactive Suggestions System
+  14. Gemini AI Backend (Cloud Functions)
+  15. End-to-End Request Flow
+  16. Key Files Reference
+
+
+================================================================================
+1. FIREBASE OVERVIEW
+================================================================================
+
+Firebase serves as the entire backend infrastructure for Malleabite. Rather
+than building a custom server, the application relies on four core Firebase
+services:
+
+  - Firebase Authentication   → User sign-in/sign-up (email + Google OAuth)
+  - Cloud Firestore           → Real-time NoSQL database for all app data
+  - Cloud Functions           → Serverless backend for AI processing
+  - Cloud Storage             → File/image storage
+
+This "serverless" architecture means there is no traditional backend server.
+All business logic either lives on the client (React/TypeScript) or runs as
+on-demand Cloud Functions triggered by HTTP requests.
+
+Project ID: malleabite-97d35
+Region:     us-central1
+
+
+================================================================================
+2. FIREBASE CONFIGURATION & INITIALIZATION
+================================================================================
+
+File: src/integrations/firebase/config.ts
+
+Firebase is initialized once at app startup using environment variables:
+
+  VITE_FIREBASE_API_KEY
+  VITE_FIREBASE_AUTH_DOMAIN
+  VITE_FIREBASE_PROJECT_ID
+  VITE_FIREBASE_STORAGE_BUCKET
+  VITE_FIREBASE_MESSAGING_SENDER_ID
+  VITE_FIREBASE_APP_ID
+  VITE_FIREBASE_MEASUREMENT_ID
+
+The config file exports initialized instances of:
+  - auth       (Firebase Authentication)
+  - db         (Cloud Firestore)
+  - functions  (Cloud Functions, pinned to us-central1)
+  - storage    (Cloud Storage)
+
+Emulator support is available but disabled in production. When enabled, it
+redirects Firestore, Auth, and Functions calls to local emulator ports for
+development without touching production data.
+
+
+================================================================================
+3. AUTHENTICATION SYSTEM
+================================================================================
+
+File: src/integrations/firebase/auth.ts
+Contexts: src/contexts/AuthContext.firebase.tsx
+          src/contexts/FirebaseAuthContext.tsx
+
+Supported sign-in methods:
+  1. Email/Password — Traditional registration and login
+  2. Google OAuth   — Social login with redirect flow (mobile-aware)
+
+Key functions:
+  - signIn(email, password)    → Email/password authentication
+  - signUp(email, password)    → Create account, auto sends verification email
+  - signInWithGoogle()         → Google popup/redirect based on platform
+  - signOutUser()              → Logout and clear session
+  - onAuthStateChange(cb)      → Subscribe to auth state (logged in/out)
+  - getUserToken()             → Get Firebase ID token (used to call Cloud Functions)
+  - isAuthenticated()          → Boolean check
+
+The auth state is made available to the entire app through React Context
+providers. Every Firestore query filters by the current user's UID, ensuring
+data isolation between users.
+
+
+================================================================================
+4. FIRESTORE DATABASE — COLLECTIONS & DATA MODELS
+================================================================================
+
+File: src/integrations/firebase/firestore.ts
+
+Firestore is a document-based NoSQL database. Malleabite uses the following
+collections:
+
+CORE COLLECTIONS:
+  users               → User profiles (keyed by userId)
+  calendar_events     → Calendar events with full scheduling metadata
+  todos               → Legacy simple todo items
+  todo_lists          → Polymorphic todo list containers
+  todo_items          → Individual items within todo lists
+  eisenhower_items    → Priority matrix items (4 quadrants: urgent/important)
+  reminders           → Scheduled reminders
+  alarms              → Alarms with repeat intervals
+
+COLLABORATION:
+  invites             → Event invitations (email-based recipient matching)
+  teams               → Team/workspace management
+
+AI & ANALYTICS:
+  ai_suggestions      → AI-generated scheduling suggestions
+  patterns            → Detected user scheduling patterns
+  usage               → Feature usage tracking (for subscription limits)
+  analytics           → User analytics data
+
+CALENDAR FEATURES:
+  calendars           → Calendar accounts (Google Calendar integration)
+  calendar_snapshots  → Saved/archived calendar states
+  snapshot_events     → Events from archived snapshots
+  templates           → Reusable event templates
+
+UI STATE:
+  module_instances    → Sidebar module instances (pomodoro, reminders, etc.)
+  sidebar_pages       → Multi-page sidebar containers
+  pomodoro_sessions   → Focus timer session records
+
+BILLING:
+  customers           → Stripe customer mapping
+  subscriptions       → Subscription tier data
+
+CALENDAR EVENT DATA MODEL (most complex document):
+  {
+    id, createdAt, updatedAt, userId
+    title, description, startAt, endAt
+    color, isLocked, isTodo, hasAlarm, hasReminder
+    location, meetingUrl, meetingProvider (zoom/google_meet/teams)
+    calendarId, isAllDay, visibility (public/private/confidential)
+    status (confirmed/tentative/cancelled), timeZone
+    isRecurring, recurrenceRule: {
+      frequency (daily/weekly/monthly/yearly),
+      interval, count, until, byDay, byMonth, byMonthDay
+    }
+    recurrenceParentId, recurrenceExceptions[]
+    attendees[], reminders[], useDefaultReminders
+    eventType (default/focusTime/outOfOffice/workingLocation)
+    googleEventId (for 2-way sync), source
+  }
+
+Every document includes a userId field, ensuring that queries always filter
+to the authenticated user. Firestore's real-time listeners update the UI
+instantly when data changes.
+
+
+================================================================================
+5. FIRESTORE SECURITY RULES
+================================================================================
+
+File: firestore.rules
+
+The security model enforces:
+
+  1. Authentication Required — All reads/writes require a logged-in user
+  2. Ownership Validation    — Users can only access their own documents
+  3. Rate Limiting           — 1-second minimum between updates (anti-abuse)
+  4. Field Validation        — String length limits, required fields
+
+Helper functions in the rules:
+  - isAuthenticated()     → request.auth != null
+  - isOwner(userId)       → request.auth.uid == userId
+  - isValidOwner()        → document userId matches auth UID on creation
+  - isNotRateLimited()    → 1-second cooldown between writes
+  - isValidString(f,a,b)  → String field within length bounds
+  - isValidEmail(f)       → Email format check
+
+Collection-specific rules:
+  - calendar_events: Title must be 1-200 chars, timestamps required
+  - todos/todo_items: Text must be 1-500 chars
+  - invites: Both sender AND recipient (by email) can read
+  - templates: All authenticated users can read, only owner can write
+  - teams: Owner has full access, members have read-only
+  - customers: Owner CRUD but deletion is blocked (Stripe constraint)
+
+
+================================================================================
+6. CLOUD FUNCTIONS
+================================================================================
+
+Files: firebase/functions/index.js
+       src/integrations/firebase/functions.ts
+
+Cloud Functions serve as the secure backend for operations that need:
+  - Server-side API keys (Gemini AI)
+  - Elevated Firestore access
+  - External API calls
+
+Deployed Functions:
+  1. processAIRequest    → Main AI scheduling handler (receives user message,
+                           fetches calendar context, calls Gemini, returns
+                           structured actions)
+  2. transcribeAudio     → Audio-to-text via Gemini 1.5 Flash
+  3. createCalendarEvent → Direct event creation endpoint
+  4. synthesizeSpeech    → Text-to-speech via Google Cloud TTS
+
+All functions require a Bearer token (Firebase ID token) for authentication.
+The client calls them via direct HTTP POST to:
+  https://us-central1-malleabite-97d35.cloudfunctions.net/<functionName>
+
+The Gemini API key is stored as a Firebase secret:
+  firebase functions:secrets:set GEMINI_API_KEY
+
+
+================================================================================
+7. AI SYSTEM OVERVIEW — "MALLY"
+================================================================================
+
+Mally is the AI scheduling assistant built into Malleabite. It operates as a
+multimodal conversational agent that can:
+
+  - Understand natural language scheduling requests
+  - Create, update, and delete calendar events
+  - Manage todos, alarms, reminders, and pomodoro timers
+  - Detect scheduling conflicts and suggest resolutions
+  - Proactively suggest optimizations to the user's schedule
+  - Accept voice, text, and image inputs
+  - Respond with text and synthesized speech
+
+The AI stack:
+  Frontend: React components + custom hooks
+  Backend:  Google Gemini 2.0 Flash (via Firebase Cloud Functions)
+  Voice:    Web Speech API + Capacitor (native) + Google Cloud TTS
+
+
+================================================================================
+8. AI CHAT INTERFACE (BottomMallyAI)
+================================================================================
+
+File: src/components/ai/BottomMallyAI.tsx
+
+The user-facing AI interface is a bottom-anchored, expandable chat panel:
+
+  - Drag-down gesture to minimize
+  - Text input with send button
+  - Voice recording button (hold-to-talk or toggle)
+  - Image upload support (up to 5MB)
+  - Quick action chips: "Add Todo", "New Event", "Set Alarm", "Remind Me",
+    "Reschedule"
+  - Proactive suggestion banner at the top (conflicts, busy days, etc.)
+  - Message history with loading/error states
+  - Haptic feedback on interactions
+  - Auto-retracts when navigating away
+
+Message structure:
+  {
+    id: string
+    text: string
+    sender: "user" | "ai"
+    timestamp: Date
+    isLoading?: boolean
+    isError?: boolean
+    image?: { dataUrl, fileName, mimeType }
+  }
+
+The component maintains the last 10 messages for conversation context,
+keeping token usage efficient while preserving conversational flow.
+
+
+================================================================================
+9. VOICE INPUT — SPEECH-TO-TEXT & WAKE WORD
+================================================================================
+
+Speech-to-Text Service:
+  File: src/lib/ai/speech-recognition-service.ts
+
+  Platform-aware implementation:
+    - Native mobile: @capacitor-community/speech-recognition plugin
+    - Web browser:   Web Speech API (SpeechRecognition)
+
+  Features:
+    - Continuous listening mode
+    - Partial/interim results
+    - Permission handling
+    - Language support (default: en-US)
+    - Graceful fallback between native and web APIs
+
+Wake Word Detection:
+  File: src/hooks/use-wake-word.ts
+  Context: src/contexts/HeyMallyContext.tsx
+
+  Supported wake words (multi-language):
+    English:    "hey mally", "okay mally", "mally"
+    Spanish:    "hola mally", "oye mally"
+    French:     "salut mally", "he mally"
+    German:     "hallo mally"
+    Portuguese: "oi mally", "ola mally"
+    Italian:    "ciao mally"
+    + Japanese, Korean, Chinese, Hindi, Arabic romanized variants
+
+  Behavior:
+    - Continuous background listening for wake words
+    - 3-second cooldown between detections
+    - Plays activation sound (dual-tone beep or vibration)
+    - Dispatches custom "heyMallyActivated" DOM event
+    - BottomMallyAI listens for this event to auto-open and start recording
+    - Auto-restart on transient errors (up to 3 retries)
+
+  Global state (via HeyMallyContext):
+    - isWakeWordEnabled / isListening / isSupported
+    - isMallyOpen / isPaused
+    - Preferences persisted to localStorage
+
+
+================================================================================
+10. VOICE OUTPUT — TEXT-TO-SPEECH
+================================================================================
+
+File: src/lib/ai/tts-service.ts
+
+Primary: Google Cloud Text-to-Speech (via Firebase Cloud Function)
+  - Called through synthesizeSpeech Cloud Function
+  - Returns base64 audio, converted to blob URL for playback
+  - In-memory cache to avoid redundant API calls
+
+Fallback: Browser Web Speech Synthesis API
+  - Premium voice preference ranking:
+    Google US English, Google UK English Female,
+    Microsoft Aria Online, Samantha, Karen, Moira, Tessa
+  - Rate: 0.95 (slightly slower for clarity)
+  - Pitch: 1.05
+
+Features:
+  - Playback state tracking (isSpeaking)
+  - Speaking state change callbacks
+  - Stop/interrupt support
+
+
+================================================================================
+11. AI ACTIONS ENGINE (use-mally-actions)
+================================================================================
+
+File: src/hooks/use-mally-actions.ts
+
+This is the core execution layer. When Gemini returns a structured response
+with actions, this hook interprets and executes them.
+
+Supported action types (40+):
+
+  CALENDAR:
+    create_event       → Create event with optional recurrence
+    update_event       → Modify existing event fields
+    delete_event       → Remove event
+    archive_calendar   → Bulk archive events
+    restore_folder     → Restore archived events
+
+  TODOS:
+    create_todo        → Add task to a list
+    create_todo_list   → Create new list container
+    complete_todo      → Mark task as done
+    delete_todo        → Remove task
+
+  PRODUCTIVITY:
+    create_eisenhower  → Add item to priority matrix
+    update_eisenhower  → Move between quadrants
+    create_alarm       → Set alarm with repeat intervals
+    create_reminder    → Set reminder with scheduled time
+    start_pomodoro     → Start focus timer
+    pause_pomodoro     → Pause timer
+    stop_pomodoro      → Stop timer
+    reset_pomodoro     → Reset timer
+
+  UI NAVIGATION:
+    change_view        → Switch calendar view (day/week/month/year)
+    switch_page        → Navigate sidebar pages
+    add_module         → Add sidebar module
+    remove_module      → Remove module
+    minimize_module    → Collapse module
+    maximize_module    → Expand module
+
+Context building:
+  The buildContext() function gathers the full app state to send to the AI:
+    {
+      currentTime, timeZone,
+      availableCalendars,
+      sidebarPages[],
+      todoLists[],
+      pomodoro state,
+      eisenhowerItems[],
+      events[],
+      todos[]
+    }
+
+Time parsing intelligence:
+  - Handles "09:00", "9:00 AM", and ISO datetime strings
+  - Auto-forwards past times to tomorrow
+  - Timezone-aware calculations
+
+
+================================================================================
+12. AI SCHEDULING OPTIMIZER
+================================================================================
+
+File: src/lib/ai/schedule-optimizer.ts
+
+Client-side scheduling algorithms that augment the AI:
+
+Pattern Analysis (analyzeUserPatterns):
+  - Detects preferred work hours (min/max from event history)
+  - Identifies top 3 most productive hours
+  - Calculates average event duration
+  - Finds common event categories
+  - Identifies busiest days of the week
+
+Optimal Time Slot Finder (findOptimalTimeSlots):
+  - Checks for conflicts against existing events
+  - Scoring system:
+      Base score:           50 points
+      Productive hour:     +30 points
+      Morning focus 9-11:  +10 points
+      Post-lunch 1pm:      -10 points
+      Has buffer time:      +5 points
+  - Returns top 5 slots sorted by score
+
+Smart Suggestions (generateScheduleSuggestions):
+  - Overloaded day warning (>6 events)
+  - Back-to-back meetings detection
+  - Peak hours insight
+  - Empty days identification
+  - Buffer time recommendations
+
+Conflict Detection (detectConflicts):
+  - Pairwise overlap detection
+  - Returns conflicting event pairs with overlap duration in minutes
+
+Duration Suggestions (suggestEventDuration):
+  - "standup" / "call"      → 15 min
+  - "meeting" / "1:1"       → 30 min
+  - "workshop" / "training" → 60 min
+  - "interview"             → 45 min
+  - "focus" / "deep work"   → 120 min
+  - "all-day" / "retreat"   → 480 min
+
+
+================================================================================
+13. PROACTIVE SUGGESTIONS SYSTEM
+================================================================================
+
+File: src/hooks/use-proactive-suggestions.ts
+
+The AI doesn't just respond to commands — it proactively analyzes the user's
+schedule and surfaces suggestions as banners in the chat interface.
+
+Suggestion types and triggers:
+
+  TYPE           | PRIORITY | TRIGGER
+  ---------------+----------+------------------------------------------
+  Conflict       | HIGH     | Overlapping events detected
+  Upcoming       | HIGH     | Event starting within 30 minutes
+  Back-to-back   | HIGH     | 2+ consecutive meetings today/tomorrow
+  Busy Day       | MEDIUM   | 5+ events on a single day
+  Todo Backlog   | MEDIUM   | 10+ incomplete tasks
+  Free Block     | LOW      | 2+ free hours this afternoon
+
+Polling intervals:
+  - Every minute: Check for imminent events
+  - Every 10 minutes: Full re-analysis for staleness
+  - On mount: Initial analysis
+  - On event/todo count change: Triggered re-analysis
+
+Users can dismiss suggestions, and dismissed state is tracked per-session.
+Multiple suggestions display as a navigable carousel.
+
+
+================================================================================
+14. GEMINI AI BACKEND (Cloud Functions)
+================================================================================
+
+File: firebase/functions/index.js
+Model: gemini-2.0-flash (scheduling), gemini-1.5-flash (transcription)
+
+The processAIRequest Cloud Function is the brain of the system:
+
+1. AUTHENTICATION
+   - Validates Firebase ID token from Authorization header
+   - Extracts user UID
+
+2. CONTEXT GATHERING
+   - Fetches up to 100 events from Firestore (next 30 days)
+   - Filters by userId and non-archived status
+   - Formats events into human-readable strings:
+     "Event Title: Meeting | Start: Feb 24 2:00 PM | End: 3:00 PM | ..."
+
+3. SYSTEM PROMPT
+   The AI is instructed to be an "elite precision scheduling assistant" with:
+   - Pomodoro control as highest priority
+   - Conversational memory (uses message history)
+   - Proactive planning (analyzes existing events)
+   - Conflict detection and resolution
+   - Recurrence rule generation
+   - Duration inference from event types
+   - Action JSON generation
+
+4. AI CALL
+   Sends to Gemini:
+     - System prompt
+     - User's calendar context (events list)
+     - Conversation history (last N messages)
+     - Current message (text + optional image)
+     - Current time and timezone
+
+5. RESPONSE FORMAT
+   Gemini returns structured JSON:
+     {
+       "response": "Natural language explanation",
+       "actionRequired": true/false,
+       "intent": "scheduling | task_management | pomodoro_control | query | general",
+       "actions": [
+         { "type": "create_event", "data": { title, startAt, endAt, ... } },
+         { "type": "create_todo", "data": { text, listId, ... } },
+         { "type": "start_pomodoro", "data": { duration, ... } }
+       ]
+     }
+
+6. EXECUTION
+   The response is sent back to the client, where use-mally-actions.ts
+   parses and executes each action against Firestore.
+
+
+================================================================================
+15. END-TO-END REQUEST FLOW
+================================================================================
+
+Here's what happens when a user says "Schedule a meeting with Alex tomorrow
+at 2pm":
+
+  1. INPUT CAPTURE
+     User types or speaks the message in BottomMallyAI.
+
+  2. VOICE PROCESSING (if spoken)
+     Speech-recognition-service converts audio to text via Web Speech API
+     or Capacitor native plugin.
+
+  3. CONTEXT BUILDING (Client)
+     useMallyActions.buildContext() gathers:
+       - Current time and timezone
+       - All calendar events, todos, Eisenhower items
+       - Sidebar pages and module states
+       - Pomodoro state
+
+  4. API CALL
+     BottomMallyAI sends POST to processAIRequest Cloud Function:
+       {
+         message: "Schedule a meeting with Alex tomorrow at 2pm",
+         context: { ...built context },
+         conversationHistory: [...last 10 messages],
+         timezone: "America/New_York"
+       }
+
+  5. SERVER-SIDE ENRICHMENT
+     Cloud Function fetches 100 events from Firestore for conflict checking.
+     Constructs full prompt with system instructions + calendar context.
+
+  6. GEMINI PROCESSING
+     Gemini 2.0 Flash analyzes the request, checks for conflicts at 2pm
+     tomorrow, and generates:
+       {
+         "response": "I've scheduled a meeting with Alex tomorrow at 2:00 PM.",
+         "actionRequired": true,
+         "intent": "scheduling",
+         "actions": [{
+           "type": "create_event",
+           "data": {
+             "title": "Meeting with Alex",
+             "startAt": "2026-02-25T14:00:00",
+             "endAt": "2026-02-25T14:30:00"
+           }
+         }]
+       }
+
+  7. ACTION EXECUTION (Client)
+     useMallyActions receives the response and:
+       - Parses the create_event action
+       - Converts times to proper Date objects
+       - Writes new document to calendar_events collection in Firestore
+
+  8. UI UPDATE
+     - Firestore real-time listener triggers calendar UI refresh
+     - AI response displayed in chat: "I've scheduled a meeting with Alex..."
+     - Optional: TTS speaks the response
+     - Toast notification confirms creation
+     - Haptic feedback on mobile
+
+  9. PROACTIVE FOLLOW-UP
+     Proactive suggestions system re-analyzes and may show:
+       "You have back-to-back meetings tomorrow from 1-3pm. Want a buffer?"
+
+
+================================================================================
+16. KEY FILES REFERENCE
+================================================================================
+
+  FIREBASE CORE:
+    src/integrations/firebase/config.ts       → Firebase initialization
+    src/integrations/firebase/auth.ts          → Authentication functions
+    src/integrations/firebase/firestore.ts     → Firestore CRUD operations
+    src/integrations/firebase/functions.ts     → Cloud Functions client calls
+    firestore.rules                            → Security rules
+
+  AUTHENTICATION:
+    src/contexts/AuthContext.firebase.tsx       → Auth React context
+    src/contexts/FirebaseAuthContext.tsx        → Firebase auth provider
+
+  AI CHAT:
+    src/components/ai/BottomMallyAI.tsx        → Chat UI component
+
+  VOICE:
+    src/lib/ai/speech-recognition-service.ts   → Speech-to-text
+    src/lib/ai/tts-service.ts                  → Text-to-speech
+    src/hooks/use-wake-word.ts                 → Wake word detection
+    src/contexts/HeyMallyContext.tsx            → Wake word global state
+
+  AI ENGINE:
+    src/hooks/use-mally-actions.ts             → Action interpretation & execution
+    src/lib/ai/schedule-optimizer.ts           → Scheduling algorithms
+    src/hooks/use-proactive-suggestions.ts     → Proactive suggestion engine
+    src/lib/ai/format-ai-event.ts              → Event data formatting
+
+  BACKEND:
+    firebase/functions/index.js                → Cloud Functions (Gemini AI)
+
+  DEPLOYMENT:
+    npm run firebase:setup                     → Configure API key
+    npm run firebase:functions:deploy          → Deploy functions
+    npm run mally:deploy                       → Build + deploy
+    npm run firebase:emulators                 → Local development
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================

@@ -9,6 +9,8 @@ import RemindersModule from '../modules/RemindersModule';
 import ArchivesModule from '../modules/ArchivesModule';
 import TemplatesModule from '../modules/TemplatesModule';
 import CalendarFilterModule from '../modules/CalendarFilterModule';
+import BookingModule from '../modules/BookingModule';
+import TeamsModule from '../modules/TeamsModule';
 
 interface ModuleRendererProps {
   module: ModuleInstance;
@@ -95,6 +97,18 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
       return (
         <div key={index} style={moduleStyle} className={moduleClassName}>
           <CalendarFilterModule {...moduleProps} />
+        </div>
+      );
+    case 'booking':
+      return (
+        <div key={index} style={moduleStyle} className={moduleClassName}>
+          <BookingModule {...moduleProps} instanceId={module.instanceId} />
+        </div>
+      );
+    case 'teams':
+      return (
+        <div key={index} style={moduleStyle} className={moduleClassName}>
+          <TeamsModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     default:

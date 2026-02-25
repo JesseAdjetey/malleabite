@@ -89,6 +89,8 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const { toggleTodo, deleteTodo } = useTodos();
   const [isEditing, setIsEditing] = useState(false);
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
+  const [showRecurringEditDialog, setShowRecurringEditDialog] = useState(false);
+  const [editScope, setEditScope] = useState<EditScope | null>(null);
 
   // All hooks must be called before any early returns!
   // Memoize handleRecurringDeleteConfirm at the top level
@@ -242,14 +244,43 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   };
 
   const handleEdit = () => {
-    setIsEditing(true);
+    if (isRecurringEvent) {
+      setShowRecurringEditDialog(true);
+    } else {
+      setIsEditing(true);
+    }
   };
+
+  const handleRecurringEditConfirm = useCallback((scope: EditScope) => {
+    setEditScope(scope);
+    setShowRecurringEditDialog(false);
+    setIsEditing(true);
+  }, []);
 
   const handleUpdate = async (updatedEvent: CalendarEventType) => {
     try {
-      await updateEvent(updatedEvent);
+      if (isRecurringEvent && editScope && editScope !== 'all') {
+        const parentId = selectedEvent.recurrenceParentId ||
+          (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
+        const instanceDate = selectedEvent.id.includes('_')
+          ? selectedEvent.id.split('_')[1]
+          : dayjs(selectedEvent.startsAt).format('YYYY-MM-DD');
+
+        if (editScope === 'single' && addRecurrenceException) {
+          // Add exception to parent and create standalone event for this occurrence
+          await addRecurrenceException(parentId, instanceDate);
+          const { id, recurrenceRule, isRecurring, recurrenceParentId, ...eventData } = updatedEvent;
+          await updateEvent({ ...eventData, id: `${parentId}_exc_${instanceDate}` } as CalendarEventType);
+        } else {
+          // 'thisAndFuture' or 'all' — update the parent event
+          await updateEvent({ ...updatedEvent, id: parentId });
+        }
+      } else {
+        await updateEvent(updatedEvent);
+      }
       toast.success("Event updated");
       setIsEditing(false);
+      setEditScope(null);
       onClose();
     } catch (error) {
       console.error("Error updating event:", error);
@@ -410,6 +441,20 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
             action="delete"
             onConfirm={handleRecurringDeleteConfirm}
             onCancel={() => setShowRecurringDeleteDialog(false)}
+          />
+        )
+      }
+
+      {/* Recurring Event Edit Scope Dialog */}
+      {
+        selectedEvent && isRecurringEvent && (
+          <RecurringEventEditDialog
+            open={showRecurringEditDialog}
+            onOpenChange={setShowRecurringEditDialog}
+            event={selectedEvent}
+            action="edit"
+            onConfirm={handleRecurringEditConfirm}
+            onCancel={() => setShowRecurringEditDialog(false)}
           />
         )
       }

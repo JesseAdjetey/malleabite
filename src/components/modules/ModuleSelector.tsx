@@ -18,13 +18,15 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
 
   if (!isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="flex items-center justify-center w-full p-1.5 bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg mb-3 text-primary hover:bg-primary/20 transition-all"
-      >
-        <Plus size={20} className="mr-2" />
-        <span>Add Module</span>
-      </button>
+      <div className="flex justify-center w-full px-4 mb-3">
+        <button
+          onClick={() => setIsOpen(true)}
+          className="flex items-center justify-center px-6 py-1.5 bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-full text-foreground hover:bg-white/20 transition-all font-medium backdrop-blur-md shadow-sm"
+        >
+          <Plus size={18} className="mr-2 text-purple-400" />
+          <span>Add</span>
+        </button>
+      </div>
     );
   }
 

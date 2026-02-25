@@ -548,47 +548,69 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         )}
       </AnimatePresence>
 
-      {/* Minimized floating icon */}
+      {/* Minimized floating icon - centered glassmorphic pill */}
       <AnimatePresence>
         {isMinimized && (
           <motion.button
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            onClick={() => setIsMinimized(false)}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            drag="x"
+            dragConstraints={{
+              left: -(window.innerWidth / 2 - 60),
+              right: (window.innerWidth / 2 - 120),
+            }}
+            dragElastic={0.15}
+            dragTransition={{
+              power: 0.3,
+              timeConstant: 200,
+              bounceDamping: 20,
+              bounceStiffness: 300,
+            }}
+            whileDrag={{ scale: 1.08 }}
+            onDragStart={() => { (window as any).__mallyDragged = true; }}
+            onDragEnd={() => { setTimeout(() => { (window as any).__mallyDragged = false; }, 100); }}
+            onClick={() => { if (!(window as any).__mallyDragged) setIsMinimized(false); }}
             className={cn(
-              "fixed z-50 p-3 rounded-full",
-              "bg-gradient-to-br from-purple-600 to-purple-700",
-              "shadow-lg shadow-purple-500/30",
-              "hover:shadow-xl hover:shadow-purple-500/40",
-              "hover:scale-105 transition-all",
-              isMobile ? "bottom-20 left-4" : "bottom-4 right-4"
+              "fixed left-1/2 -translate-x-1/2 z-50 px-8 py-3 rounded-full cursor-grab active:cursor-grabbing",
+              "backdrop-blur-2xl border",
+              "bg-purple-500/30 border-purple-400/40 dark:bg-white/10 dark:border-white/20",
+              "hover:bg-purple-500/40 dark:hover:bg-white/20 transition-colors flex items-center gap-2",
+              isMobile ? "bottom-20" : "bottom-6"
             )}
+            style={{
+              boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.15)',
+              touchAction: 'none',
+            }}
           >
-            <Sparkles className="h-6 w-6 text-white" />
+            <span
+              className="text-purple-700 dark:text-purple-400 font-extrabold text-xl tracking-wide select-none"
+              style={{ fontFamily: "'Courier New', Courier, monospace" }}
+            >Mally</span>
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* Main container - fixed at bottom (starts after sidebar, above mobile nav on mobile) */}
+      {/* Main container - fixed at bottom (borderless fade effect) */}
       <AnimatePresence>
         {!isMinimized && (
           <motion.div
             ref={containerRef}
-            initial={{ opacity: 0, y: 100 }}
+            initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
+            exit={{ opacity: 0, y: 50 }}
             className={cn(
               "fixed z-50 flex flex-col",
-              isMobile ? "left-2 right-2 bottom-[72px]" : "left-4 right-4 bottom-4",
-              "rounded-2xl backdrop-blur-3xl"
+              isMobile ? "left-0 right-0 bottom-[60px]" : "left-0 right-0 bottom-0",
+              "backdrop-blur-3xl"
             )}
             style={{
-              maxHeight: isMobile ? "70vh" : "60vh",
+              maxHeight: isMobile ? "80vh" : "70vh",
+              background: "linear-gradient(to top, rgba(15, 10, 26, 0.98) 0%, rgba(15, 10, 26, 0.8) 25%, transparent 50%)",
             }}
             transition={{ type: "spring", damping: 30, stiffness: 250 }}
           >
-            <DoodleBackground />
+            {/* No DoodleBackground or hard borders for the fade look */}
 
 
             {/* Minimize button - top right */}

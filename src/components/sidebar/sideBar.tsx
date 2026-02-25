@@ -1,11 +1,11 @@
-
 import React, { useRef } from 'react';
 import { useSidebarPages } from '@/hooks/use-sidebar-pages';
 import { ModuleType } from '@/lib/store';
 import ModuleSelector from '../modules/ModuleSelector';
 import PageHeader from './PageHeader';
 import ModuleGrid from './ModuleGrid';
-import NewPageCreator from './NewPageCreator';
+import { Plus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const SideBar = () => {
   const {
@@ -73,7 +73,8 @@ const SideBar = () => {
     reorderModules(activePageId, fromIndex, toIndex);
   };
 
-  const handleCreateNewPage = async (title: string) => {
+  const handleCreateNewPage = async () => {
+    const title = 'New Page';
     const result = await createPage(title);
     if (result.success && result.pageId) {
       setActivePageId(result.pageId);
@@ -92,20 +93,15 @@ const SideBar = () => {
 
   if (loading) {
     return (
-      <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-white/50 dark:bg-black/20 items-center justify-center">
+      <div className="h-full overflow-hidden flex flex-col items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="glass-sidebar h-full overflow-hidden flex flex-col bg-white/50 dark:bg-black/20">
-      {/* New Page Creator - at top */}
-      <div className="p-3 border-b border-gray-200 dark:border-white/10">
-        <NewPageCreator onCreatePage={handleCreateNewPage} />
-      </div>
-
-      {/* Header with page title and navigation */}
+    <div className="h-full overflow-hidden flex flex-col">
+      {/* Header with page title */}
       <PageHeader
         title={activePage?.title || 'Untitled'}
         onUpdateTitle={handleUpdatePageTitle}
@@ -120,13 +116,11 @@ const SideBar = () => {
       {/* Page modules with responsive grid */}
       <div
         ref={sidebarContentRef}
-        className="flex-1 overflow-y-auto p-3"
+        className="flex-1 overflow-y-auto p-4 pt-0"
       >
-        <ModuleSelector
-          onSelect={handleAddModule}
-        />
+        <ModuleSelector onSelect={handleAddModule} />
 
-        {/* Module container - uses grid for two columns or flex for one column */}
+        {/* Module container */}
         <ModuleGrid
           modules={activePage?.modules || []}
           onRemoveModule={handleRemoveModule}
@@ -134,6 +128,32 @@ const SideBar = () => {
           onReorderModules={handleReorderModules}
           pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
         />
+      </div>
+
+      {/* Minimal Page Navigation Footer */}
+      <div className="p-4 flex items-center justify-center gap-3">
+        <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-3 py-2 rounded-full backdrop-blur-md">
+          {pages.map((page, index) => (
+            <button
+              key={page.id}
+              onClick={() => setActivePageId(page.id)}
+              className={cn(
+                "w-2.5 h-2.5 rounded-full transition-all duration-300",
+                index === currentPageIndex
+                  ? "bg-purple-600 w-4 shadow-lg shadow-purple-500/50"
+                  : "bg-gray-400 dark:bg-gray-600 hover:bg-gray-500"
+              )}
+              title={page.title}
+            />
+          ))}
+          <button
+            onClick={handleCreateNewPage}
+            className="ml-1 p-0.5 rounded-full hover:bg-purple-500/20 text-gray-500 hover:text-purple-600 transition-colors"
+            title="Create new page"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );

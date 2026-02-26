@@ -20,7 +20,7 @@ const missingEnvVars = requiredEnvVars.filter(
 );
 
 if (missingEnvVars.length > 0) {
-  throw new Error(
+  console.error(
     `Missing required environment variables: ${missingEnvVars.join(', ')}\n` +
     'Please copy .env.example to .env and fill in your Firebase credentials.'
   );

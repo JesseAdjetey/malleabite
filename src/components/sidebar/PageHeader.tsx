@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Edit2, Check, Trash2 } from 'lucide-react';
 
@@ -39,15 +38,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   };
 
   return (
-    <div className="p-3 flex items-center justify-between border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/30">
-      <button
-        onClick={onPrevPage}
-        disabled={!canGoToPrevPage}
-        className="p-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <ChevronLeft size={16} />
-      </button>
-
+    <div className="p-4 flex items-center justify-center">
       <div className="flex items-center">
         {isEditingTitle ? (
           <div className="flex items-center">
@@ -66,11 +57,28 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </button>
           </div>
         ) : (
-          <div className="flex items-center">
-            <h1 className="text-lg font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
+          <div className="flex items-center text-center gap-2">
+            <button
+              onClick={onPrevPage}
+              disabled={!canGoToPrevPage}
+              className={`p-1 rounded-full text-gray-400 dark:text-gray-500 hover:bg-purple-500/10 transition-colors ${!canGoToPrevPage ? 'opacity-20 cursor-not-allowed' : ''}`}
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <h1 className="text-xl font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
+
+            <button
+              onClick={onNextPage}
+              disabled={!canGoToNextPage}
+              className={`p-1 rounded-full text-gray-400 dark:text-gray-500 hover:bg-purple-500/10 transition-colors ${!canGoToNextPage ? 'opacity-20 cursor-not-allowed' : ''}`}
+            >
+              <ChevronRight size={18} />
+            </button>
+
             <button
               onClick={handleEditTitle}
-              className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20"
+              className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 opacity-40 hover:opacity-100 transition-opacity"
             >
               <Edit2 size={14} />
             </button>
@@ -81,7 +89,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                     onDeletePage();
                   }
                 }}
-                className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-red-500/20 hover:text-red-500"
+                className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-red-500/20 hover:text-red-500 opacity-40 hover:opacity-100 transition-opacity"
                 title="Delete page"
               >
                 <Trash2 size={14} />
@@ -90,14 +98,6 @@ const PageHeader: React.FC<PageHeaderProps> = ({
           </div>
         )}
       </div>
-
-      <button
-        onClick={onNextPage}
-        disabled={!canGoToNextPage}
-        className="p-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <ChevronRight size={16} />
-      </button>
     </div>
   );
 };

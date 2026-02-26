@@ -17,6 +17,7 @@ import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -93,12 +94,12 @@ const DayView = () => {
   const expandedEvents = useMemo(() => {
     const dayStart = userSelectedDate.startOf('day').toDate();
     const dayEnd = userSelectedDate.endOf('day').toDate();
-    
+
     const allInstances: CalendarEventType[] = [];
-    
+
     // First filter by calendar visibility, then expand recurring events
     const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
-    
+
     visibleEvents.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
@@ -112,7 +113,7 @@ const DayView = () => {
         allInstances.push(event);
       }
     });
-    
+
     return allInstances;
   }, [events, userSelectedDate, isCalendarVisible]);
 
@@ -183,21 +184,25 @@ const DayView = () => {
 
   return (
     <>
-      <div className="glass mx-2 my-2 rounded-xl overflow-hidden gradient-border cursor-glow">
+      <div className="glass mx-2 mt-2 mb-3 rounded-xl overflow-hidden border border-purple-200 dark:border-white/10 shadow-sm bg-gradient-to-r from-purple-50/80 to-purple-100/50 dark:from-secondary/50 dark:to-secondary/50">
         <DayHeader userSelectedDate={userSelectedDate} isToday={isToday} />
+      </div>
 
-        <TimeSlotsGrid
-          userSelectedDate={userSelectedDate}
-          currentTime={currentTime}
-          events={dayEvents}
-          onTimeSlotClick={handleTimeSlotClick}
-          addEvent={handleAddEvent}
-          openEventForm={openEventForm}
-          showTodoCalendarDialog={showTodoCalendarDialog}
-          isBulkMode={isBulkMode}
-          isSelected={isSelected}
-          onToggleSelection={toggleSelection}
-        />
+      <div className="mx-2 mb-2 rounded-2xl overflow-hidden cursor-glow">
+        <ScrollArea className="h-[calc(100vh-170px)]">
+          <TimeSlotsGrid
+            userSelectedDate={userSelectedDate}
+            currentTime={currentTime}
+            events={dayEvents}
+            onTimeSlotClick={handleTimeSlotClick}
+            addEvent={handleAddEvent}
+            openEventForm={openEventForm}
+            showTodoCalendarDialog={showTodoCalendarDialog}
+            isBulkMode={isBulkMode}
+            isSelected={isSelected}
+            onToggleSelection={toggleSelection}
+          />
+        </ScrollArea>
       </div>
       <AddEventButton />
 

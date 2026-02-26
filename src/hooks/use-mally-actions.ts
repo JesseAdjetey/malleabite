@@ -16,6 +16,7 @@ import { useDateStore } from "@/lib/stores/date-store";
 import { logger } from "@/lib/logger";
 import { SidebarPage } from "@/lib/stores/types";
 import { useGoogleCalendar } from "@/hooks/use-google-calendar";
+import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import dayjs from "dayjs";
 
@@ -23,6 +24,9 @@ export function useMallyActions() {
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
   const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
+
+  // AI Memory
+  const { memory: userMemory } = useUserMemory();
 
   // Todos
   const {
@@ -672,10 +676,17 @@ export function useMallyActions() {
     eisenhowerItems,
     events: events.slice(0, 20),
     todos: todos.slice(0, 30),
+    // Persistent AI memory (preferences, patterns, goals, observations)
+    userMemory: userMemory ? {
+      preferences: userMemory.preferences,
+      patterns: userMemory.patterns,
+      goals: userMemory.goals,
+      observations: (userMemory.observations || []).slice(-5),
+    } : undefined,
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
-    eisenhowerItems, events, todos,
+    eisenhowerItems, events, todos, userMemory,
   ]);
 
   return {

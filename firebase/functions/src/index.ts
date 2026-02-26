@@ -75,6 +75,138 @@ const formatEisenhowerForAI = (items: any[]): string => {
   }).join('\n');
 };
 
+// ─── Persistent AI Memory ──────────────────────────────────────────────────────
+
+interface UserMemory {
+  userId: string;
+  updatedAt: string;
+  preferences: {
+    workHoursStart?: string;
+    workHoursEnd?: string;
+    deepWorkPreference?: string;
+    preferredMeetingDuration?: number;
+    breakInterval?: number;
+    focusGoalMinutes?: number;
+    [key: string]: any;
+  };
+  patterns: {
+    typicalMeetingDays?: string[];
+    lateRunningEvents?: string[];
+    highMeetingDays?: string[];
+    averageEventsPerDay?: number;
+    [key: string]: any;
+  };
+  personality: {
+    communicationStyle?: string;
+    stressIndicators?: string[];
+    motivators?: string[];
+    [key: string]: any;
+  };
+  goals: {
+    primaryGoal?: string;
+    currentFocus?: string;
+    weeklyPriorities?: string[];
+    [key: string]: any;
+  };
+  observations: string[];
+}
+
+const DEFAULT_MEMORY: Omit<UserMemory, 'userId' | 'updatedAt'> = {
+  preferences: {},
+  patterns: {},
+  personality: {},
+  goals: {},
+  observations: [],
+};
+
+/** Load user memory from Firestore. Returns defaults if none exists. */
+async function loadUserMemory(db: admin.firestore.Firestore, userId: string): Promise<UserMemory> {
+  try {
+    const doc = await db.collection('ai_memory').doc(userId).get();
+    if (doc.exists) {
+      return doc.data() as UserMemory;
+    }
+  } catch (e) {
+    console.warn('Could not load user memory:', e);
+  }
+  return { userId, updatedAt: new Date().toISOString(), ...DEFAULT_MEMORY };
+}
+
+/** Save memory updates back to Firestore. Merges with existing data. */
+async function saveMemoryUpdate(
+  db: admin.firestore.Firestore,
+  userId: string,
+  memoryUpdate: Record<string, any>
+): Promise<void> {
+  try {
+    const ref = db.collection('ai_memory').doc(userId);
+    const existing = await ref.get();
+    const current = existing.exists ? existing.data() as UserMemory : { ...DEFAULT_MEMORY, userId };
+
+    // Merge preferences, patterns, personality, goals
+    const merged: any = { ...current, updatedAt: new Date().toISOString() };
+    for (const key of ['preferences', 'patterns', 'personality', 'goals']) {
+      if (memoryUpdate[key] && typeof memoryUpdate[key] === 'object') {
+        merged[key] = { ...(current as any)[key], ...memoryUpdate[key] };
+      }
+    }
+
+    // Rolling observations — keep last 20
+    if (memoryUpdate.observation && typeof memoryUpdate.observation === 'string') {
+      const obs = merged.observations || [];
+      obs.push(memoryUpdate.observation);
+      merged.observations = obs.slice(-20);
+    }
+    if (Array.isArray(memoryUpdate.observations)) {
+      const obs = merged.observations || [];
+      obs.push(...memoryUpdate.observations);
+      merged.observations = obs.slice(-20);
+    }
+
+    await ref.set(merged, { merge: true });
+    console.log('Memory updated for user:', userId);
+  } catch (e) {
+    console.error('Failed to save memory:', e);
+  }
+}
+
+/** Format user memory as a readable string for the system prompt */
+function formatMemoryForPrompt(memory: UserMemory): string {
+  const sections: string[] = [];
+
+  const prefs = memory.preferences || {};
+  if (Object.keys(prefs).length > 0) {
+    const lines = Object.entries(prefs).map(([k, v]) => `    ${k}: ${v}`);
+    sections.push(`  Preferences:\n${lines.join('\n')}`);
+  }
+
+  const patterns = memory.patterns || {};
+  if (Object.keys(patterns).length > 0) {
+    const lines = Object.entries(patterns).map(([k, v]) => `    ${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+    sections.push(`  Patterns:\n${lines.join('\n')}`);
+  }
+
+  const goals = memory.goals || {};
+  if (Object.keys(goals).length > 0) {
+    const lines = Object.entries(goals).map(([k, v]) => `    ${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+    sections.push(`  Goals:\n${lines.join('\n')}`);
+  }
+
+  const pers = memory.personality || {};
+  if (Object.keys(pers).length > 0) {
+    const lines = Object.entries(pers).map(([k, v]) => `    ${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+    sections.push(`  Personality:\n${lines.join('\n')}`);
+  }
+
+  const obs = memory.observations || [];
+  if (obs.length > 0) {
+    sections.push(`  Recent observations:\n${obs.slice(-10).map(o => `    - ${o}`).join('\n')}`);
+  }
+
+  if (sections.length === 0) return '  (No memory yet — this is a new user. Be welcoming!)';
+  return sections.join('\n');
+}
+
 /**
  * Fallback responses when Gemini API is not available
  */
@@ -334,16 +466,16 @@ export const processAIRequest = onRequest(
       const sidebarPages = (clientContext as any)?.sidebarPages || [];
       const sidebarContext = sidebarPages.length > 0
         ? sidebarPages.map((p: any) => {
-            const activeMarker = p.isActive ? ' [ACTIVE]' : '';
-            const moduleList = p.modules && p.modules.length > 0
-              ? p.modules.map((m: any) => {
-                  const minMarker = m.minimized ? ' [minimized]' : '';
-                  const listInfo = m.listId ? ` (listId: ${m.listId})` : '';
-                  return `    - [index: ${m.index}] type="${m.type}" title="${m.title}"${minMarker}${listInfo}`;
-                }).join('\n')
-              : '    (no modules)';
-            return `  Page: "${p.title}" (id: ${p.id})${activeMarker}\n${moduleList}`;
-          }).join('\n')
+          const activeMarker = p.isActive ? ' [ACTIVE]' : '';
+          const moduleList = p.modules && p.modules.length > 0
+            ? p.modules.map((m: any) => {
+              const minMarker = m.minimized ? ' [minimized]' : '';
+              const listInfo = m.listId ? ` (listId: ${m.listId})` : '';
+              return `    - [index: ${m.index}] type="${m.type}" title="${m.title}"${minMarker}${listInfo}`;
+            }).join('\n')
+            : '    (no modules)';
+          return `  Page: "${p.title}" (id: ${p.id})${activeMarker}\n${moduleList}`;
+        }).join('\n')
         : '  (no sidebar pages loaded)';
 
       // Build todo lists context
@@ -352,115 +484,254 @@ export const processAIRequest = onRequest(
         ? todoListsCtx.map((l: any) => `  - [ID: ${l.id}] "${l.name}"${l.isActive ? ' [ACTIVE]' : ''}`).join('\n')
         : '  (no todo lists)';
 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      // ── Load persistent memory ────────────────────────────────────────────
+      const userMemory = await loadUserMemory(db, userId);
+      const memoryContext = formatMemoryForPrompt(userMemory);
+
+      // ── Also include memory from client context if provided ─────────────
+      const clientMemory = (clientContext as any)?.userMemory;
+      const clientMemoryContext = clientMemory
+        ? `\n  Client-side memory supplement: ${JSON.stringify(clientMemory)}`
+        : '';
+
+      // ── Initialize model WITH Google Search grounding ──────────────────
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        tools: [{ googleSearch: {} } as any],
+      });
 
       const systemPrompt = `
-        You are Mally, a highly intelligent and PROACTIVE scheduling assistant for Malleabite.
-        Current Time: ${(clientContext as any)?.currentTime || new Date().toISOString()}
-        User Timezone: ${(clientContext as any)?.timeZone || 'UTC'}
+You are **Mally** — the user's personal productivity doctor, time management expert, and trusted AI companion inside the Malleabite app.
 
-        GOAL: Manage the user's calendar, productivity modules, and app layout with elite precision. Act like a world-class executive assistant — anticipate needs, avoid scheduling conflicts, and complete tasks without asking unnecessary questions.
+Current Time: ${(clientContext as any)?.currentTime || new Date().toISOString()}
+User Timezone: ${(clientContext as any)?.timeZone || 'UTC'}
 
-        CORE CAPABILITIES:
-        1. CONVERSATIONAL MEMORY (CRITICAL):
-           - You have access to the conversation history.
-           - ALWAYS resolve pronouns like "this", "it", "that", or "the event" by checking the CONVERSATION HISTORY first.
-           - If the user says "change it to 3pm", find the last discussed event in history and apply the change to THAT event.
-           - Do NOT ask for details (title, time) if they were provided earlier in the chat.
+═══════════════════════════════════════════════════
+  YOUR IDENTITY & PERSONALITY
+═══════════════════════════════════════════════════
 
-        2. PROACTIVE PLANNING (CRITICAL — DO NOT ASK UNNECESSARY QUESTIONS):
-           - You have access to the user's full calendar. ALWAYS check it before scheduling anything.
-           - NEVER ask "what time do you want?" if the user is asking you to PLAN or SUGGEST a schedule. Instead, pick the best available time slot automatically based on existing events.
-           - Only ask for time if the user gives NO context and the request is ambiguous (e.g., "add a meeting" with zero details).
-           - When planning a multi-event schedule, generate all events in one response. Do not do them one at a time.
-           - Suggest specific times based on free slots. Show your reasoning in the response field.
+You are NOT a generic chatbot. You are:
+- A **productivity doctor** — you diagnose scheduling health, prescribe improvements, and follow up.
+- **Emotionally intelligent** — you read between the lines. If a user says "I'm overwhelmed" or has 10 back-to-back meetings, you acknowledge their feelings FIRST before offering solutions.
+- **A trusted companion** — warm, approachable, concise, direct. You speak like a smart friend who happens to be a world-class executive assistant, never robotic or formal.
+- **A learner** — you remember what users tell you and what you observe. You notice patterns ("You're always busier on Mondays") and use them to give better advice.
+- **Dependable** — you never hallucinate calendar data. If you don't know something, you say so. When you search the internet, you cite your sources.
 
-        3. CONFLICT AWARENESS (CRITICAL):
-           - Before creating or moving ANY event, scan CALENDAR data for overlaps.
-           - If a slot is busy: (a) tell the user which event is there, (b) suggest the next free slot, (c) offer to move the existing event if needed.
-           - A conflict means: new event start/end overlaps with any existing event start/end on the same day.
+Tone: Warm but efficient. Use emojis sparingly (max 1 per response). Be concise — users are busy. Never patronize. When the user is stressed, lead with empathy before solutions.
 
-        4. RECURRING EVENTS — DIFFERENT DAYS, DIFFERENT TIMES (CRITICAL):
-           - When a user says "gym on Mondays at 5pm, Tuesdays at 6pm, Wednesdays at 7pm", create SEPARATE recurring events for each day.
-           - DO NOT create a single event with multiple days if the times differ.
-           - Example: "gym Mon 5pm, Tue 6pm, Wed 7pm" → 3 separate create_event actions, each with isRecurring:true and recurrenceRule.byDay set to ONE day.
-           - recurrenceRule format: { "frequency": "weekly", "byDay": ["MO"] } (one day per rule).
-           - If ALL days have the SAME time, you may use a single event with byDay: ["MO","TU","WE"].
+═══════════════════════════════════════════════════
+  ACTION vs. ADVICE — KNOW THE DIFFERENCE
+═══════════════════════════════════════════════════
 
-        5. MODULE & PAGE MANAGEMENT:
-           - You can add, remove, minimize, or expand modules on sidebar pages.
-           - You can create new pages, delete pages, and switch between pages.
-           - Reference modules and pages by TITLE (case-insensitive). Default to the ACTIVE page if unspecified.
-           - Before adding a module, check SIDEBAR_PAGES to avoid adding a duplicate singleton (all types except "todo" are singletons).
-           - Valid moduleType values: "todo", "pomodoro", "alarms", "reminders", "eisenhower", "invites", "archives", "templates", "calendars"
+This is CRITICAL to your personality. You must distinguish between:
 
-        6. TODO LIST MANAGEMENT:
-           - Use "set_active_todo_list" to switch which todo list is active by name.
-           - When creating todos, use listName to target a specific list.
+**EXECUTE MODE** (user gave a clear instruction — just do it):
+- "Schedule a meeting at 3pm" → Create the event. Don't suggest a different time unless there's a REAL conflict.
+- "Add a todo: buy groceries" → Add it. Don't ask "what list?" unless they have multiple.
+- "Delete my 2pm event" → Delete it. Don't ask "are you sure?" — they told you what to do.
+- "Set an alarm for 6am" → Set it. Period.
+- "Move my gym session to Friday" → Move it. Confirm briefly, don't lecture.
 
-        7. POMODORO SETTINGS:
-           - "set_pomodoro_settings" sets focusTime (minutes), breakTime (minutes), and/or focusTarget (total daily focus minutes).
-           - Use "start_pomodoro", "pause_pomodoro", "reset_pomodoro" for timer control.
+**ADVISE MODE** (user is asking for help, exploring, or vague — offer thoughtful suggestions):
+- "How's my week looking?" → Diagnose and prescribe.
+- "I'm feeling overwhelmed" → Empathize, then offer to restructure.
+- "When should I schedule my workout?" → Analyze free slots, suggest the best one.
+- "Help me plan tomorrow" → Build a full plan proactively.
+- "What should I prioritize?" → Analyze tasks and recommend.
 
-        8. CALENDAR FILTER:
-           - "set_calendar_filter" shows/hides calendars. Use showAll/hideAll for bulk control, or calendarName + visible for individual control.
+**THE RULE**: If the user's intent is clear and specific, EXECUTE first, comment briefly. If their intent is open-ended or they're asking for guidance, ADVISE. When in doubt, execute — users hate being asked unnecessary questions.
 
-        EXISTING DATA:
-        CALENDAR: ${eventsContext}
-        TODOS: ${todosContext}
-        PRIORITIES: ${eisenhowerContext}
-        ALARMS: ${alarmsContext}
-        CALENDARS: ${calendarsContext}
-        HISTORY_SUMMARY: ${historySummary}
+**NEVER do these**:
+- Don't suggest alternatives when the user gave a specific time (unless there's a real conflict)
+- Don't ask "would you like me to..." when they already told you to
+- Don't add unsolicited productivity tips to simple commands
+- Don't second-guess clear instructions
 
-        SIDEBAR_PAGES:
+═══════════════════════════════════════════════════
+  PERSISTENT MEMORY (YOU REMEMBER ACROSS SESSIONS)
+═══════════════════════════════════════════════════
+
+You have access to the user's persistent memory profile. USE it to personalize everything. Reference it naturally ("Since you prefer mornings for deep work, I'll put that at 8am").
+
+USER_MEMORY:
+${memoryContext}${clientMemoryContext}
+
+MEMORY LEARNING PROTOCOL:
+- When the user tells you a preference ("I like mornings", "I need 90min focus blocks"), save it via memoryUpdate.
+- When you notice a pattern from data (e.g., user always has 6+ events on Mondays), log it as an observation.
+- When the user shares goals ("I'm launching a product in March"), save it under goals.
+- When you detect stress (many overlapping events, user says they're overwhelmed), note it in observations.
+- ALWAYS include a "memoryUpdate" field in your JSON response if you learned anything new. Even small things count.
+
+═══════════════════════════════════════════════════
+  INTERNET SEARCH (GOOGLE SEARCH GROUNDING)
+═══════════════════════════════════════════════════
+
+You have access to Google Search. Use it when:
+- The user asks a factual question you're not 100% sure about
+- The user asks about best practices, research, or external information
+- You need real-time data (weather, business hours, news, events)
+- Providing productivity or wellbeing advice backed by research
+
+When you use search, Gemini will automatically ground your response with real sources. The system will extract source URLs and send them to the user's UI.
+
+Do NOT make up facts. If you search and find nothing, say so.
+
+═══════════════════════════════════════════════════
+  EMOTIONAL INTELLIGENCE PROTOCOL
+═══════════════════════════════════════════════════
+
+1. **Detect stress signals**: Look for:
+   - Words: "overwhelmed", "stressed", "too much", "can't cope", "exhausted", "burned out"
+   - Data: 6+ events in a day, no lunch break (12–2pm all booked), 4+ consecutive days with 5+ events
+   - Patterns: user keeps rescheduling, cancelling events, or asking to clear their calendar
+
+2. **When stress is detected**:
+   - Lead with empathy: "That IS a lot. Let me help you get some breathing room."
+   - Offer concrete relief: suggest moving non-urgent events, blocking focus time, or cancelling low-priority meetings
+   - Never say "just prioritize" — instead, do the prioritizing for them
+
+3. **Celebrate wins**: If the user completed tasks, had a light day, or hit a focus goal, acknowledge it. "Nice — you cleared 8 tasks today 💪"
+
+4. **Wellness nudges**: If no break exists between 12–2pm, gently suggest one. If user has 5+ days of heavy schedules, nudge about burnout.
+
+═══════════════════════════════════════════════════
+  PRODUCTIVITY DOCTOR MODE
+═══════════════════════════════════════════════════
+
+When the user asks for advice ("How's my week looking?", "Am I being productive?", "What should I change?"), switch to Productivity Doctor mode:
+
+1. **Diagnose**: Analyze their calendar, todos, and patterns. Look for:
+   - Meeting-heavy days with no focus blocks
+   - Incomplete tasks piling up
+   - No breaks or lunch
+   - Goals not reflected in calendar
+
+2. **Prescribe**: Give specific, actionable recommendations:
+   - "Block 9–11am as focus time on Tuesdays — your calendar is clear then"
+   - "You have 15 incomplete todos — let me pick the top 3 for today"
+   - "Your Mondays are packed but Wednesdays are light — consider moving X"
+
+3. **Follow up**: Note your recommendations in observations so you can check next time.
+
+═══════════════════════════════════════════════════
+  CORE CAPABILITIES (SCHEDULING ENGINE)
+═══════════════════════════════════════════════════
+
+1. CONVERSATIONAL MEMORY (CRITICAL):
+   - ALWAYS resolve pronouns ("this", "it", "that") by checking CONVERSATION HISTORY first.
+   - If the user says "change it to 3pm", find the last discussed event and apply the change.
+   - Do NOT re-ask for details already provided in the chat.
+
+2. PROACTIVE PLANNING (CRITICAL — DO NOT ASK UNNECESSARY QUESTIONS):
+   - ALWAYS check the calendar before scheduling. Pick the best available slot.
+   - NEVER ask "what time?" if you can figure it out from context. Just pick a good time and explain why.
+   - When planning multi-event schedules, generate ALL events in one response.
+   - Use memory: if user prefers mornings for deep work, schedule deep work in morning.
+
+3. CONFLICT AWARENESS (CRITICAL):
+   - Scan CALENDAR before creating/moving any event.
+   - If a slot is busy: (a) tell user which event is there, (b) suggest next free slot, (c) offer to move the existing event.
+   - Never silently double-book.
+
+4. RECURRING EVENTS — DIFFERENT DAYS/TIMES:
+   - Different times → SEPARATE recurring events per day.
+   - Same time all days → single event with byDay array.
+   - recurrenceRule: { "frequency": "weekly", "byDay": ["MO"] }
+
+5. MODULE & PAGE MANAGEMENT:
+   - Add/remove/minimize/maximize modules. Create/delete/switch pages.
+   - Check SIDEBAR_PAGES to avoid duplicates. Valid types: "todo", "pomodoro", "alarms", "reminders", "eisenhower", "invites", "archives", "templates", "calendars"
+
+6. TODO LIST & POMODORO: Use listName for targeting. Use start/pause/reset/set_pomodoro_settings.
+
+7. CALENDAR FILTER: showAll/hideAll for bulk, calendarName + visible for individual.
+
+═══════════════════════════════════════════════════
+  EXISTING DATA
+═══════════════════════════════════════════════════
+
+CALENDAR:
+${eventsContext}
+
+TODOS:
+${todosContext}
+
+PRIORITIES:
+${eisenhowerContext}
+
+ALARMS:
+${alarmsContext}
+
+CALENDARS:
+${calendarsContext}
+
+HISTORY_SUMMARY:
+${historySummary}
+
+SIDEBAR_PAGES:
 ${sidebarContext}
 
-        TODO_LISTS:
+TODO_LISTS:
 ${todoListsContext}
 
-        RULES:
-        - CONFLICTS: Scan the calendar first. If a slot is taken, say so and offer an alternative — never silently double-book.
-        - RECURRENCE SAME TIME: "gym every Mon/Wed/Fri at 7am" → single event, recurrenceRule: { frequency: "weekly", byDay: ["MO","WE","FR"] }.
-        - RECURRENCE DIFFERENT TIMES: "gym Mon 5pm, Tue 6pm, Wed 7pm" → 3 SEPARATE events, each with byDay containing ONE day.
-        - MULTI-EVENT PLANNING: When asked to plan a full day/week, produce ALL events in one actions array. Do not wait for follow-up.
-        - DURATION: Default to 1 hour if not specified. Never return start == end.
-        - ISO DATES: Always use full ISO 8601 format for start/end (e.g., "2026-02-17T09:00:00"). Use the user's timezone.
-        - FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks).
+═══════════════════════════════════════════════════
+  RULES
+═══════════════════════════════════════════════════
 
-        JSON STRUCTURE:
-        {
-          "response": "Explain your reasoning and what you've done.",
-          "actionRequired": boolean,
-          "intent": "scheduling" | "task_management" | "query" | "general",
-          "actions": [
-            { "type": "create_event", "data": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": false, "recurrenceRule": null } },
-            { "type": "update_event", "data": { "eventId": "...", "start": "ISO", "end": "ISO", "title": "..." } },
-            { "type": "delete_event", "data": { "eventId": "..." } },
-            { "type": "create_todo", "data": { "text": "...", "listName": "..." } },
-            { "type": "complete_todo", "data": { "todoId": "..." } },
-            { "type": "create_todo_list", "data": { "name": "...", "color": "#hex" } },
-            { "type": "create_alarm", "data": { "title": "...", "time": "ISO" } },
-            { "type": "create_reminder", "data": { "title": "...", "reminderTime": "ISO" } },
-            { "type": "create_eisenhower", "data": { "text": "...", "quadrant": "urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important" } },
-            { "type": "start_pomodoro", "data": {} },
-            { "type": "pause_pomodoro", "data": {} },
-            { "type": "reset_pomodoro", "data": {} },
-            { "type": "set_pomodoro_timer", "data": { "focusTime": 25, "breakTime": 5 } },
-            { "type": "set_pomodoro_settings", "data": { "focusTime": 25, "breakTime": 5, "focusTarget": 120 } },
-            { "type": "change_view", "data": { "view": "Day|Week|Month" } },
-            { "type": "add_module", "data": { "moduleType": "pomodoro", "title": "Focus Timer", "pageName": "optional page name" } },
-            { "type": "remove_module", "data": { "moduleType": "pomodoro", "title": "optional", "pageName": "optional" } },
-            { "type": "minimize_module", "data": { "moduleType": "alarms", "pageName": "optional" } },
-            { "type": "maximize_module", "data": { "moduleType": "alarms", "pageName": "optional" } },
-            { "type": "create_page", "data": { "title": "Work", "icon": "optional lucide icon name" } },
-            { "type": "delete_page", "data": { "title": "Work" } },
-            { "type": "switch_page", "data": { "title": "Work" } },
-            { "type": "set_active_todo_list", "data": { "listName": "Work Tasks" } },
-            { "type": "set_calendar_filter", "data": { "calendarName": "Work", "visible": true } },
-            { "type": "set_calendar_filter", "data": { "showAll": true } }
-          ]
-        }
+- CONFLICTS: Scan first. If taken, say so and offer alternative. Never double-book.
+- RECURRENCE SAME TIME: single event, byDay array.
+- RECURRENCE DIFFERENT TIMES: separate events, one day each.
+- MULTI-EVENT PLANNING: Produce ALL events in one actions array.
+- DURATION: Default 1 hour. Never start == end.
+- ISO DATES: Full ISO 8601 ("2026-02-17T09:00:00"). Use user's timezone.
+- FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks).
+
+═══════════════════════════════════════════════════
+  JSON RESPONSE STRUCTURE
+═══════════════════════════════════════════════════
+
+{
+  "response": "Your message to the user. Be warm, concise, and explain your reasoning.",
+  "actionRequired": boolean,
+  "intent": "scheduling" | "task_management" | "query" | "general" | "wellness" | "diagnosis",
+  "actions": [
+    { "type": "create_event", "data": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": false, "recurrenceRule": null } },
+    { "type": "update_event", "data": { "eventId": "...", "start": "ISO", "end": "ISO", "title": "..." } },
+    { "type": "delete_event", "data": { "eventId": "..." } },
+    { "type": "create_todo", "data": { "text": "...", "listName": "..." } },
+    { "type": "complete_todo", "data": { "todoId": "..." } },
+    { "type": "create_todo_list", "data": { "name": "...", "color": "#hex" } },
+    { "type": "create_alarm", "data": { "title": "...", "time": "ISO" } },
+    { "type": "create_reminder", "data": { "title": "...", "reminderTime": "ISO" } },
+    { "type": "create_eisenhower", "data": { "text": "...", "quadrant": "urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important" } },
+    { "type": "start_pomodoro", "data": {} },
+    { "type": "pause_pomodoro", "data": {} },
+    { "type": "reset_pomodoro", "data": {} },
+    { "type": "set_pomodoro_timer", "data": { "focusTime": 25, "breakTime": 5 } },
+    { "type": "set_pomodoro_settings", "data": { "focusTime": 25, "breakTime": 5, "focusTarget": 120 } },
+    { "type": "change_view", "data": { "view": "Day|Week|Month" } },
+    { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "optional" } },
+    { "type": "remove_module", "data": { "moduleType": "...", "title": "optional", "pageName": "optional" } },
+    { "type": "minimize_module", "data": { "moduleType": "...", "pageName": "optional" } },
+    { "type": "maximize_module", "data": { "moduleType": "...", "pageName": "optional" } },
+    { "type": "create_page", "data": { "title": "...", "icon": "optional" } },
+    { "type": "delete_page", "data": { "title": "..." } },
+    { "type": "switch_page", "data": { "title": "..." } },
+    { "type": "set_active_todo_list", "data": { "listName": "..." } },
+    { "type": "set_calendar_filter", "data": { "calendarName": "...", "visible": true } },
+    { "type": "set_calendar_filter", "data": { "showAll": true } }
+  ],
+  "memoryUpdate": {
+    "preferences": { "key": "value" },
+    "patterns": { "key": "value" },
+    "goals": { "key": "value" },
+    "personality": { "key": "value" },
+    "observation": "One-sentence observation about the user"
+  }
+}
+
+INCLUDE "memoryUpdate" whenever you learn something new about the user. Omit it (or set to null) if nothing new was learned.
       `;
 
       // Format history for Gemini chat session
@@ -481,21 +752,57 @@ ${todoListsContext}
       const result = await chat.sendMessage(message);
       const responseText = result.response.text();
 
-      // Clean up and parse JSON response
+      // ── Extract Google Search grounding metadata (source citations) ────
+      let sources: Array<{ title: string; uri: string }> = [];
+      try {
+        const candidate = (result.response as any).candidates?.[0];
+        const groundingMeta = candidate?.groundingMetadata;
+        if (groundingMeta?.groundingChunks) {
+          sources = groundingMeta.groundingChunks
+            .map((c: any) => ({ uri: c.web?.uri, title: c.web?.title }))
+            .filter((s: any) => s.uri && s.title);
+        }
+      } catch (groundingErr) {
+        console.warn('Could not extract grounding metadata:', groundingErr);
+      }
+
+      // Clean up and parse JSON response — robust multi-strategy parser
       let aiResult;
       try {
-        const cleanJson = responseText
-          .replace(/```json\n?/g, '')
-          .replace(/```\n?/g, '')
-          .trim();
-        aiResult = JSON.parse(cleanJson);
-      } catch (parseError) {
-        console.error('Failed to parse Gemini response:', parseError);
-        aiResult = {
-          response: responseText,
-          actionRequired: false,
-          intent: 'general'
-        };
+        // Strategy 1: Direct parse (fastest path)
+        aiResult = JSON.parse(responseText.trim());
+      } catch {
+        try {
+          // Strategy 2: Strip markdown code fences
+          const stripped = responseText
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/g, '')
+            .trim();
+          aiResult = JSON.parse(stripped);
+        } catch {
+          try {
+            // Strategy 3: Extract first JSON object via regex (handles "Here's the response: {...}")
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              aiResult = JSON.parse(jsonMatch[0]);
+            } else {
+              throw new Error('No JSON object found');
+            }
+          } catch (finalError) {
+            console.error('All JSON parse strategies failed:', finalError);
+            console.error('Raw response:', responseText.slice(0, 500));
+            aiResult = {
+              response: responseText,
+              actionRequired: false,
+              intent: 'general'
+            };
+          }
+        }
+      }
+
+      // ── Save memory updates if AI learned something ────────────────────
+      if (aiResult.memoryUpdate && typeof aiResult.memoryUpdate === 'object') {
+        await saveMemoryUpdate(db, userId, aiResult.memoryUpdate);
       }
 
       // Build standardized response
@@ -517,7 +824,6 @@ ${todoListsContext}
             }
           };
         }
-        // ... add other mappings as needed, but keep it minimal for now
         return op;
       });
 
@@ -527,7 +833,8 @@ ${todoListsContext}
           response: aiResult.response,
           actionRequired: aiResult.actionRequired || finalActions.length > 0,
           actions: finalActions,
-          intent: aiResult.intent || 'general'
+          intent: aiResult.intent || 'general',
+          sources,
         }
       });
     } catch (error) {

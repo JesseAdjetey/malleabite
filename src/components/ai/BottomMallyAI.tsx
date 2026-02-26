@@ -27,6 +27,8 @@ import {
   Fingerprint,
   AlertTriangle,
   CheckSquare,
+  ExternalLink,
+  Heart,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -37,6 +39,7 @@ import { useMallyActions } from "@/hooks/use-mally-actions";
 import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proactive-suggestions";
 import { logger } from "@/lib/logger";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
+import { useUserMemory } from "@/hooks/use-user-memory";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { mallyTTS } from "@/lib/ai/tts-service";
@@ -55,6 +58,10 @@ interface Message {
     fileName: string;
     mimeType: string;
   };
+  sources?: Array<{
+    title: string;
+    uri: string;
+  }>;
 }
 
 interface QuickAction {
@@ -169,7 +176,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     activeListId,
   } = useMallyActions();
 
-  const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos });
+  const { memory: userMemory } = useUserMemory();
+
+  const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos, memory: userMemory });
   const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
 
   // MIGRATION: Effect to move old todos to new list
@@ -432,10 +441,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         }
       }
 
-      // Update with AI response
+      // Update with AI response + sources
+      const responseSources = (response as any).sources || [];
       setMessages(prev => prev.map(m =>
         m.id === loadingId
-          ? { ...m, text: aiResponse, isLoading: false }
+          ? { ...m, text: aiResponse, isLoading: false, sources: responseSources.length > 0 ? responseSources : undefined }
           : m
       ));
 
@@ -658,6 +668,28 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                             ) : (
                               <span className="whitespace-pre-wrap">{message.text}</span>
                             )}
+                            {/* Source citations from Google Search grounding */}
+                            {message.sources && message.sources.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-white/10">
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                                  <ExternalLink size={10} />
+                                  <span>Sources</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {message.sources.map((src, i) => (
+                                    <a
+                                      key={i}
+                                      href={src.uri}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200 transition-colors border border-purple-500/20"
+                                    >
+                                      {src.title.length > 30 ? src.title.slice(0, 30) + '...' : src.title}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                           {message.sender === "user" && (
                             <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
@@ -721,6 +753,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                         {activeSuggestion.iconName === 'Calendar' && <Calendar size={12} />}
                         {activeSuggestion.iconName === 'CheckSquare' && <CheckSquare size={12} />}
                         {activeSuggestion.iconName === 'Zap' && <Zap size={12} />}
+                        {activeSuggestion.iconName === 'Star' && <Star size={12} />}
+                        {activeSuggestion.iconName === 'Heart' && <Heart size={12} />}
                       </span>
                       <button
                         className="flex-1 text-left text-foreground hover:text-foreground/80 transition-colors"

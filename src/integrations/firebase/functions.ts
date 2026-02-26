@@ -52,6 +52,10 @@ export interface SchedulingResponse {
     type: string;
     data: any;
   }>;
+  sources?: Array<{
+    title: string;
+    uri: string;
+  }>;
   error?: string;
 }
 
@@ -126,6 +130,7 @@ export class FirebaseFunctions {
         actionRequired: responseData.actionRequired || false,
         action: responseData.action || null,
         actions: responseData.actions || [],
+        sources: responseData.sources || [],
         error: responseData.error
       };
     } catch (error: any) {

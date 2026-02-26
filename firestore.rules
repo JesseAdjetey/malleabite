@@ -259,6 +259,14 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    // AI Memory - persistent AI preferences, patterns, and observations per user
+    match /ai_memory/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
     // Booking Pages - owner can manage their own booking pages
     match /booking_pages/{pageId} {
       allow read: if isAuthenticated() &&

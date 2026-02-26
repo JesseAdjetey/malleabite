@@ -13,7 +13,7 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({ children, classN
                 className="absolute inset-0 z-0 dark:hidden bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]"
             />
             <div
-                className="absolute inset-0 z-0 dark:hidden bg-[radial-gradient(circle_800px_at_100%_200px,#d5c5ff,transparent)]"
+                className="absolute inset-0 z-0 dark:hidden bg-[radial-gradient(circle_800px_at_100%_200px,rgba(213,197,255,0.25),transparent)] opacity-60"
             />
 
             {/* Dark mode: dark dot matrix */}

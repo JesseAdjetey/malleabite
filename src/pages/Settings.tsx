@@ -111,7 +111,17 @@ const Settings = () => {
     return (
       <PageWrapper>
         <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
-          <h1 className="text-large-title mb-6">Settings</h1>
+          <div className="flex items-center gap-2 mb-6">
+            <button
+              onClick={() => { haptics.light(); navigate(-1); }}
+              className="flex items-center gap-0.5 text-primary font-medium text-subheadline active:opacity-50 transition-opacity touch-manipulation"
+            >
+              <ChevronLeft className="h-5 w-5" />
+              <span>Back</span>
+            </button>
+            <div className="flex-1" />
+          </div>
+          <h1 className="text-large-title mb-6 px-1">Settings</h1>
 
           {/* Profile & Subscription section */}
           <GroupedList className="mb-6">

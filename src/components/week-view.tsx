@@ -55,13 +55,13 @@ const WeekView = () => {
     hasRecurringEvents,
     getRecurringEvents,
   } = useBulkSelection();
-  
+
   // Calendar filtering
   const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
-  
+
   // Undo/redo functionality - keyboard shortcuts are handled automatically
   const { trackCreateEvent, trackDeleteEvent, trackUpdateEvent, trackBulkDeleteEvents } = useUndoRedo();
-  
+
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
     { date: Date; startTime: string } | undefined
@@ -71,7 +71,7 @@ const WeekView = () => {
     day: dayjs.Dayjs;
     hour: dayjs.Dayjs;
   } | null>(null);
-  
+
   // State for recurring event drop dialog
   const [recurringDropDialogOpen, setRecurringDropDialogOpen] = useState(false);
   const [pendingRecurringDrop, setPendingRecurringDrop] = useState<RecurringDropResult | null>(null);
@@ -86,17 +86,17 @@ const WeekView = () => {
     handleCreateCalendarOnly,
     handleCreateTodoFromEvent
   } = useTodoCalendarIntegration();
-  
+
   // Handler for when a recurring event is dropped
   const handleRecurringEventDrop = useCallback((result: RecurringDropResult) => {
     if (!result.isRecurring) return;
-    
+
     // Find the parent event to show in dialog
-    const parentEvent = events.find(e => 
-      e.id === result.parentId || 
+    const parentEvent = events.find(e =>
+      e.id === result.parentId ||
       e.id.startsWith(result.parentId || '')
     );
-    
+
     if (parentEvent) {
       setRecurringEventForDialog(parentEvent);
       setPendingRecurringDrop(result);
@@ -107,13 +107,13 @@ const WeekView = () => {
       toast.success("Event moved");
     }
   }, [events, addEvent]);
-  
+
   // Handle confirmation from recurring event dialog
   const handleRecurringDropConfirm = useCallback(async (scope: EditScope) => {
     if (!pendingRecurringDrop || !pendingRecurringDrop.newEvent) return;
-    
+
     const { parentId, originalDate, newEvent } = pendingRecurringDrop;
-    
+
     try {
       if (scope === 'single') {
         // Move only this occurrence - create new event and add exception to parent
@@ -159,7 +159,7 @@ const WeekView = () => {
       console.error("Error handling recurring drop:", error);
       toast.error("Failed to move event");
     }
-    
+
     setPendingRecurringDrop(null);
     setRecurringEventForDialog(null);
   }, [pendingRecurringDrop, events, addEvent, updateEvent, addRecurrenceException]);
@@ -195,16 +195,16 @@ const WeekView = () => {
     if (!weekDays.length) {
       return events.filter(event => isCalendarVisible(event.calendarId));
     }
-    
+
     // weekDays returns { currentDate, today } objects, not dayjs directly
     const weekStart = weekDays[0].currentDate.startOf('day').toDate();
     const weekEnd = weekDays[weekDays.length - 1].currentDate.endOf('day').toDate();
-    
+
     const allInstances: CalendarEventType[] = [];
-    
+
     // First filter by calendar visibility, then expand recurring events
     const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
-    
+
     visibleEvents.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
@@ -218,7 +218,7 @@ const WeekView = () => {
         allInstances.push(event);
       }
     });
-    
+
     return allInstances;
   }, [events, userSelectedDate, isCalendarVisible]);
 
@@ -263,17 +263,17 @@ const WeekView = () => {
     try {
       let dataString = e.dataTransfer.getData('application/json');
       console.log("🎯 DROP - application/json:", dataString);
-      
+
       if (!dataString) {
         dataString = e.dataTransfer.getData('text/plain');
         console.log("🎯 DROP - text/plain fallback:", dataString);
       }
-      
+
       if (!dataString) {
         dataString = e.dataTransfer.getData('text');
         console.log("🎯 DROP - text fallback:", dataString);
       }
-      
+
       if (!dataString) {
         console.error("❌ No data found in drag event");
         return;
@@ -489,10 +489,12 @@ const WeekView = () => {
 
   return (
     <>
-      <div className="glass mx-2 my-2 rounded-xl overflow-hidden">
+      <div className="glass mx-2 mt-2 mb-3 rounded-xl overflow-hidden border border-purple-200 dark:border-white/10 shadow-sm bg-gradient-to-r from-purple-50/80 to-purple-100/50 dark:from-secondary/50 dark:to-secondary/50">
         <WeekHeader userSelectedDate={userSelectedDate} />
+      </div>
 
-        <ScrollArea className="h-[calc(100vh-160px)]">
+      <div className="mx-2 mb-2 rounded-2xl overflow-hidden">
+        <ScrollArea className="h-[calc(100vh-170px)]">
           <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr] px-4 py-2">
             <TimeColumn />
             {getWeekDays(userSelectedDate).map(({ currentDate }, index) => {
@@ -560,7 +562,7 @@ const WeekView = () => {
           onCreateCalendarOnly={handleCreateCalendarOnly}
         />
       )}
-      
+
       {/* Recurring Event Edit Dialog for drag-drop operations */}
       {recurringEventForDialog && (
         <RecurringEventEditDialog

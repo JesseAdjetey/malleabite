@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, User } from 'lucide-react';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -104,19 +104,10 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     }
   };
 
-  const formatDate = () => {
-    switch (selectedView) {
-      case "Month":
-        return dayjs(new Date(dayjs().year(), selectedMonthIndex)).format("MMMM YYYY");
-      case "Week":
-        const weekStart = userSelectedDate.startOf('week').format("MMM D");
-        const weekEnd = userSelectedDate.endOf('week').format("MMM D, YYYY");
-        return `${weekStart} - ${weekEnd}`;
-      case "Day":
-        return userSelectedDate.format("ddd, MMM D");
-      default:
-        return "";
-    }
+  const formatWeekRange = () => {
+    const weekStart = userSelectedDate.startOf('week').format("D");
+    const weekEnd = userSelectedDate.endOf('week').format("D");
+    return `${weekStart}-${weekEnd}`;
   };
 
   const handleViewChange = (view: string) => {
@@ -125,10 +116,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   return (
-    <div className="bg-background/80 backdrop-blur-xl border-b border-border/40 px-4 py-2 flex items-center justify-between">
-      {/* Left Side */}
-      <div className="flex items-center gap-1 flex-1 min-w-0">
-        {/* Home button — only when not on root */}
+    <div className="px-4 py-2 flex items-center justify-between w-full relative z-10 pointer-events-none">
+      {/* Left Side (Home Button) */}
+      <div className="flex items-center gap-1 flex-1 min-w-0 pointer-events-auto">
         {location.pathname !== '/' && (
           <Button
             variant="ghost"
@@ -136,93 +126,78 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             onClick={() => navigate('/')}
             className="h-9 w-9 p-0"
           >
-            <Home className="h-5 w-5" />
+            <Home className="h-5 w-5 text-gray-700 dark:text-gray-300" />
           </Button>
         )}
-
-        {/* Date navigation arrows */}
-        <button
-          onClick={handlePrevClick}
-          className="p-1.5 rounded-full text-muted-foreground hover:bg-accent transition-colors touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center active:scale-95"
-          aria-label="Previous"
-        >
-          <ChevronLeft size={20} />
-        </button>
-        <button
-          onClick={handleNextClick}
-          className="p-1.5 rounded-full text-muted-foreground hover:bg-accent transition-colors touch-manipulation min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center active:scale-95"
-          aria-label="Next"
-        >
-          <ChevronRight size={20} />
-        </button>
-
-        {/* Date display */}
-        <h1 className="text-headline text-foreground ml-1 whitespace-nowrap truncate">{formatDate()}</h1>
-
-        {/* Today — iOS style text button */}
-        <button
-          onClick={handleTodayClick}
-          className="text-subheadline text-primary font-medium ml-2 hover:opacity-70 transition-opacity touch-manipulation active:opacity-50 whitespace-nowrap"
-        >
-          Today
-        </button>
       </div>
 
-      {/* Right Side */}
-      <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-        {/* iOS Segmented Control for view switcher */}
-        <div className="flex bg-muted/60 rounded-lg p-0.5 gap-0.5">
-          {["Day", "Week", "Month"].map((view) => (
-            <button
-              key={view}
-              onClick={() => handleViewChange(view)}
-              className={`h-7 px-2.5 rounded-md text-xs font-medium transition-all duration-150 touch-manipulation ${
-                selectedView === view
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span className="hidden sm:inline">{view}</span>
-              <span className="sm:hidden">{view.charAt(0)}</span>
-            </button>
-          ))}
+      {/* Right Side Container */}
+      <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-3 py-2 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
+
+        {/* Today Button */}
+        <button
+          onClick={handleTodayClick}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-medium flex-shrink-0"
+        >
+          <span className="text-gray-700 dark:text-gray-300">Today</span>
+          <span className="text-muted-foreground/30">|</span>
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{dayjs().format('D')}</span>
+        </button>
+
+        {/* Date Navigator Box */}
+        <div className="flex items-center bg-black/5 dark:bg-white/10 rounded-full px-1.5 py-0.5 flex-shrink-0 min-h-[36px]">
+          <button onClick={handlePrevClick} className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground">
+            <ChevronLeft size={16} />
+          </button>
+
+          <div className="px-2 text-xs font-semibold text-center leading-tight min-w-[70px] text-black dark:text-gray-100">
+            {selectedView === 'Week' ? (
+              <>
+                <div>{dayjs(userSelectedDate).format('MMM, YYYY')}</div>
+                <div className="text-[10px] text-muted-foreground font-normal">{formatWeekRange()}</div>
+              </>
+            ) : selectedView === 'Month' ? (
+              <div>{dayjs(new Date(dayjs().year(), selectedMonthIndex)).format('MMM, YYYY')}</div>
+            ) : (
+              <>
+                <div>{userSelectedDate.format('MMM, YYYY')}</div>
+                <div className="text-[10px] text-muted-foreground font-normal">{userSelectedDate.format('dddd')}</div>
+              </>
+            )}
+          </div>
+
+          <button onClick={handleNextClick} className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground">
+            <ChevronRight size={16} />
+          </button>
         </div>
 
-        <TooltipProvider>
-          {<BulkModeToggle
-            isBulkMode={isBulkMode}
-            onToggle={handleToggleBulkMode}
-            selectedCount={selectedCount}
-            onDelete={bulkDelete}
-            onUpdateColor={bulkUpdateColor}
-            onReschedule={bulkReschedule}
-            onDuplicate={bulkDuplicate}
-            onDeselectAll={deselectAll}
-            iconOnly
-          />}
+        {/* Calendar Account Dropdown (UI Mock) */}
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 transition-colors text-sm font-medium border border-purple-500/20 flex-shrink-0">
+          <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-[10px] text-white">
+            <User size={12} />
+          </div>
+          <span>jesseadjetey</span>
+        </button>
 
-          {!isMobile && <UndoRedoToolbar />}
+        {/* Tools & Actions */}
+        <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+          <TooltipProvider>
+            <BulkModeToggle
+              isBulkMode={isBulkMode}
+              onToggle={handleToggleBulkMode}
+              selectedCount={selectedCount}
+              onDelete={bulkDelete}
+              onUpdateColor={bulkUpdateColor}
+              onReschedule={bulkReschedule}
+              onDuplicate={bulkDuplicate}
+              onDeselectAll={deselectAll}
+              iconOnly
+            />
 
-          {!isMobile && (
-            isPro ? (
-              <Badge className="bg-purple-600 text-white text-xs">
-                <Crown className="h-3 w-3 mr-1" />
-                PRO
-              </Badge>
-            ) : (
-              <Button
-                size="sm"
-                onClick={() => navigate('/pricing')}
-                className="h-8 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white text-xs"
-              >
-                <Crown className="h-3 w-3 mr-1" />
-                Upgrade
-              </Button>
-            )
-          )}
-
-          {!isMobile && <SettingsNav />}
-        </TooltipProvider>
+            {!isMobile && <UndoRedoToolbar />}
+            {!isMobile && <SettingsNav />}
+          </TooltipProvider>
+        </div>
       </div>
     </div>
   );

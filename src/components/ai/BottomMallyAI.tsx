@@ -591,35 +591,45 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         )}
       </AnimatePresence>
 
-      {/* Main container - fixed at bottom (borderless fade effect) */}
+      {/* Main container - borderless fade emerging from bottom */}
       <AnimatePresence>
         {!isMinimized && (
           <motion.div
             ref={containerRef}
-            initial={{ opacity: 0, y: 50 }}
+            initial={{ opacity: 0, y: 60 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
+            exit={{ opacity: 0, y: 60 }}
             className={cn(
               "fixed z-50 flex flex-col",
               isMobile ? "left-0 right-0 bottom-[60px]" : "left-0 right-0 bottom-0",
-              "backdrop-blur-3xl"
             )}
             style={{
               maxHeight: isMobile ? "80vh" : "70vh",
-              background: "linear-gradient(to top, rgba(15, 10, 26, 0.98) 0%, rgba(15, 10, 26, 0.8) 25%, transparent 50%)",
+              /* Layered gradient: fully transparent at top fading into dark glassy base */
+              background: `
+                linear-gradient(
+                  to bottom,
+                  transparent 0%,
+                  rgba(8, 5, 18, 0) 0%,
+                  rgba(8, 5, 18, 0.45) 10%,
+                  rgba(8, 5, 18, 0.82) 28%,
+                  rgba(8, 5, 18, 0.96) 100%
+                )
+              `,
+              /* No border, no shadow box — just the gradient itself as the visual */
             }}
-            transition={{ type: "spring", damping: 30, stiffness: 250 }}
+            transition={{ type: "spring", damping: 32, stiffness: 220 }}
           >
             {/* No DoodleBackground or hard borders for the fade look */}
 
 
-            {/* Minimize button - top right */}
+            {/* Minimize button - top right, shifted closer */}
             <button
               onClick={() => setIsMinimized(true)}
-              className="absolute top-2 right-2 p-1.5 rounded-full hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors z-10"
+              className="absolute top-3 right-8 p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors z-10"
               title="Minimize"
             >
-              <Minimize2 className="h-4 w-4" />
+              <Minimize2 className="h-5 w-5" />
             </button>
 
             {/* Messages area - shows chat history */}

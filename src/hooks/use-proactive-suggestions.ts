@@ -179,7 +179,70 @@ function analyzeSuggestions(
     });
   }
 
-  // --- 7. Wellness / burnout (medium) - memory-aware ---
+  // --- 7. Work Hours Check (medium) - memory-aware ---
+  if (memory?.preferences?.workHoursStart || memory?.preferences?.workHoursEnd) {
+    const { workHoursStart, workHoursEnd } = memory.preferences;
+    for (const dayStr of [todayStr, tomorrowStr]) {
+      const dayEvents = eventsForDay(dayStr);
+      const outsideHours = dayEvents.filter(e => {
+        const eStart = dayjs(e.startsAt);
+        const eEnd = dayjs(e.endsAt);
+        if (workHoursStart) {
+          const [h, m] = workHoursStart.split(':').map(Number);
+          if (eStart.hour() < h || (eStart.hour() === h && eStart.minute() < m)) return true;
+        }
+        if (workHoursEnd) {
+          const [h, m] = workHoursEnd.split(':').map(Number);
+          if (eEnd.hour() > h || (eEnd.hour() === h && eEnd.minute() > m)) return true;
+        }
+        return false;
+      });
+
+      if (outsideHours.length > 0) {
+        const label = dayStr === todayStr ? 'today' : 'tomorrow';
+        suggestions.push({
+          id: `work-hours-${dayStr}`,
+          type: 'wellness',
+          priority: 'medium',
+          message: `${outsideHours.length} events ${label} are outside your preferred hours (${workHoursStart || '?'}-${workHoursEnd || '?'})`,
+          prompt: `I have events ${label} that fall outside my preferred work hours. Can you help me reschedule them to fit within ${workHoursStart || '9 AM'} and ${workHoursEnd || '5 PM'}?`,
+          iconName: 'Clock',
+        });
+      }
+    }
+  }
+
+  // --- 8. Break Interval Check (medium) - memory-aware ---
+  if (memory?.preferences?.breakInterval) {
+    const minBreak = memory.preferences.breakInterval;
+    for (const dayStr of [todayStr, tomorrowStr]) {
+      const dayEvents = eventsForDay(dayStr);
+      let breakViolationCount = 0;
+
+      for (let i = 1; i < dayEvents.length; i++) {
+        const prev = dayEvents[i - 1];
+        const curr = dayEvents[i];
+        const gap = dayjs(curr.startsAt).diff(dayjs(prev.endsAt), 'minute');
+        if (gap >= 0 && gap < minBreak) {
+          breakViolationCount++;
+        }
+      }
+
+      if (breakViolationCount >= 2 && !suggestions.some(s => s.id === `back-to-back-${dayStr}`)) {
+        const label = dayStr === todayStr ? 'today' : 'tomorrow';
+        suggestions.push({
+          id: `break-interval-${dayStr}`,
+          type: 'wellness',
+          priority: 'medium',
+          message: `Multiple meetings ${label} lack your preferred ${minBreak}m break`,
+          prompt: `Several of my meetings ${label} don't have the ${minBreak}-minute break I prefer. Can you help me shift them to create proper breathing room?`,
+          iconName: 'Heart',
+        });
+      }
+    }
+  }
+
+  // --- 9. Wellness / burnout (medium) - memory-aware ---
   if (memory) {
     const highMeetingDays = memory.patterns?.highMeetingDays;
     if (highMeetingDays && highMeetingDays.length >= 3) {

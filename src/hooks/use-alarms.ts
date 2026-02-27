@@ -15,6 +15,7 @@ import {
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
+import { scheduleAlarmNotification, cancelAlarmNotification } from '@/lib/native-notification-scheduler';
 
 export interface Alarm {
   id?: string;
@@ -121,6 +122,9 @@ export function useAlarms(instanceId?: string) {
       }
 
       const docRef = await addDoc(collection(db, 'alarms'), newAlarm);
+      // Schedule native OS notification
+      scheduleAlarmNotification({ ...newAlarm, id: docRef.id } as Alarm)
+        .catch(err => console.error('[Alarms] Failed to schedule native notification:', err));
       toast.success(`Alarm "${title}" created`);
       return { success: true, alarmId: docRef.id };
     } catch (err) {
@@ -142,6 +146,15 @@ export function useAlarms(instanceId?: string) {
         ...updates,
         updatedAt: serverTimestamp()
       });
+      // Re-schedule native notification: cancel old, schedule new if still enabled
+      const existingAlarm = alarms.find(a => a.id === alarmId);
+      if (existingAlarm) {
+        cancelAlarmNotification(alarmId).catch(() => {});
+        const merged = { ...existingAlarm, ...updates, id: alarmId };
+        if (merged.enabled) {
+          scheduleAlarmNotification(merged as Alarm).catch(() => {});
+        }
+      }
       toast.success('Alarm updated');
       return { success: true };
     } catch (err) {
@@ -157,6 +170,8 @@ export function useAlarms(instanceId?: string) {
 
     try {
       await deleteDoc(doc(db, 'alarms', alarmId));
+      // Cancel native notification
+      cancelAlarmNotification(alarmId).catch(() => {});
       toast.success('Alarm deleted');
       return { success: true };
     } catch (err) {

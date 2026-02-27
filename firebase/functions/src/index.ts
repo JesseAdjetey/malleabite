@@ -21,24 +21,19 @@ const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 // Define request data interface
 interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
+  role: 'user' | 'model';
+  parts: string;
 }
 
 interface ProcessAIRequestData {
   message: string;
   userId: string;
+  history?: ConversationMessage[];
   imageData?: {
     dataUrl: string;
     mimeType: string;
   };
-  context?: {
-    currentTime?: string;
-    timeZone?: string;
-    conversationHistory?: ConversationMessage[];
-    todos?: any[];
-    eisenhowerItems?: any[];
-  };
+  context?: string | any;
 }
 
 // Helper to format events for the AI context
@@ -344,7 +339,16 @@ export const processAIRequest = onRequest(
 
       // Parse request body
       const requestData = req.body.data || req.body;
-      const { message, userId, context: clientContext } = requestData as ProcessAIRequestData;
+      const { message, userId, context: rawContext, history: clientHistory } = requestData as ProcessAIRequestData;
+
+      // Parse context if it's a string
+      let clientContext: any = {};
+      try {
+        clientContext = typeof rawContext === 'string' ? JSON.parse(rawContext) : (rawContext || {});
+      } catch (e) {
+        console.warn('Failed to parse client context:', e);
+        clientContext = rawContext || {};
+      }
 
       if (!message || !userId) {
         res.status(400).json({
@@ -449,12 +453,6 @@ export const processAIRequest = onRequest(
       } catch (dbError) {
         console.warn('Could not fetch alarms:', dbError);
       }
-
-      // Build conversation history string (if needed for context fallback)
-      const conversationHistory = (clientContext as any)?.conversationHistory || [];
-      const historySummary = conversationHistory.length > 0
-        ? conversationHistory.map((m: any) => `${m.role === 'user' ? 'User' : 'Mally'}: ${m.content}`).join('\n')
-        : 'No previous conversation.';
 
       // Build available calendars context for multi-account support
       const availableCalendars = (clientContext as any)?.availableCalendars || [];
@@ -596,6 +594,24 @@ Do NOT make up facts. If you search and find nothing, say so.
 4. **Wellness nudges**: If no break exists between 12–2pm, gently suggest one. If user has 5+ days of heavy schedules, nudge about burnout.
 
 ═══════════════════════════════════════════════════
+  CONVERSATIONAL CONTINUITY (CRITICAL)
+═══════════════════════════════════════════════════
+
+Mally ALWAYS maintains context. You must NEVER treat a short follow-up as a new, unrelated command.
+
+- **PARAMETER FULFILLMENT**: If you just asked a question (e.g., "What title?", "When?", "Confirm?"), and the user responds with a fragment, phrase, or single word, that word IS the answer to your question.
+- **EXAMPLE**: 
+    1. Mally: "I can schedule that! What should the title be?"
+    2. User: "Gym"
+    3. Action: Create event with title "Gym".
+- **EXAMPLE 2**:
+    1. Mally: "What would you like me to call this event?"
+    2. User: "call it bike racing"
+    3. Action: Create event with title "bike racing".
+- **STATEFULNESS**: If you established an intent (like "create event") in the previous turn, stay in that intent until parameters are filled or user changes the topic.
+- **PRONOUN RESOLUTION**: "it", "that", "this" ALWAYS refer to the last mentioned object in history.
+
+═══════════════════════════════════════════════════
   PRODUCTIVITY DOCTOR MODE
 ═══════════════════════════════════════════════════
 
@@ -667,7 +683,7 @@ CALENDARS:
 ${calendarsContext}
 
 HISTORY_SUMMARY:
-${historySummary}
+(Removed redundant summary - using chat history)
 
 SIDEBAR_PAGES:
 ${sidebarContext}
@@ -685,7 +701,8 @@ ${todoListsContext}
 - MULTI-EVENT PLANNING: Produce ALL events in one actions array.
 - DURATION: Default 1 hour. Never start == end.
 - ISO DATES: Full ISO 8601 ("2026-02-17T09:00:00"). Use user's timezone.
-- FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks).
+- FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks, no preamble).
+- CRITICAL: Your response must be PARSABLE JSON. Start with '{' and end with '}'.
 
 ═══════════════════════════════════════════════════
   JSON RESPONSE STRUCTURE
@@ -696,29 +713,61 @@ ${todoListsContext}
   "actionRequired": boolean,
   "intent": "scheduling" | "task_management" | "query" | "general" | "wellness" | "diagnosis",
   "actions": [
+    // ── Calendar Events ──
     { "type": "create_event", "data": { "title": "...", "start": "ISO", "end": "ISO", "isRecurring": false, "recurrenceRule": null } },
     { "type": "update_event", "data": { "eventId": "...", "start": "ISO", "end": "ISO", "title": "..." } },
     { "type": "delete_event", "data": { "eventId": "..." } },
+    { "type": "archive_calendar", "data": { "folderName": "..." } },
+    { "type": "restore_folder", "data": { "folderName": "..." } },
+    // ── Todos ──
     { "type": "create_todo", "data": { "text": "...", "listName": "..." } },
     { "type": "complete_todo", "data": { "todoId": "..." } },
+    { "type": "delete_todo", "data": { "todoId": "..." } },
+    { "type": "move_todo", "data": { "todoId": "...", "listName": "..." } },
     { "type": "create_todo_list", "data": { "name": "...", "color": "#hex" } },
-    { "type": "create_alarm", "data": { "title": "...", "time": "ISO" } },
-    { "type": "create_reminder", "data": { "title": "...", "reminderTime": "ISO" } },
+    { "type": "delete_todo_list", "data": { "listName": "..." } },
+    { "type": "set_active_todo_list", "data": { "listName": "..." } },
+    // ── Eisenhower Matrix ──
     { "type": "create_eisenhower", "data": { "text": "...", "quadrant": "urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important" } },
+    { "type": "update_eisenhower", "data": { "itemId": "...", "quadrant": "urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important" } },
+    { "type": "delete_eisenhower", "data": { "itemId": "..." } },
+    // ── Alarms ──
+    { "type": "create_alarm", "data": { "title": "...", "time": "ISO" } },
+    { "type": "update_alarm", "data": { "alarmId": "...", "title": "...", "time": "ISO" } },
+    { "type": "delete_alarm", "data": { "alarmId": "..." } },
+    { "type": "toggle_alarm", "data": { "alarmId": "...", "enabled": true } },
+    { "type": "link_alarm", "data": { "alarmId": "...", "linkedEventId": "optional", "linkedTodoId": "optional" } },
+    // ── Reminders ──
+    { "type": "create_reminder", "data": { "title": "...", "reminderTime": "ISO" } },
+    { "type": "update_reminder", "data": { "reminderId": "...", "title": "...", "reminderTime": "ISO" } },
+    { "type": "delete_reminder", "data": { "reminderId": "..." } },
+    { "type": "toggle_reminder", "data": { "reminderId": "...", "isActive": true } },
+    // ── Pomodoro ──
     { "type": "start_pomodoro", "data": {} },
     { "type": "pause_pomodoro", "data": {} },
     { "type": "reset_pomodoro", "data": {} },
     { "type": "set_pomodoro_timer", "data": { "focusTime": 25, "breakTime": 5 } },
     { "type": "set_pomodoro_settings", "data": { "focusTime": 25, "breakTime": 5, "focusTarget": 120 } },
+    // ── Templates ──
+    { "type": "create_template", "data": { "title": "...", "duration": 60, "category": "...", "color": "#hex" } },
+    { "type": "create_from_template", "data": { "templateName": "...", "start": "ISO" } },
+    { "type": "delete_template", "data": { "templateName": "..." } },
+    // ── Invites ──
+    { "type": "send_invite", "data": { "email": "...", "eventId": "...", "message": "optional" } },
+    { "type": "respond_invite", "data": { "inviteId": "...", "status": "accepted|declined" } },
+    { "type": "delete_invite", "data": { "inviteId": "..." } },
+    // ── View & Navigation ──
     { "type": "change_view", "data": { "view": "Day|Week|Month" } },
+    // ── Module Control ──
     { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "optional" } },
     { "type": "remove_module", "data": { "moduleType": "...", "title": "optional", "pageName": "optional" } },
     { "type": "minimize_module", "data": { "moduleType": "...", "pageName": "optional" } },
     { "type": "maximize_module", "data": { "moduleType": "...", "pageName": "optional" } },
+    // ── Page Control ──
     { "type": "create_page", "data": { "title": "...", "icon": "optional" } },
     { "type": "delete_page", "data": { "title": "..." } },
     { "type": "switch_page", "data": { "title": "..." } },
-    { "type": "set_active_todo_list", "data": { "listName": "..." } },
+    // ── Calendar Filters ──
     { "type": "set_calendar_filter", "data": { "calendarName": "...", "visible": true } },
     { "type": "set_calendar_filter", "data": { "showAll": true } }
   ],
@@ -735,10 +784,10 @@ INCLUDE "memoryUpdate" whenever you learn something new about the user. Omit it 
       `;
 
       // Format history for Gemini chat session
-      const history = (clientContext as any)?.history || [];
+      const history = clientHistory || (clientContext as any)?.history || [];
       const formattedHistory = history.map((h: any) => ({
         role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.parts }]
+        parts: [{ text: h.parts || h.content || "" }]
       }));
 
       const chat = model.startChat({
@@ -766,35 +815,37 @@ INCLUDE "memoryUpdate" whenever you learn something new about the user. Omit it 
         console.warn('Could not extract grounding metadata:', groundingErr);
       }
 
-      // Clean up and parse JSON response — robust multi-strategy parser
-      let aiResult;
+      let aiResult: any = null;
+      const cleanResponse = responseText.trim();
+
       try {
-        // Strategy 1: Direct parse (fastest path)
-        aiResult = JSON.parse(responseText.trim());
-      } catch {
+        // Strategy 1: Simple JSON parse (most common)
+        aiResult = JSON.parse(cleanResponse);
+      } catch (e1) {
         try {
-          // Strategy 2: Strip markdown code fences
-          const stripped = responseText
+          // Strategy 2: Handle markdown code blocks
+          const stripped = cleanResponse
             .replace(/```json\s*/gi, '')
             .replace(/```\s*/g, '')
             .trim();
           aiResult = JSON.parse(stripped);
-        } catch {
+        } catch (e2) {
           try {
-            // Strategy 3: Extract first JSON object via regex (handles "Here's the response: {...}")
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            // Strategy 3: Aggressive JSON extraction via regex
+            const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
               aiResult = JSON.parse(jsonMatch[0]);
             } else {
               throw new Error('No JSON object found');
             }
-          } catch (finalError) {
-            console.error('All JSON parse strategies failed:', finalError);
-            console.error('Raw response:', responseText.slice(0, 500));
+          } catch (e3) {
+            console.error('AI JSON parsing failed completely. Falling back to text wrapper.');
+            // Fallback: If it's not JSON, treat the whole thing as the response
             aiResult = {
-              response: responseText,
+              response: cleanResponse,
               actionRequired: false,
-              intent: 'general'
+              intent: 'general',
+              actions: []
             };
           }
         }
@@ -827,10 +878,37 @@ INCLUDE "memoryUpdate" whenever you learn something new about the user. Omit it 
         return op;
       });
 
+      // Ensure response is a friendly message, not raw JSON
+      // Also extract any actions/data that might be embedded in a nested JSON response
+      let finalResponse = aiResult.response || '';
+      if (typeof finalResponse === 'string' && finalResponse.trimStart().startsWith('{')) {
+        try {
+          const nested = JSON.parse(finalResponse);
+          finalResponse = nested.response || nested.message || finalResponse;
+          // If the outer parse had no actions but the nested JSON does, use those
+          if ((!aiResult.actions || aiResult.actions.length === 0) && nested.actions) {
+            aiResult.actions = nested.actions;
+          }
+          if (!aiResult.actionRequired && nested.actionRequired) {
+            aiResult.actionRequired = nested.actionRequired;
+          }
+          if (!aiResult.intent && nested.intent) {
+            aiResult.intent = nested.intent;
+          }
+          if (!aiResult.memoryUpdate && nested.memoryUpdate) {
+            aiResult.memoryUpdate = nested.memoryUpdate;
+            // Save the memory update we just extracted
+            if (typeof nested.memoryUpdate === 'object') {
+              await saveMemoryUpdate(db, userId, nested.memoryUpdate);
+            }
+          }
+        } catch { /* not JSON, use as-is */ }
+      }
+
       res.json({
         result: {
           success: true,
-          response: aiResult.response,
+          response: finalResponse,
           actionRequired: aiResult.actionRequired || finalActions.length > 0,
           actions: finalActions,
           intent: aiResult.intent || 'general',

@@ -18,9 +18,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
-import { CalendarEventType } from '@/lib/stores/types';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import { useEventStore } from '@/lib/stores/event-store';
+import { logger } from '@/lib/logger';
+import { CalendarEventType } from '@/lib/stores/types';
 
 // Usage limits callback type - will be set by the component using this hook
 type UsageLimitCallback = () => Promise<boolean>;
@@ -45,18 +47,31 @@ interface SupabaseActionResponse {
 
 // Helper function to clean recurrence rule object for Firestore
 // Firestore doesn't accept undefined values, so we filter them out
-const cleanRecurrenceRule = (rule: Record<string, any>): Record<string, any> | null => {
-  if (!rule) return null;
+// Helper to recursively remove undefined values
+const removeUndefinedDeep = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
 
-  const cleaned: Record<string, any> = {};
-  for (const [key, value] of Object.entries(rule)) {
-    if (value !== undefined && value !== null) {
-      cleaned[key] = value;
-    }
+  // Preserve Date objects and Firestore Timestamps
+  if (obj instanceof Date || obj instanceof Timestamp) return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedDeep).filter(v => v !== undefined);
   }
 
-  // Return null if no valid fields remain
-  return Object.keys(cleaned).length > 0 ? cleaned : null;
+  const result: any = {};
+  Object.keys(obj).forEach(key => {
+    const val = removeUndefinedDeep(obj[key]);
+    if (val !== undefined) {
+      result[key] = val;
+    }
+  });
+  return result;
+};
+
+const cleanRecurrenceRule = (rule: Record<string, any>): Record<string, any> | null => {
+  if (!rule) return null;
+  return removeUndefinedDeep(rule);
 };
 
 export interface ArchivedFolder {
@@ -95,6 +110,8 @@ export function useCalendarEvents() {
       data.endsAt?.toDate?.()?.toISOString() ||
       (typeof data.endsAt === 'string' ? data.endsAt : null);
 
+    const userId = data.userId || data.user_id;
+
     // Extract date from startsAt for calendar display
     const date = startsAt ? new Date(startsAt).toISOString().split('T')[0] : '';
     // Handle isArchived which might be missing in old docs
@@ -111,6 +128,7 @@ export function useCalendarEvents() {
       hasAlarm: data.hasAlarm || data.has_alarm || false,
       hasReminder: data.hasReminder || data.has_reminder || false,
       todoId: data.todoId || data.todo_id || null,
+      userId: userId,
       startsAt: startsAt || '',
       endsAt: endsAt || '',
 
@@ -261,6 +279,7 @@ export function useCalendarEvents() {
 
   // Add a new event
   const addEvent = async (event: CalendarEventType): Promise<SupabaseActionResponse> => {
+    let optimisticId = '';
     if (!user?.uid) {
       toast.error('User not authenticated');
       return { success: false };
@@ -371,7 +390,7 @@ export function useCalendarEvents() {
       };
 
       // OPTIMISTIC UPDATE: Add to local state immediately for instant UI feedback
-      const optimisticId = `temp_${Date.now()}`;
+      optimisticId = `temp_${Date.now()}`;
       const optimisticEvent: CalendarEventType = {
         id: optimisticId,
         title: eventTitle,
@@ -388,6 +407,9 @@ export function useCalendarEvents() {
         recurrenceRule: newEvent.recurrenceRule,
       };
 
+      // Add to global state immediately (optimistic)
+      useEventStore.getState().addEvent(optimisticEvent);
+
       // Add to state immediately (optimistic)
       setEvents(prev => [...prev, optimisticEvent]);
 
@@ -396,6 +418,7 @@ export function useCalendarEvents() {
 
       // Update the optimistic event with the real ID (the listener will handle this,
       // but we remove the temp one to prevent duplicates)
+      useEventStore.getState().deleteEvent(optimisticId);
       setEvents(prev => prev.filter(e => e.id !== optimisticId));
 
       // Increment usage count after successful creation
@@ -408,6 +431,7 @@ export function useCalendarEvents() {
     } catch (error) {
       console.error('Error adding event:', error);
       // Remove optimistic event on failure
+      useEventStore.getState().deleteEvent(optimisticId);
       setEvents(prev => prev.filter(e => !e.id.startsWith('temp_')));
       toast.error('Failed to add event');
       return { success: false, error };
@@ -496,9 +520,10 @@ export function useCalendarEvents() {
         // Ensure archiving fields are preserved or set
         isArchived: event.isArchived ?? false,
         folderName: event.folderName ?? null,
+        userId: event.userId || user.uid,
       };
 
-      await updateDoc(doc(db, 'calendar_events', event.id), updatedEvent);
+      await updateDoc(doc(db, 'calendar_events', event.id), removeUndefinedDeep(updatedEvent));
       toast.success('Event updated');
       return { success: true };
     } catch (error) {

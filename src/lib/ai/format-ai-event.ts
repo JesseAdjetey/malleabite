@@ -14,23 +14,18 @@ export function formatAIEvent(event: Partial<CalendarEventType> & { start?: stri
   let eventDate = event.date;
   let description = event.description || '';
 
-  // If startsAt is an ISO datetime string, parse it
+  // If startsAt is an ISO datetime string, keep it as ISO for addEvent
   if (typeof startsAt === 'string' && startsAt.includes('T')) {
     const startDayjs = dayjs(startsAt);
     const endDayjs = dayjs(endsAt);
 
-    const startTimeStr = startDayjs.format('HH:mm');
-    const endTimeStr = endDayjs.format('HH:mm');
-
-    // Update to HH:MM format for validation
-    startsAt = startTimeStr;
-    endsAt = endTimeStr;
-
     // Date must be a Date object for addEvent
     eventDate = startDayjs.toDate();
 
-    // Prepend time to description for addEvent parsing logic
-    description = `${startTimeStr} - ${endTimeStr} | ${description}`;
+    // Keep startsAt/endsAt as ISO strings — addEvent handles them at lines 306-325
+    // Do NOT downgrade to HH:mm, as that causes Invalid Date errors
+    startsAt = startDayjs.toISOString();
+    endsAt = endDayjs.toISOString();
   }
 
   const formattedEvent: CalendarEventType = {

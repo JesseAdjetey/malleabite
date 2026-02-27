@@ -38,8 +38,9 @@ const WeekView = () => {
     toggleEventLock,
     isEventSummaryOpen,
     closeEventSummary,
+    events,
   } = useEventStore();
-  const { events, updateEvent, addEvent, addRecurrenceException, removeEvent } = useCalendarEvents();
+  const { updateEvent, addEvent, addRecurrenceException, removeEvent } = useCalendarEvents();
   const { linkTodoToEvent, deleteTodo } = useTodos();
   const {
     isBulkMode,

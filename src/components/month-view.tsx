@@ -27,9 +27,9 @@ import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
-  const { openEventSummary, isEventSummaryOpen, closeEventSummary } =
+  const { openEventSummary, isEventSummaryOpen, closeEventSummary, events } =
     useEventStore();
-  const { events, updateEvent, addEvent } = useCalendarEvents();
+  const { updateEvent, addEvent } = useCalendarEvents();
   const { selectedView, setView } = useViewStore();
   const isMobile = useIsMobile();
 

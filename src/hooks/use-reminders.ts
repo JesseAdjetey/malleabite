@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
 import { REMINDER_SOUNDS } from './use-notification-manager';
+import { scheduleReminderNotification, cancelReminderNotification } from '@/lib/native-notification-scheduler';
 
 export interface Reminder {
   id: string;
@@ -142,6 +143,12 @@ export function useReminders(instanceId?: string) {
       }
 
       const docRef = await addDoc(collection(db, 'reminders'), reminderData);
+      // Schedule native OS notification
+      scheduleReminderNotification({
+        ...reminderData,
+        id: docRef.id,
+        reminderTime: reminderData.reminderTime,
+      } as Reminder).catch(err => console.error('[Reminders] Failed to schedule native notification:', err));
 
       console.log('Reminder created with ID:', docRef.id);
       toast.success('Reminder created');
@@ -176,6 +183,15 @@ export function useReminders(instanceId?: string) {
       if (data.soundId !== undefined) updateData.soundId = data.soundId;
 
       await updateDoc(doc(db, 'reminders', id), updateData);
+      // Re-schedule native notification
+      const existingReminder = reminders.find(r => r.id === id);
+      if (existingReminder) {
+        cancelReminderNotification(id).catch(() => {});
+        const merged = { ...existingReminder, ...updateData, id };
+        if (merged.isActive !== false) {
+          scheduleReminderNotification(merged as Reminder).catch(() => {});
+        }
+      }
 
       console.log('Reminder updated:', id);
       toast.success('Reminder updated');
@@ -197,6 +213,15 @@ export function useReminders(instanceId?: string) {
 
     try {
       await updateDoc(doc(db, 'reminders', id), { isActive: isActive });
+      // Schedule or cancel native notification based on active state
+      if (isActive) {
+        const reminder = reminders.find(r => r.id === id);
+        if (reminder) {
+          scheduleReminderNotification({ ...reminder, isActive: true }).catch(() => {});
+        }
+      } else {
+        cancelReminderNotification(id).catch(() => {});
+      }
 
       console.log('Reminder active status toggled:', id, isActive);
       toast.success(`Reminder ${isActive ? 'activated' : 'deactivated'}`);
@@ -218,6 +243,8 @@ export function useReminders(instanceId?: string) {
 
     try {
       await deleteDoc(doc(db, 'reminders', id));
+      // Cancel native notification
+      cancelReminderNotification(id).catch(() => {});
 
       console.log('Reminder deleted:', id);
       toast.success('Reminder deleted');

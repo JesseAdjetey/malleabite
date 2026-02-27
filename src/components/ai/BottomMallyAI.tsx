@@ -81,6 +81,23 @@ const defaultQuickActions: QuickAction[] = [
 
 interface BottomMallyAIProps { }
 
+// Dismissal phrases that end a voice conversation session
+const DISMISSAL_PHRASES = [
+  "that's all", "thats all",
+  "goodbye", "good bye", "bye",
+  "thanks mally", "thank you mally", "thanks mali",
+  "bye mally", "bye mali",
+  "never mind", "nevermind",
+  "stop listening", "stop",
+  "done", "i'm done", "im done",
+  "close", "dismiss",
+];
+
+function isDismissalPhrase(transcript: string): boolean {
+  const normalized = transcript.toLowerCase().trim();
+  return DISMISSAL_PHRASES.some(phrase => normalized === phrase || normalized.includes(phrase));
+}
+
 const DoodleBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
     {/* Abstract shapes and icons */}
@@ -122,6 +139,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const wasVoiceActivatedRef = useRef(false);
+  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
+  const voiceSessionActiveRef = useRef(false); // ref mirror for use in callbacks
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -131,18 +152,38 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   });
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  // Keep ref in sync with state for use inside callbacks/timers
+  useEffect(() => { voiceSessionActiveRef.current = voiceSessionActive; }, [voiceSessionActive]);
+
+  // Clean up voice session timers on unmount
+  useEffect(() => {
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, []);
+
   // Wire TTS speaking state to component
   useEffect(() => {
     mallyTTS.onSpeakingChange((speaking) => {
       setIsSpeaking(speaking);
-      // Auto-dismiss after voice response finishes (if voice-activated)
       if (!speaking && wasVoiceActivatedRef.current) {
-        setTimeout(() => {
-          if (!isRecording && !isLoading) {
-            wasVoiceActivatedRef.current = false;
-            setIsExpanded(false);
-          }
-        }, 3000);
+        if (voiceSessionActiveRef.current) {
+          // Voice session active: auto-start listening for next command after TTS finishes
+          setTimeout(() => {
+            if (voiceSessionActiveRef.current && !isRecording && !isLoading) {
+              startVoiceListeningRef.current?.();
+            }
+          }, 600);
+        } else {
+          // Legacy behavior: auto-dismiss after single voice command
+          setTimeout(() => {
+            if (!isRecording && !isLoading) {
+              wasVoiceActivatedRef.current = false;
+              setIsExpanded(false);
+            }
+          }, 3000);
+        }
       }
     });
     return () => mallyTTS.onSpeakingChange(() => { });
@@ -244,7 +285,88 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
   }, [isMuted]);
 
+  // ─── Voice Session Helpers ──────────────────────────────────────────────────
 
+  // End the voice conversation session
+  const endVoiceSession = useCallback(() => {
+    if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+    if (isRecording) {
+      speechService.stopListening();
+      setIsRecording(false);
+    }
+    setVoiceSessionActive(false);
+    wasVoiceActivatedRef.current = false;
+    setIsExpanded(false);
+    setInputText('');
+    resumeWakeWord?.();
+    mallyTTS.stop();
+    toast.info("Voice session ended", { duration: 2000 });
+  }, [isRecording, resumeWakeWord]);
+
+  // Start listening for the next voice command in the session
+  const startVoiceListening = useCallback(async () => {
+    if (!voiceSessionActiveRef.current) return;
+
+    const available = await speechService.isAvailable();
+    if (!available) return;
+
+    setIsRecording(true);
+    setInputText('');
+    pauseWakeWord?.();
+    haptics.light();
+
+    // Silence timer: if no final result within 8s, prompt user
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = setTimeout(() => {
+      if (!voiceSessionActiveRef.current) return;
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        text: "Still listening... say something or I'll close shortly.",
+        sender: 'ai',
+        timestamp: new Date(),
+      }]);
+      // Extended silence: close after 7 more seconds
+      inactivityTimerRef.current = setTimeout(() => {
+        if (voiceSessionActiveRef.current) {
+          endVoiceSession();
+        }
+      }, 7000);
+    }, 8000);
+
+    await speechService.startListening(
+      (result) => {
+        setInputText(result.transcript);
+        if (result.isFinal) {
+          // Clear silence timers since user spoke
+          if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+          if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
+          setIsRecording(false);
+
+          // Check if user wants to end the session
+          if (isDismissalPhrase(result.transcript)) {
+            endVoiceSession();
+            return;
+          }
+
+          setTimeout(() => handleSendMessage(result.transcript), 100);
+        }
+      },
+      () => {
+        setIsRecording(false);
+        // On error during voice session, try to re-listen after a brief pause
+        if (voiceSessionActiveRef.current) {
+          setTimeout(() => startVoiceListening(), 1000);
+        } else {
+          resumeWakeWord?.();
+        }
+      }
+    );
+  }, [pauseWakeWord, resumeWakeWord, endVoiceSession]);
+
+  // Stable ref for startVoiceListening so TTS callback can access it
+  const startVoiceListeningRef = useRef(startVoiceListening);
+  useEffect(() => { startVoiceListeningRef.current = startVoiceListening; }, [startVoiceListening]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -262,6 +384,13 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Auto-retract when navigating to a different page
   useEffect(() => {
+    // End voice session if active
+    if (voiceSessionActiveRef.current) {
+      if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+      setVoiceSessionActive(false);
+      wasVoiceActivatedRef.current = false;
+    }
     setIsExpanded(false);
     setIsMinimized(true);
     mallyTTS.stop();
@@ -272,51 +401,30 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
   }, [location.pathname]);
 
-  // Listen for Hey Mally activation — Siri-like voice-first flow
+  // Listen for Hey Mally activation — conversational voice-first flow
   useEffect(() => {
     const handleHeyMallyActivation = () => {
       wasVoiceActivatedRef.current = true;
+      setVoiceSessionActive(true);
       setIsExpanded(true);
       haptics.medium();
 
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
-        text: "I'm listening...",
+        text: "I'm listening... speak freely, no need to say 'Hey Mally' again.",
         sender: 'ai',
         timestamp: new Date(),
       }]);
 
-      // Auto-start recording after brief delay so user can speak immediately
-      setTimeout(async () => {
-        if (!isRecording) {
-          const available = await speechService.isAvailable();
-          if (available) {
-            setIsRecording(true);
-            pauseWakeWord?.();
-            haptics.light();
-
-            await speechService.startListening(
-              (result) => {
-                setInputText(result.transcript);
-                if (result.isFinal) {
-                  setIsRecording(false);
-                  resumeWakeWord?.();
-                  setTimeout(() => handleSendMessage(result.transcript), 100);
-                }
-              },
-              () => {
-                setIsRecording(false);
-                resumeWakeWord?.();
-              }
-            );
-          }
-        }
+      // Auto-start recording after brief delay
+      setTimeout(() => {
+        startVoiceListeningRef.current?.();
       }, 400);
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [isRecording, pauseWakeWord, resumeWakeWord]);
+  }, []);
 
   // Handle image upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -552,7 +660,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setIsExpanded(false)}
+            onClick={() => { if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); } }}
             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
           />
         )}

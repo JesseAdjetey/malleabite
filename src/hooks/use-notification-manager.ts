@@ -56,6 +56,25 @@ export function useNotificationManager() {
         }
     }, []);
 
+    const stopSound = useCallback(() => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    }, []);
+
+    const playSound = useCallback((soundId: string = 'default') => {
+        // Find sound by ID, or fallback to first one if not found or if ID is empty
+        const sound = REMINDER_SOUNDS.find(s => s.id === soundId) || REMINDER_SOUNDS[0];
+
+        // Stop any currently playing sound
+        stopSound();
+
+        audioRef.current = new Audio(sound.url);
+        audioRef.current.loop = true; // Loop the sound
+        audioRef.current.play().catch(err => console.error('Error playing sound:', err));
+    }, [stopSound]);
+
     // Native: sync all alarms/reminders to OS-scheduled notifications on startup
     const hasSyncedRef = useRef(false);
     useEffect(() => {
@@ -111,26 +130,6 @@ export function useNotificationManager() {
 
         return () => cleanup?.();
     }, [playSound, stopSound]);
-
-    const stopSound = useCallback(() => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            // Don't nullify immediately if we want to reuse, but recreating is fine
-        }
-    }, []);
-
-    const playSound = useCallback((soundId: string = 'default') => {
-        // Find sound by ID, or fallback to first one if not found or if ID is empty
-        const sound = REMINDER_SOUNDS.find(s => s.id === soundId) || REMINDER_SOUNDS[0];
-
-        // Stop any currently playing sound
-        stopSound();
-
-        audioRef.current = new Audio(sound.url);
-        audioRef.current.loop = true; // Loop the sound
-        audioRef.current.play().catch(err => console.error('Error playing sound:', err));
-    }, [stopSound]);
 
     const showNotification = useCallback((title: string, body: string, soundId?: string) => {
         // Play sound

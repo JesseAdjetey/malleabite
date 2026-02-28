@@ -468,6 +468,17 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       return;
     }
 
+    if (!user?.uid) {
+      console.error('MallyAI: User not authenticated, cannot send message');
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        text: "Please sign in to chat with Mally.",
+        sender: "ai",
+        timestamp: new Date(),
+      }]);
+      return;
+    }
+
     console.log('Adding user message');
 
     // Add user message
@@ -516,7 +527,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       // Call Firebase function
       const response = await FirebaseFunctions.processScheduling({
         userMessage: messageText,
-        userId: user?.uid || '',
+        userId: user.uid,
         context: JSON.stringify(context),
         history: messageHistory,
         imageData: uploadedImage ? {

@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { springs } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { GridBackground } from "@/components/ui/grid-background";
+import RippleBorder from "@/components/ui/RippleBorder";
 
 const Mainview = () => {
   const { selectedView } = useViewStore();
@@ -25,6 +26,8 @@ const Mainview = () => {
   const isDragging = useRef(false);
   const isTouchDevice = useRef(false);
   const isMobile = useIsMobile();
+  const [isCrossingBoundary, setIsCrossingBoundary] = useState(false);
+  const crossingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const MIN_WIDTH = 280;
 
@@ -121,6 +124,17 @@ const Mainview = () => {
     };
   }, []);
 
+  // Detect when a dragged item crosses the resizer boundary
+  const handleBorderDragEnter = (e: React.DragEvent) => {
+    // Only trigger for actual data transfers (not resizer drags)
+    if (e.dataTransfer.types.includes('application/json') || e.dataTransfer.types.includes('text/plain')) {
+      if (crossingDebounce.current) clearTimeout(crossingDebounce.current);
+      setIsCrossingBoundary(true);
+      // Reset after a short delay so it can re-trigger on next crossing
+      crossingDebounce.current = setTimeout(() => setIsCrossingBoundary(false), 100);
+    }
+  };
+
   return (
     <GridBackground>
       <div className="flex h-screen overflow-hidden">
@@ -155,9 +169,11 @@ const Mainview = () => {
 
             {/* Resizer */}
             <div
-              className="hidden md:flex items-center justify-center w-6 cursor-ew-resize z-50 transition-all duration-300 group"
+              className="hidden md:flex items-center justify-center w-6 cursor-ew-resize z-50 transition-all duration-300 group relative"
               onMouseDown={startDrag}
               onTouchStart={handleTouchStart}
+              onDragEnter={handleBorderDragEnter}
+              onDragOver={(e) => e.preventDefault()}
               draggable={false}
               onDragStart={(e) => e.preventDefault()}
             >
@@ -178,6 +194,8 @@ const Mainview = () => {
                   border: '1px solid rgba(168,85,247,0.3)',
                 }}
               />
+              {/* Ripple effect overlay for cross-boundary drags */}
+              <RippleBorder trigger={isCrossingBoundary} />
             </div>
           </>
         )}

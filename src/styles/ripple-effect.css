@@ -1,0 +1,69 @@
+/* Cross-boundary drag refraction effect — transparent water distortion */
+
+@keyframes refractionPulse {
+  0% {
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.5;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes turbulenceShift {
+  0% {
+    filter: url(#water-refraction-0);
+  }
+
+  25% {
+    filter: url(#water-refraction-1);
+  }
+
+  50% {
+    filter: url(#water-refraction-2);
+  }
+
+  75% {
+    filter: url(#water-refraction-1);
+  }
+
+  100% {
+    filter: url(#water-refraction-0);
+  }
+}
+
+.refraction-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -80px;
+  width: 184px;
+  pointer-events: none;
+  z-index: 100;
+  overflow: visible;
+}
+
+.refraction-wave {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(0.8px);
+  -webkit-backdrop-filter: blur(0.8px);
+  opacity: 0;
+  animation: refractionPulse 800ms ease-out forwards;
+  pointer-events: none;
+  /* A very subtle glass-like distortion via an SVG filter */
+  filter: url(#water-refraction-1);
+  will-change: opacity, filter;
+}
+
+/* Secondary wave — slightly delayed for a layered ripple feel */
+.refraction-wave-delayed {
+  animation-delay: 120ms;
+  backdrop-filter: blur(0.5px);
+  -webkit-backdrop-filter: blur(0.5px);
+  filter: url(#water-refraction-2);
+}

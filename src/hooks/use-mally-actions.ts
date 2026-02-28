@@ -16,6 +16,7 @@ import { useDateStore } from "@/lib/stores/date-store";
 import { logger } from "@/lib/logger";
 import { SidebarPage } from "@/lib/stores/types";
 import { useGoogleCalendar } from "@/hooks/use-google-calendar";
+import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import dayjs from "dayjs";
 
@@ -24,9 +25,12 @@ export function useMallyActions() {
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
   const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
 
+  // AI Memory
+  const { memory: userMemory } = useUserMemory();
+
   // Todos
   const {
-    createList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo
+    createList, deleteList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo, moveTodo
   } = useTodoLists();
 
   // Sidebar pages & modules
@@ -46,8 +50,8 @@ export function useMallyActions() {
   const { items: eisenhowerItems, addItem: addEisenhowerItem, updateQuadrant, removeItem: removeEisenhowerItem } = useEisenhower();
 
   // Alarms & Reminders
-  const { addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo } = useAlarms();
-  const { addReminder, updateReminder, deleteReminder } = useReminders();
+  const { addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo } = useAlarms();
+  const { addReminder, updateReminder, deleteReminder, toggleReminderActive } = useReminders();
 
   // Pomodoro
   const {
@@ -57,8 +61,8 @@ export function useMallyActions() {
   } = usePomodoroStore();
 
   // Templates & Invites
-  const { templates, applyTemplate, useTemplate } = useTemplates();
-  const { sendInvite } = useInvites();
+  const { templates, applyTemplate, useTemplate, createTemplate, deleteTemplate } = useTemplates();
+  const { sendInvite, respondToInvite, deleteInvite } = useInvites();
 
   // View & Date
   const { setView } = useViewStore();
@@ -283,6 +287,35 @@ export function useMallyActions() {
           return true;
         }
 
+        case 'move_todo': {
+          if (!data.todoId) { toast.error('No todo ID provided'); return false; }
+          let targetListId = data.listId;
+          if (!targetListId && data.listName) {
+            const found = lists.find(l =>
+              l.name.toLowerCase().trim() === (data.listName as string).toLowerCase().trim()
+            );
+            targetListId = found?.id;
+          }
+          if (!targetListId) { toast.error(`List "${data.listName}" not found`); return false; }
+          await moveTodo(data.todoId, targetListId);
+          toast.success('Todo moved');
+          return true;
+        }
+
+        case 'delete_todo_list': {
+          let targetListId = data.listId;
+          if (!targetListId && data.listName) {
+            const found = lists.find(l =>
+              l.name.toLowerCase().trim() === (data.listName as string).toLowerCase().trim()
+            );
+            targetListId = found?.id;
+          }
+          if (!targetListId) { toast.error(`List "${data.listName}" not found`); return false; }
+          const result = await deleteList(targetListId);
+          if (result?.success) { toast.success('Todo list deleted'); return true; }
+          return false;
+        }
+
         // ── Eisenhower ───────────────────────────────────────────────────────
 
         case 'create_eisenhower': {
@@ -356,6 +389,13 @@ export function useMallyActions() {
           return false;
         }
 
+        case 'toggle_alarm': {
+          if (!data.alarmId) return false;
+          const result = await toggleAlarm(data.alarmId, data.enabled ?? true);
+          if (result?.success) { toast.success(`Alarm ${data.enabled ? 'enabled' : 'disabled'}`); return true; }
+          return false;
+        }
+
         // ── Reminders ────────────────────────────────────────────────────────
 
         case 'create_reminder': {
@@ -393,6 +433,13 @@ export function useMallyActions() {
           if (!data.reminderId) return false;
           const result = await deleteReminder(data.reminderId);
           if (result?.success) { toast.success('Reminder deleted'); return true; }
+          return false;
+        }
+
+        case 'toggle_reminder': {
+          if (!data.reminderId) return false;
+          const result = await toggleReminderActive(data.reminderId, data.isActive ?? true);
+          if (result?.success) { toast.success(`Reminder ${data.isActive ? 'enabled' : 'disabled'}`); return true; }
           return false;
         }
 
@@ -453,6 +500,37 @@ export function useMallyActions() {
           return true;
         }
 
+        case 'create_template': {
+          if (!data.title) { toast.error('Template title is required'); return false; }
+          await ensureModuleVisible('templates', 'Templates');
+          const result = await createTemplate({
+            title: data.title,
+            duration: data.duration || 60,
+            category: data.category,
+            color: data.color,
+            location: data.location,
+            notes: data.notes,
+            isAllDay: data.isAllDay || false,
+          });
+          if (result?.success) { toast.success(`Template "${data.title}" created`); return true; }
+          return false;
+        }
+
+        case 'delete_template': {
+          if (!data.templateName && !data.templateId) { toast.error('Template name is required'); return false; }
+          let templateId = data.templateId;
+          if (!templateId && data.templateName) {
+            const found = templates.find(t =>
+              t.title.toLowerCase().includes((data.templateName as string).toLowerCase())
+            );
+            templateId = found?.id;
+          }
+          if (!templateId) { toast.error(`Template "${data.templateName}" not found`); return false; }
+          const result = await deleteTemplate(templateId);
+          if (result?.success) { toast.success('Template deleted'); return true; }
+          return false;
+        }
+
         // ── Invites ──────────────────────────────────────────────────────────
 
         case 'send_invite': {
@@ -464,6 +542,20 @@ export function useMallyActions() {
           if (!event) { toast.error('Event not found for invitation'); return false; }
           await sendInvite(data.email, event, data.message);
           return true;
+        }
+
+        case 'respond_invite': {
+          if (!data.inviteId || !data.status) { toast.error('Invite ID and status required'); return false; }
+          const result = await respondToInvite(data.inviteId, data.status);
+          if (result?.success) { toast.success(`Invite ${data.status}`); return true; }
+          return false;
+        }
+
+        case 'delete_invite': {
+          if (!data.inviteId) { toast.error('Invite ID required'); return false; }
+          const result = await deleteInvite(data.inviteId);
+          if (result?.success) { toast.success('Invite deleted'); return true; }
+          return false;
         }
 
         // ── Module control ───────────────────────────────────────────────────
@@ -632,15 +724,15 @@ export function useMallyActions() {
     }
   }, [
     addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder,
-    createList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo,
+    createList, deleteList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo, moveTodo,
     pages, activePage, activePageId, setActivePageId,
     addModule, removeModule, toggleModuleMinimized, createPage, deletePage,
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
-    addAlarm, updateAlarm, deleteAlarm, linkToEvent, linkToTodo,
-    addReminder, updateReminder, deleteReminder,
+    addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
+    addReminder, updateReminder, deleteReminder, toggleReminderActive,
     startTimer, pauseTimer, resetTimer, setFocusTime, setBreakTime, setFocusTarget,
-    templates, applyTemplate, useTemplate,
-    sendInvite, setView, setDate,
+    templates, applyTemplate, useTemplate, createTemplate, deleteTemplate,
+    sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,
     resolvePageRef, resolveModuleIndex, ensureModuleVisible,
     syncEnabled, pushEventToGoogle,
@@ -672,10 +764,17 @@ export function useMallyActions() {
     eisenhowerItems,
     events: events.slice(0, 20),
     todos: todos.slice(0, 30),
+    // Persistent AI memory (preferences, patterns, goals, observations)
+    userMemory: userMemory ? {
+      preferences: userMemory.preferences,
+      patterns: userMemory.patterns,
+      goals: userMemory.goals,
+      observations: (userMemory.observations || []).slice(-5),
+    } : undefined,
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
-    eisenhowerItems, events, todos,
+    eisenhowerItems, events, todos, userMemory,
   ]);
 
   return {

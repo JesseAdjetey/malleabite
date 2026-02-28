@@ -91,6 +91,7 @@ export type CalendarEventType = {
   // Archiving support
   isArchived?: boolean;
   folderName?: string;
+  userId?: string;
 };
 
 // Event attendee type

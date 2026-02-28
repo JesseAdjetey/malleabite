@@ -22,8 +22,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
-  const { isEventSummaryOpen, closeEventSummary } = useEventStore();
-  const { events, addEvent } = useCalendarEvents();
+  const { events, isEventSummaryOpen, closeEventSummary } = useEventStore();
+  const { addEvent } = useCalendarEvents();
   const {
     isBulkMode,
     selectedIds,

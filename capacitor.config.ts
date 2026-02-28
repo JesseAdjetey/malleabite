@@ -20,6 +20,11 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: 'body',
     },
+    LocalNotifications: {
+      smallIcon: 'ic_launcher',
+      iconColor: '#488AFF',
+      sound: 'default_notification',
+    },
   },
 };
 

@@ -4,6 +4,18 @@ import { useReminders, Reminder } from './use-reminders';
 import { toast } from 'sonner';
 import { Timestamp } from 'firebase/firestore';
 import { isNative } from '@/lib/platform';
+import { syncAllNotifications, createNotificationChannels } from '@/lib/native-notification-scheduler';
+import { mallyTTS } from '@/lib/ai/tts-service';
+
+// Speak a notification aloud using Mally's voice (respects user mute preference)
+function speakNotification(text: string) {
+    const muted = localStorage.getItem('mally-voice-muted') === 'true';
+    if (muted) return;
+    // Small delay so the notification sound plays first, then Mally speaks
+    setTimeout(() => {
+        mallyTTS.speak({ text }).catch(() => mallyTTS.speakFallback(text));
+    }, 800);
+}
 
 export const REMINDER_SOUNDS = [
     { id: 'default', name: 'Default', url: '/sounds/default-notification.mp3' },
@@ -19,7 +31,7 @@ export function useNotificationManager() {
     const triggeredRemindersRef = useRef<Set<string>>(new Set());
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Request notification permission on mount
+    // Request notification permission on mount + create channels on Android
     useEffect(() => {
         console.log('[NotificationManager] Initializing...');
         if (isNative) {
@@ -29,6 +41,8 @@ export function useNotificationManager() {
                     console.log('[NotificationManager] Native permission:', result.display);
                 });
             });
+            // Create Android notification channels
+            createNotificationChannels();
         } else if ('Notification' in window && Notification.permission === 'default') {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
@@ -46,7 +60,6 @@ export function useNotificationManager() {
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current.currentTime = 0;
-            // Don't nullify immediately if we want to reuse, but recreating is fine
         }
     }, []);
 
@@ -61,6 +74,62 @@ export function useNotificationManager() {
         audioRef.current.loop = true; // Loop the sound
         audioRef.current.play().catch(err => console.error('Error playing sound:', err));
     }, [stopSound]);
+
+    // Native: sync all alarms/reminders to OS-scheduled notifications on startup
+    const hasSyncedRef = useRef(false);
+    useEffect(() => {
+        if (!isNative || hasSyncedRef.current) return;
+        // Wait until we have data loaded (at least one array is non-empty, or both are loaded)
+        if (alarms.length === 0 && reminders.length === 0) return;
+
+        hasSyncedRef.current = true;
+        syncAllNotifications(alarms, reminders);
+    }, [alarms, reminders]);
+
+    // Native: listen for notification events (foreground sound + tap handling)
+    useEffect(() => {
+        if (!isNative) return;
+
+        let cleanup: (() => void) | undefined;
+
+        import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+            const receivedPromise = LocalNotifications.addListener(
+                'localNotificationReceived',
+                (notification) => {
+                    // Notification received while app is in foreground — play sound + voice + toast
+                    const extra = notification.extra;
+                    playSound(extra?.soundId || 'default');
+                    // Mally announces the notification
+                    const voiceText = extra?.type === 'alarm'
+                        ? `Alarm: ${notification.title?.replace('⏰ ', '') || 'Time\'s up'}`
+                        : `Reminder: ${notification.title?.replace('🔔 ', '') || notification.body || 'You have a reminder'}`;
+                    speakNotification(voiceText);
+                    toast.message(notification.title || 'Notification', {
+                        description: notification.body,
+                        duration: Infinity,
+                        action: { label: 'Dismiss', onClick: () => { stopSound(); mallyTTS.stop(); } },
+                        onDismiss: () => { stopSound(); mallyTTS.stop(); },
+                    });
+                }
+            );
+
+            const actionPromise = LocalNotifications.addListener(
+                'localNotificationActionPerformed',
+                () => {
+                    // User tapped the notification
+                    stopSound();
+                    mallyTTS.stop();
+                }
+            );
+
+            cleanup = () => {
+                receivedPromise.then(l => l.remove());
+                actionPromise.then(l => l.remove());
+            };
+        });
+
+        return () => cleanup?.();
+    }, [playSound, stopSound]);
 
     const showNotification = useCallback((title: string, body: string, soundId?: string) => {
         // Play sound
@@ -102,10 +171,10 @@ export function useNotificationManager() {
             duration: Infinity,
             action: {
                 label: 'Turn Off',
-                onClick: () => stopSound(),
+                onClick: () => { stopSound(); mallyTTS.stop(); },
             },
-            onDismiss: () => stopSound(),
-            onAutoClose: () => stopSound(),
+            onDismiss: () => { stopSound(); mallyTTS.stop(); },
+            onAutoClose: () => { stopSound(); mallyTTS.stop(); },
         });
     }, [playSound, stopSound]);
 
@@ -188,6 +257,9 @@ export function useNotificationManager() {
             alarm.soundId
         );
 
+        // Mally voice announcement
+        speakNotification(`Alarm: ${alarm.title}`);
+
         // If it's a one-time alarm (no repeat days), disable it
         if (!alarm.repeatDays || alarm.repeatDays.length === 0) {
             updateAlarm(alarm.id, { enabled: false });
@@ -214,6 +286,12 @@ export function useNotificationManager() {
             reminder.soundId || 'default'
         );
 
+        // Mally voice announcement
+        const voiceText = reminder.description
+            ? `Reminder: ${reminder.title}. ${reminder.description}`
+            : `Reminder: ${reminder.title}`;
+        speakNotification(voiceText);
+
         // Mark reminder as inactive after triggering
         toggleReminderActive(reminder.id, false);
 
@@ -225,8 +303,10 @@ export function useNotificationManager() {
         }, 120000);
     }, [showNotification, toggleReminderActive]);
 
-    // Check alarms and reminders every 30 seconds
+    // Check alarms and reminders every 30 seconds (web only — native uses OS-scheduled notifications)
     useEffect(() => {
+        if (isNative) return; // Native relies on pre-scheduled OS notifications
+
         const checkNotifications = () => {
             const now = new Date();
             console.log('[NotificationManager] Checking notifications at:', now.toISOString());

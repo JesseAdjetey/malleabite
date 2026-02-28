@@ -15,6 +15,7 @@ import dayjs from 'dayjs';
 import { eventSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { errorHandler } from '@/lib/error-handler';
+import { useEventStore } from '@/lib/stores/event-store';
 
 interface FirebaseActionResponse {
   success: boolean;
@@ -136,6 +137,7 @@ export function useCalendarEvents() {
       // Google Calendar sync
       googleEventId: firebaseEvent.googleEventId || undefined,
       source: (firebaseEvent.source as 'malleabite' | 'google') || undefined,
+      userId: firebaseEvent.userId,
     };
   };
 
@@ -200,6 +202,8 @@ export function useCalendarEvents() {
       return { success: false };
     }
 
+    const eventStore = useEventStore.getState();
+
     try {
       // Validate event data
       const validation = eventSchema.safeParse(event);
@@ -214,33 +218,34 @@ export function useCalendarEvents() {
         return { success: false, error: new Error(errorMessage) };
       }
 
-      logger.debug('useCalendarEvents', 'Processing event', {
-        date: event.date,
-        hasDescription: !!event.description
-      });
+      // Determine start/end times
+      let startDateTime: Date;
+      let endDateTime: Date;
+      let actualDescription = event.description || '';
 
-      // Parse the time range from description (e.g., "09:00 - 10:00 | Description")
-      const timeRange = extractTimeString(event.description);
+      // Check for ISO strings first (preferred)
+      if (event.startsAt && event.endsAt && (event.startsAt.includes('T') || !isNaN(Date.parse(event.startsAt)))) {
+        startDateTime = new Date(event.startsAt);
+        endDateTime = new Date(event.endsAt);
 
-      const [startTime, endTime] = timeRange.split('-').map(t => t.trim());
+        // Strip out the time range prefix from description if it was prepended by formatAIEvent
+        if (actualDescription.includes(' | ')) {
+          actualDescription = actualDescription.split(' | ')[1].trim();
+        }
+      } else {
+        // Fallback to parsing from description (legacy/manual entry)
+        const timeRange = extractTimeString(event.description);
+        const [startTime, endTime] = timeRange.split('-').map(t => t.trim());
+        const eventDate = event.date instanceof Date
+          ? dayjs(event.date).format('YYYY-MM-DD')
+          : (event.date || dayjs().format('YYYY-MM-DD'));
 
-      // Handle event.date being a Date object or string/undefined
-      const eventDate = event.date instanceof Date
-        ? dayjs(event.date).format('YYYY-MM-DD')
-        : (event.date || dayjs().format('YYYY-MM-DD'));
+        startDateTime = dayjs(`${eventDate} ${startTime}`).toDate();
+        endDateTime = dayjs(`${eventDate} ${endTime}`).toDate();
 
-      // Create Date objects by combining date and time
-      const startDateTime = dayjs(`${eventDate} ${startTime}`).toDate();
-      let endDateTime = dayjs(`${eventDate} ${endTime}`).toDate();
-
-      // Ensure end time is after start time (default to 1 hour if same or before)
-      if (isNaN(endDateTime.getTime()) || endDateTime <= startDateTime) {
-        endDateTime = dayjs(startDateTime).add(1, 'hour').toDate();
+        const descriptionParts = event.description.split('|');
+        actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : event.description;
       }
-
-      // Extract the actual description part
-      const descriptionParts = event.description.split('|');
-      const actualDescription = descriptionParts.length > 1 ? descriptionParts[1].trim() : '';
 
       // Prepare Firebase event data
       const firebaseEvent: Omit<CalendarEvent, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -300,12 +305,19 @@ export function useCalendarEvents() {
         source: event.source || 'malleabite',
       };
 
-      logger.debug('useCalendarEvents', 'Inserting event to Firebase', {
-        title: firebaseEvent.title
-      });
+      // OPTIMISTIC UPDATE: Add to global store immediately
+      const optimisticId = `temp_${crypto.randomUUID()}`;
+      const optimisticEvent: CalendarEventType = {
+        ...event,
+        id: optimisticId,
+        startsAt: startDateTime.toISOString(),
+        endsAt: endDateTime.toISOString(),
+        date: dayjs(startDateTime).format('YYYY-MM-DD'),
+        description: actualDescription, // Already cleaned above
+      };
+      eventStore.addEvent(optimisticEvent);
 
       // Insert into Firebase
-      // Use removeUndefinedDeep to ensure no undefined values are sent to Firestore (nested or otherwise)
       const docRef = await FirestoreService.create<CalendarEvent>(
         COLLECTIONS.CALENDAR_EVENTS,
         removeUndefinedDeep(firebaseEvent)
@@ -314,6 +326,9 @@ export function useCalendarEvents() {
       logger.info('useCalendarEvents', 'Event created successfully', {
         docId: docRef.id
       });
+
+      // Replace optimistic event with real one (the listener will catch it, but we cleanup temp)
+      eventStore.deleteEvent(optimisticId);
 
       // Refresh events to show the new one
       await fetchEvents();
@@ -337,11 +352,16 @@ export function useCalendarEvents() {
         error: err,
         diagnosticMessage: `Firebase insert error: ${errorMessage}`
       };
+    } finally {
+      // Cleanup optimistic event if it still exists and we failed
+      // (The temp ID would only be in store if we didn't succeed or refresh)
     }
   };
 
   // Update an existing event
-  const updateEvent = async (eventId: string, updates: Partial<CalendarEventType>): Promise<FirebaseActionResponse> => {
+  const updateEvent = async (event: Partial<CalendarEventType>): Promise<FirebaseActionResponse> => {
+    const eventId = event.id;
+    const updates = event;
     if (!user) {
       toast.error('User not authenticated');
       return { success: false };
@@ -352,6 +372,8 @@ export function useCalendarEvents() {
         eventId,
         updateKeys: Object.keys(updates)
       });
+
+      const eventStore = useEventStore.getState();
 
       // Transform updates to Firebase format
       const firebaseUpdates: Partial<CalendarEvent> = {};
@@ -413,6 +435,12 @@ export function useCalendarEvents() {
       if (updates.googleEventId !== undefined) firebaseUpdates.googleEventId = updates.googleEventId;
       if (updates.source !== undefined) firebaseUpdates.source = updates.source;
 
+      // OPTIMISTIC UPDATE
+      const existing = eventStore.events.find(e => e.id === eventId);
+      if (existing) {
+        eventStore.updateEvent({ ...existing, ...updates, id: eventId } as any);
+      }
+
       // Handle description and time updates
       if (updates.description) {
         const timeRange = extractTimeString(updates.description);
@@ -431,7 +459,7 @@ export function useCalendarEvents() {
 
       await FirestoreService.update<CalendarEvent>(
         COLLECTIONS.CALENDAR_EVENTS,
-        eventId,
+        eventId!,
         removeUndefinedDeep(firebaseUpdates)
       );
 
@@ -456,7 +484,8 @@ export function useCalendarEvents() {
     }
 
     try {
-      logger.debug('useCalendarEvents', 'Delete event attempt', { eventId });
+      const eventStore = useEventStore.getState();
+      eventStore.deleteEvent(eventId);
 
       await FirestoreService.delete(COLLECTIONS.CALENDAR_EVENTS, eventId);
 

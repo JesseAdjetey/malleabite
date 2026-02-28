@@ -52,6 +52,10 @@ export interface SchedulingResponse {
     type: string;
     data: any;
   }>;
+  sources?: Array<{
+    title: string;
+    uri: string;
+  }>;
   error?: string;
 }
 
@@ -112,11 +116,27 @@ export class FirebaseFunctions {
 
       const responseData = result.result || result.data || result;
 
+      // If the response text looks like raw JSON, extract the friendly message and any embedded actions
+      let friendlyMessage = responseData.response || responseData.message || 'No response from AI';
+      let embeddedActions: any[] = [];
+      if (typeof friendlyMessage === 'string' && friendlyMessage.trimStart().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(friendlyMessage);
+          friendlyMessage = parsed.response || parsed.message || friendlyMessage;
+          // Extract actions embedded in the nested JSON
+          if (parsed.actions && Array.isArray(parsed.actions)) {
+            embeddedActions = parsed.actions;
+          }
+        } catch {
+          // Not valid JSON, use as-is
+        }
+      }
+
       // Transform response to match expected format
       // Include the action field with recurring event properties
       return {
         success: responseData.success || false,
-        message: responseData.response || responseData.message || 'No response from AI',
+        message: friendlyMessage,
         operations: responseData.eventData ? [{
           type: 'create_event',
           data: responseData.eventData,
@@ -125,7 +145,8 @@ export class FirebaseFunctions {
         intent: responseData.intent || 'general',
         actionRequired: responseData.actionRequired || false,
         action: responseData.action || null,
-        actions: responseData.actions || [],
+        actions: (responseData.actions && responseData.actions.length > 0) ? responseData.actions : embeddedActions,
+        sources: responseData.sources || [],
         error: responseData.error
       };
     } catch (error: any) {

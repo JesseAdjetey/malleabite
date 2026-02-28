@@ -96,7 +96,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   // Memoize handleRecurringDeleteConfirm at the top level
   const handleRecurringDeleteConfirm = useCallback(async (scope: EditScope) => {
     if (!selectedEvent) return;
-    
+
     try {
       const parentId = selectedEvent.recurrenceParentId ||
         (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
@@ -132,6 +132,12 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       toast.error("Failed to delete event");
     }
   }, [selectedEvent, addRecurrenceException, removeEvent, onClose]);
+
+  const handleRecurringEditConfirm = useCallback((scope: EditScope) => {
+    setEditScope(scope);
+    setShowRecurringEditDialog(false);
+    setIsEditing(true);
+  }, []);
 
   // Early return if no event selected - AFTER all hooks
   if (!selectedEvent) {
@@ -250,12 +256,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       setIsEditing(true);
     }
   };
-
-  const handleRecurringEditConfirm = useCallback((scope: EditScope) => {
-    setEditScope(scope);
-    setShowRecurringEditDialog(false);
-    setIsEditing(true);
-  }, []);
 
   const handleUpdate = async (updatedEvent: CalendarEventType) => {
     try {

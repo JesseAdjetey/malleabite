@@ -734,15 +734,15 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             )}
             style={{
               maxHeight: isMobile ? "80vh" : "70vh",
-              /* Layered gradient: fully transparent at top fading into dark glassy base */
+              /* Layered gradient: fully transparent at top fading into light base */
               background: `
                 linear-gradient(
                   to bottom,
                   transparent 0%,
-                  rgba(8, 5, 18, 0) 0%,
-                  rgba(8, 5, 18, 0.45) 10%,
-                  rgba(8, 5, 18, 0.82) 28%,
-                  rgba(8, 5, 18, 0.96) 100%
+                  rgba(248, 246, 255, 0) 0%,
+                  rgba(248, 246, 255, 0.75) 10%,
+                  rgba(248, 246, 255, 0.95) 28%,
+                  rgba(248, 246, 255, 1) 100%
                 )
               `,
               /* No border, no shadow box — just the gradient itself as the visual */
@@ -755,7 +755,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             {/* Minimize button - top right, shifted closer */}
             <button
               onClick={() => setIsMinimized(true)}
-              className="absolute top-3 right-8 p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors z-10"
+              className="absolute top-3 right-8 p-2 rounded-full hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors z-10"
               title="Minimize"
             >
               <Minimize2 className="h-5 w-5" />
@@ -800,8 +800,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                               message.sender === "user"
                                 ? "bg-purple-600 text-white rounded-br-md"
                                 : message.isError
-                                  ? "bg-red-500/20 text-red-200 border border-red-500/30 rounded-bl-md"
-                                  : "bg-white/10 text-foreground border border-white/10 rounded-bl-md"
+                                  ? "bg-red-100 text-red-700 border border-red-300 rounded-bl-md"
+                                  : "bg-white/80 text-foreground border border-black/10 rounded-bl-md"
                             )}
                           >
                             {message.image && (
@@ -821,7 +821,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                             )}
                             {/* Source citations from Google Search grounding */}
                             {message.sources && message.sources.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
+                              <div className="mt-2 pt-2 border-t border-black/10">
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                                   <ExternalLink size={10} />
                                   <span>Sources</span>
@@ -833,7 +833,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                                       href={src.uri}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200 transition-colors border border-purple-500/20"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-200 hover:text-purple-800 transition-colors border border-purple-300"
                                     >
                                       {src.title.length > 30 ? src.title.slice(0, 30) + '...' : src.title}
                                     </a>
@@ -865,7 +865,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     onClick={() => handleQuickAction(action)}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
-                      "bg-white/5 hover:bg-white/10 border border-white/10",
+                      "bg-black/5 hover:bg-black/10 border border-black/10",
                       "text-muted-foreground hover:text-foreground",
                       "transition-all whitespace-nowrap flex-shrink-0"
                     )}
@@ -944,7 +944,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   <img
                     src={uploadedImage.dataUrl}
                     alt="Upload preview"
-                    className="h-16 rounded-lg border border-white/20"
+                    className="h-16 rounded-lg border border-black/20"
                   />
                   <button
                     onClick={() => setUploadedImage(null)}
@@ -966,7 +966,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                  className="p-2.5 rounded-full bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ImageIcon className="h-5 w-5" />
                 </button>
@@ -983,7 +983,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     placeholder="Ask Mally anything..."
                     className={cn(
                       "w-full px-4 py-2.5 rounded-full",
-                      "bg-white/5 border border-white/10",
+                      "bg-white/80 border border-black/10",
                       "text-foreground placeholder:text-muted-foreground",
                       "focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50",
                       "transition-all"
@@ -1000,7 +1000,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     "p-2.5 rounded-full transition-all",
                     isRecording
                       ? "bg-red-500 text-white animate-pulse"
-                      : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
+                      : "bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Mic className="h-5 w-5" />
@@ -1016,8 +1016,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   className={cn(
                     "p-2.5 rounded-full transition-all",
                     isMuted
-                      ? "bg-white/5 text-red-400 hover:bg-white/10"
-                      : "bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-black/5 text-red-500 hover:bg-black/10"
+                      : "bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground"
                   )}
                   title={isMuted ? "Unmute AI voice" : "Mute AI voice"}
                 >
@@ -1035,7 +1035,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     "p-2.5 rounded-full transition-all",
                     inputText.trim() || uploadedImage
                       ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "bg-white/5 text-muted-foreground"
+                      : "bg-black/5 text-muted-foreground"
                   )}
                 >
                   <Send className="h-5 w-5" />

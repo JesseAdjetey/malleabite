@@ -95,7 +95,7 @@ class Logger {
   /**
    * Error level logging - for error events
    */
-  error(category: string, message: string, error?: Error, ...args: any[]): void {
+  error(category: string, message: string, error?: unknown, ...args: any[]): void {
     if (this.shouldLog(LogLevel.ERROR)) {
       console.error(
         `%c${this.formatMessage('ERROR', category, message)}`,
@@ -105,7 +105,7 @@ class Logger {
       );
 
       // Log stack trace if available
-      if (error && error.stack) {
+      if (error instanceof Error && error.stack) {
         console.error('Stack trace:', error.stack);
       }
     }

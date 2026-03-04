@@ -517,6 +517,9 @@ export function useCalendarEvents() {
         // Event type
         eventType: event.eventType || 'default',
 
+        // Google Calendar sync
+        googleEventId: event.googleEventId || null,
+
         // Ensure archiving fields are preserved or set
         isArchived: event.isArchived ?? false,
         folderName: event.folderName ?? null,

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import SettingsNav from './SettingsNav';
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AnalyticsNav from './AnalyticsNav';
 import BulkModeToggle from '../calendar/BulkModeToggle';
+import CalendarDropdown from '../calendar/CalendarDropdown';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -171,13 +172,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           </button>
         </div>
 
-        {/* Calendar Account Dropdown (UI Mock) */}
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 transition-colors text-sm font-medium border border-purple-500/20 flex-shrink-0">
-          <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center text-[10px] text-white">
-            <User size={12} />
-          </div>
-          <span>jesseadjetey</span>
-        </button>
+        {/* Calendar Account Dropdown */}
+        <CalendarDropdown />
 
         {/* Tools & Actions */}
         <div className="flex items-center gap-1 ml-1 flex-shrink-0">

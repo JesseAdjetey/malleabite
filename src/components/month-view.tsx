@@ -15,7 +15,7 @@ import EventForm from "@/components/calendar/EventForm";
 import EventDetails from "@/components/calendar/EventDetails";
 import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 import dayjs from "dayjs";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
@@ -29,7 +29,7 @@ const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
   const { openEventSummary, isEventSummaryOpen, closeEventSummary, events } =
     useEventStore();
-  const { updateEvent, addEvent } = useCalendarEvents();
+  const { updateEvent, addEvent } = useEventCRUD();
   const { selectedView, setView } = useViewStore();
   const isMobile = useIsMobile();
 
@@ -98,7 +98,8 @@ const MonthView = () => {
     }
   }, [pendingDaySelection]);
 
-  // Get calendar visibility filter
+  // Get calendar visibility filter — subscribe to hiddenCalendarIds for reactivity
+  const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
   const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
 
   // Expand recurring events into instances for the current month view
@@ -135,7 +136,7 @@ const MonthView = () => {
     });
 
     return allInstances;
-  }, [events, twoDMonthArray, isCalendarVisible]);
+  }, [events, twoDMonthArray, isCalendarVisible, hiddenCalendarIds]);
 
   const getEventsForDay = (day: any) => {
     if (!day) return [];

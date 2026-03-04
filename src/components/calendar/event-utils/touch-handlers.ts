@@ -91,5 +91,8 @@ export const getDragData = (event: any, isLocked: boolean = false, color: string
     recurrenceParentId: event.recurrenceParentId,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
+    // Template draft flag — signals that this event should be updated
+    // in the draft store, not in Firestore
+    _isDraft: event._isDraft || false,
   };
 };

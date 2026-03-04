@@ -5,6 +5,8 @@ import dayjs from 'dayjs';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const GOOGLE_CALENDAR_SCOPES = [
+  'openid',
+  'email',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events',
 ].join(' ');
@@ -28,84 +30,296 @@ interface GoogleCalendarList {
   }>;
 }
 
-// Store tokens in memory (in production, use secure storage)
-let accessToken: string | null = null;
-let tokenExpiry: number | null = null;
+// ─── Per-account token storage ─────────────────────────────────────────
+// Supports multiple Google accounts by keying tokens on email.
+// Legacy single-slot keys are migrated on boot.
 
-// Initialize Google OAuth
-export function initGoogleCalendarAuth(): Promise<string> {
+const TOKEN_MAP_KEY = 'malleabite_gcal_tokens';
+const LEGACY_TOKEN_KEY = 'malleabite_gcal_token';
+const LEGACY_EXPIRY_KEY = 'malleabite_gcal_expiry';
+
+interface AccountToken {
+  accessToken: string;
+  expiry: number; // epoch ms
+  email: string;
+}
+
+/** In-memory cache — hydrated from localStorage on load */
+let tokenMap: Record<string, AccountToken> = {};
+
+function loadTokenMap(): Record<string, AccountToken> {
+  try {
+    return JSON.parse(localStorage.getItem(TOKEN_MAP_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveTokenMap() {
+  localStorage.setItem(TOKEN_MAP_KEY, JSON.stringify(tokenMap));
+}
+
+// Migrate legacy single-slot token once
+(function migrateLegacyToken() {
+  const legacyToken = localStorage.getItem(LEGACY_TOKEN_KEY);
+  const legacyExpiry = localStorage.getItem(LEGACY_EXPIRY_KEY);
+  if (legacyToken && legacyExpiry) {
+    // We don't know the email yet, store under a sentinel key; it will be
+    // overwritten on the next real auth.
+    const map = loadTokenMap();
+    if (Object.keys(map).length === 0) {
+      map['__legacy__'] = {
+        accessToken: legacyToken,
+        expiry: parseInt(legacyExpiry, 10),
+        email: '__legacy__',
+      };
+      localStorage.setItem(TOKEN_MAP_KEY, JSON.stringify(map));
+    }
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_EXPIRY_KEY);
+  }
+  tokenMap = loadTokenMap();
+})();
+
+function persistAccountToken(email: string, token: string, expiresIn: number) {
+  // Remove the legacy sentinel if it exists
+  delete tokenMap['__legacy__'];
+  tokenMap[email] = { accessToken: token, expiry: Date.now() + expiresIn * 1000, email };
+  saveTokenMap();
+}
+
+function getAccountToken(email?: string): string | null {
+  if (email && tokenMap[email]) {
+    const entry = tokenMap[email];
+    if (Date.now() < entry.expiry) return entry.accessToken;
+    return null;
+  }
+  // If no specific email requested, return the first non-expired token
+  // (only used for non-account-specific calls like initial discovery).
+  if (!email) {
+    for (const entry of Object.values(tokenMap)) {
+      if (Date.now() < entry.expiry) return entry.accessToken;
+    }
+  }
+  // If a specific email was requested but not found, do NOT fall back
+  // to another account's token — that would use the wrong credentials.
+  return null;
+}
+
+function clearAccountToken(email: string) {
+  delete tokenMap[email];
+  saveTokenMap();
+}
+
+function clearAllTokens() {
+  tokenMap = {};
+  saveTokenMap();
+}
+
+// Back-compat helper used by API functions below
+function getActiveToken(accountEmail?: string): string | null {
+  return getAccountToken(accountEmail);
+}
+
+// Initialize Google OAuth — returns the token AND the account email
+export interface GoogleAuthResult {
+  token: string;
+  email: string;
+}
+
+export function initGoogleCalendarAuth(): Promise<GoogleAuthResult> {
   return new Promise((resolve, reject) => {
     if (!GOOGLE_CLIENT_ID) {
-      reject(new Error('Google Client ID not configured'));
+      reject(new Error('Google Client ID not configured. Add VITE_GOOGLE_CLIENT_ID to your .env file.'));
       return;
     }
+
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (!settled) { settled = true; fn(); }
+    };
+
+    // Safety timeout — if the popup is blocked or GIS never calls back
+    const timeout = setTimeout(() => {
+      settle(() => reject(new Error(
+        'Google authentication timed out. Make sure popups are allowed for this site.'
+      )));
+    }, 60_000);
 
     // Use Google Identity Services
     const client = (window as any).google?.accounts?.oauth2?.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: GOOGLE_CALENDAR_SCOPES,
-      callback: (response: any) => {
-        if (response.error) {
-          reject(new Error(response.error));
-          return;
+      callback: async (response: any) => {
+        // Wrap the entire callback in try/catch so the promise can never hang.
+        // clearTimeout is called first — if something throws afterwards
+        // without this guard, the promise would never settle.
+        try {
+          clearTimeout(timeout);
+          if (response.error) {
+            settle(() => reject(new Error(response.error_description || response.error)));
+            return;
+          }
+          if (!response.access_token) {
+            settle(() => reject(new Error('No access token received from Google')));
+            return;
+          }
+
+          // Fetch the email of the account that just authenticated
+          let email = '__unknown__';
+          try {
+            const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${response.access_token}` },
+            }).then(r => r.json());
+            email = userInfo.email || '__unknown__';
+          } catch (e) {
+            console.warn('[Google Auth] Failed to fetch user email, using fallback', e);
+          }
+
+          persistAccountToken(email, response.access_token, response.expires_in || 3600);
+          settle(() => resolve({ token: response.access_token, email }));
+        } catch (callbackErr) {
+          console.error('[Google Auth] Unexpected error in GIS callback:', callbackErr);
+          settle(() => reject(
+            callbackErr instanceof Error
+              ? callbackErr
+              : new Error('Unexpected error during Google sign-in')
+          ));
         }
-        accessToken = response.access_token;
-        tokenExpiry = Date.now() + (response.expires_in * 1000);
-        resolve(response.access_token);
+      },
+      error_callback: (err: any) => {
+        // GIS calls this when popup is closed, blocked, or fails to open
+        clearTimeout(timeout);
+        const msg = err?.message || err?.type || 'Google sign-in was cancelled or blocked';
+        console.warn('[Google Auth] error_callback:', err);
+        settle(() => reject(new Error(msg)));
       },
     });
 
     if (!client) {
-      reject(new Error('Google Identity Services not loaded'));
+      clearTimeout(timeout);
+      settle(() => reject(new Error(
+        'Google Identity Services not loaded. Check your internet connection and try again.'
+      )));
       return;
     }
 
-    client.requestAccessToken({ prompt: 'consent' });
+    // 'select_account' shows account picker every time.
+    // Avoid 'consent' — it triggers stricter COOP handling in some browsers
+    // that blocks the popup callback.
+    client.requestAccessToken({ prompt: 'select_account' });
   });
 }
 
-// Check if authenticated
-export function isGoogleCalendarAuthenticated(): boolean {
-  return !!accessToken && !!tokenExpiry && Date.now() < tokenExpiry;
+// Check if authenticated (optionally for a specific account)
+export function isGoogleCalendarAuthenticated(accountEmail?: string): boolean {
+  // Re-read from localStorage in case another tab updated the map
+  tokenMap = loadTokenMap();
+  return !!getAccountToken(accountEmail);
 }
 
-// Disconnect Google Calendar
-export function disconnectGoogleCalendar(): void {
-  if (accessToken) {
-    (window as any).google?.accounts?.oauth2?.revoke(accessToken);
+/**
+ * Silently attempt to obtain a new Google token using GIS.
+ * Uses `prompt: 'none'` so no popup appears if the user has an active Google
+ * session and has previously consented.  Falls back to the popup if silent
+ * fails.  Returns true if a valid token was obtained.
+ */
+export async function ensureGoogleToken(accountEmail?: string): Promise<boolean> {
+  if (isGoogleCalendarAuthenticated(accountEmail)) return true;
+  try {
+    const result = await initGoogleCalendarAuth();
+    // If a specific account was requested, check that the user picked the right one
+    if (accountEmail && result.email !== accountEmail) {
+      console.warn(`[Google Auth] Requested ${accountEmail} but got ${result.email}`);
+      // Still valid — the user may have picked a different account
+    }
+    return true;
+  } catch {
+    return false;
   }
-  accessToken = null;
-  tokenExpiry = null;
+}
+
+// Disconnect a Google Calendar account (or all if no email given)
+export function disconnectGoogleCalendar(accountEmail?: string): void {
+  if (accountEmail) {
+    const entry = tokenMap[accountEmail];
+    if (entry) {
+      (window as any).google?.accounts?.oauth2?.revoke(entry.accessToken);
+      clearAccountToken(accountEmail);
+    }
+  } else {
+    // Revoke all tokens
+    for (const entry of Object.values(tokenMap)) {
+      (window as any).google?.accounts?.oauth2?.revoke(entry.accessToken);
+    }
+    clearAllTokens();
+  }
 }
 
 // Fetch user's calendars
-export async function fetchGoogleCalendars(): Promise<GoogleCalendarList['items']> {
-  if (!accessToken) {
-    throw new Error('Not authenticated with Google');
+export async function fetchGoogleCalendars(accountEmail?: string): Promise<GoogleCalendarList['items']> {
+  const token = getActiveToken(accountEmail);
+  if (!token) {
+    throw new Error('Not authenticated with Google. Please reconnect.');
   }
 
-  const response = await fetch(
-    'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
+  // 15-second timeout so the call can't hang forever
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      }
+    );
+  } catch (fetchErr: any) {
+    clearTimeout(timeoutId);
+    if (fetchErr?.name === 'AbortError') {
+      throw new Error('Request timed out. Check your internet connection and try again.');
     }
-  );
+    throw new Error(`Network error: ${fetchErr?.message || 'Failed to reach Google Calendar API'}`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
-    throw new Error('Failed to fetch calendars');
+    // Extract the actual error from Google's API response
+    let detail = '';
+    try {
+      const errBody = await response.json();
+      detail = errBody?.error?.message || '';
+    } catch { /* ignore parse errors */ }
+
+    if (response.status === 403) {
+      throw new Error(
+        detail ||
+        'Google Calendar API access denied. Make sure the Google Calendar API is enabled in your Google Cloud Console.'
+      );
+    }
+    if (response.status === 401) {
+      if (accountEmail) clearAccountToken(accountEmail); else clearAllTokens();
+      throw new Error('Google session expired. Please reconnect.');
+    }
+    throw new Error(detail || `Failed to fetch calendars (HTTP ${response.status})`);
   }
 
   const data: GoogleCalendarList = await response.json();
-  return data.items;
+  return data.items || [];
 }
 
 // Fetch events from Google Calendar
 export async function fetchGoogleCalendarEvents(
   calendarId: string = 'primary',
   timeMin?: Date,
-  timeMax?: Date
+  timeMax?: Date,
+  accountEmail?: string
 ): Promise<GoogleCalendarEvent[]> {
-  if (!accessToken) {
+  const token = getActiveToken(accountEmail);
+  if (!token) {
     throw new Error('Not authenticated with Google');
   }
 
@@ -125,7 +339,7 @@ export async function fetchGoogleCalendarEvents(
   const response = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     }
   );
 
@@ -138,9 +352,7 @@ export async function fetchGoogleCalendarEvents(
 }
 
 // Convert Google event to Malleabite format.
-// Produces the format expected by useCalendarEvents.addEvent:
-//   description = "HH:mm - HH:mm | actual description"
-//   date = Date object, startsAt / endsAt = "HH:mm" strings
+// startsAt/endsAt are now full ISO strings (not "HH:mm").
 export function googleEventToMalleabite(
   event: GoogleCalendarEvent,
   calendarId?: string
@@ -152,25 +364,21 @@ export function googleEventToMalleabite(
   const startDayjs = dayjs(startRaw);
   const endDayjs = endRaw ? dayjs(endRaw) : startDayjs.add(1, 'hour');
 
-  const startHHMM = startDayjs.format('HH:mm');
-  const endHHMM = endDayjs.format('HH:mm');
-
   return {
     title: event.summary || 'Untitled Event',
-    description: `${startHHMM} - ${endHHMM} | ${event.description || ''}`,
-    date: startDayjs.toDate(),
-    startsAt: startHHMM,
-    endsAt: endHHMM,
+    description: event.description || '',
+    date: startDayjs.format('YYYY-MM-DD'),
+    startsAt: startDayjs.toISOString(),
+    endsAt: endDayjs.toISOString(),
+    timeStart: startDayjs.format('HH:mm'),
+    timeEnd: endDayjs.format('HH:mm'),
     color: googleColorToMalleabite(event.colorId),
     isLocked: false,
     isTodo: false,
     hasAlarm: false,
     hasReminder: false,
     isAllDay,
-    location: event.location,
-    timeZone: event.start.timeZone,
     calendarId: calendarId || 'google',
-    googleEventId: event.id,
     source: 'google',
   };
 }
@@ -194,17 +402,24 @@ function googleColorToMalleabite(colorId?: string): string {
 }
 
 // Convert Malleabite event to Google format
+// startsAt/endsAt are full ISO strings in Malleabite
 export function malleabiteEventToGoogle(event: CalendarEventType): Partial<GoogleCalendarEvent> {
+  // startsAt is already an ISO string (e.g. "2026-03-02T14:00:00.000Z")
+  const startISO = event.startsAt;
+  const endISO = event.endsAt || dayjs(event.startsAt).add(1, 'hour').toISOString();
+  const tz = event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   return {
     summary: event.title,
     description: event.description,
+    location: event.location,
     start: {
-      dateTime: dayjs(event.startsAt).toISOString(),
+      dateTime: startISO,
+      timeZone: tz,
     },
     end: {
-      dateTime: event.endsAt 
-        ? dayjs(event.endsAt).toISOString()
-        : dayjs(event.startsAt).add(1, 'hour').toISOString(),
+      dateTime: endISO,
+      timeZone: tz,
     },
   };
 }
@@ -212,9 +427,11 @@ export function malleabiteEventToGoogle(event: CalendarEventType): Partial<Googl
 // Create event in Google Calendar
 export async function createGoogleCalendarEvent(
   event: CalendarEventType,
-  calendarId: string = 'primary'
+  calendarId: string = 'primary',
+  accountEmail?: string
 ): Promise<GoogleCalendarEvent> {
-  if (!accessToken) {
+  const token = getActiveToken(accountEmail);
+  if (!token) {
     throw new Error('Not authenticated with Google');
   }
 
@@ -225,7 +442,7 @@ export async function createGoogleCalendarEvent(
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(googleEvent),
@@ -245,9 +462,11 @@ export async function createGoogleCalendarEvent(
 export async function updateGoogleCalendarEvent(
   eventId: string,
   event: CalendarEventType,
-  calendarId: string = 'primary'
+  calendarId: string = 'primary',
+  accountEmail?: string
 ): Promise<GoogleCalendarEvent> {
-  if (!accessToken) {
+  const token = getActiveToken(accountEmail);
+  if (!token) {
     throw new Error('Not authenticated with Google');
   }
 
@@ -258,7 +477,7 @@ export async function updateGoogleCalendarEvent(
     {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(googleEvent),
@@ -275,9 +494,11 @@ export async function updateGoogleCalendarEvent(
 // Delete event from Google Calendar
 export async function deleteGoogleCalendarEvent(
   eventId: string,
-  calendarId: string = 'primary'
+  calendarId: string = 'primary',
+  accountEmail?: string
 ): Promise<void> {
-  if (!accessToken) {
+  const token = getActiveToken(accountEmail);
+  if (!token) {
     throw new Error('Not authenticated with Google');
   }
 
@@ -285,7 +506,7 @@ export async function deleteGoogleCalendarEvent(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
     {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     }
   );
 

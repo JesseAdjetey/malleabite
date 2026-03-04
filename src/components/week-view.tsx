@@ -16,7 +16,7 @@ import {
 } from "./calendar/week-view/DragDropHandlers";
 import { formatMinutesAsTime, getTimeInMinutes } from "./calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
 import { useTodos } from "@/hooks/use-todos";
@@ -29,6 +29,7 @@ import { RecurringEventEditDialog } from "@/components/calendar/RecurringEventEd
 import { EditScope } from "@/hooks/use-recurring-events";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
+import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -40,7 +41,7 @@ const WeekView = () => {
     closeEventSummary,
     events,
   } = useEventStore();
-  const { updateEvent, addEvent, addRecurrenceException, removeEvent } = useCalendarEvents();
+  const { updateEvent, addEvent, addRecurrenceException, removeEvent } = useEventCRUD();
   const { linkTodoToEvent, deleteTodo } = useTodos();
   const {
     isBulkMode,
@@ -57,8 +58,16 @@ const WeekView = () => {
     getRecurringEvents,
   } = useBulkSelection();
 
-  // Calendar filtering
+  // Calendar filtering — subscribe to both the function AND the data so React
+  // knows to re-render when hiddenCalendarIds changes (function ref is stable).
+  const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
   const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+
+  // Template mode
+  const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
+  const draftEvents = useTemplateModeStore(s => s.draftEvents);
+  const addDraftEvent = useTemplateModeStore(s => s.addDraftEvent);
+  const updateDraftEvent = useTemplateModeStore(s => s.updateDraftEvent);
 
   // Undo/redo functionality - keyboard shortcuts are handled automatically
   const { trackCreateEvent, trackDeleteEvent, trackUpdateEvent, trackBulkDeleteEvents } = useUndoRedo();
@@ -221,11 +230,19 @@ const WeekView = () => {
     });
 
     return allInstances;
-  }, [events, userSelectedDate, isCalendarVisible]);
+  }, [events, userSelectedDate, isCalendarVisible, hiddenCalendarIds]);
+
+  // Merge template draft events into display when in template mode
+  const displayEvents = useMemo(() => {
+    if (!isTemplateMode || draftEvents.length === 0) return expandedEvents;
+    // Tag draft events so they can be visually distinguished
+    const tagged = draftEvents.map(e => ({ ...e, _isDraft: true } as CalendarEventType & { _isDraft?: boolean }));
+    return [...expandedEvents, ...tagged];
+  }, [expandedEvents, isTemplateMode, draftEvents]);
 
   const getEventsForDay = (day: dayjs.Dayjs) => {
     const dayStr = day.format("YYYY-MM-DD");
-    return expandedEvents.filter((event) => {
+    return displayEvents.filter((event) => {
       // Check both date field and startsAt
       if (event.date === dayStr) return true;
       if (event.startsAt) {
@@ -325,6 +342,26 @@ const WeekView = () => {
       const descriptionParts = (data.description || '').split('|');
       const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
 
+      // ── Template Mode: route drags to draft store, not Firestore ──
+      if (isTemplateMode && data.id && data._isDraft) {
+        const updatedDraft: CalendarEventType = {
+          ...data,
+          date: day.format('YYYY-MM-DD'),
+          description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+          startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+          endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+        };
+        updateDraftEvent(updatedDraft);
+        toast.success(`Draft event moved to ${day.format("MMM D")} at ${newStartTime}`);
+        return;
+      }
+
+      // In template mode, block moving real (non-draft) events
+      if (isTemplateMode) {
+        toast.info("Exit template mode to move calendar events.");
+        return;
+      }
+
       // Check if this is a recurring event instance
       const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));
 
@@ -411,6 +448,13 @@ const WeekView = () => {
   };
 
   const handleSaveEvent = async (event: CalendarEventType) => {
+    // In template mode, save to draft events (not Firestore)
+    if (isTemplateMode) {
+      addDraftEvent(event);
+      setFormOpen(false);
+      toast.success(`Draft event "${event.title}" added to template`);
+      return;
+    }
     try {
       if (event.isTodo && !event.todoId) {
         const newTodoId = await handleCreateTodoFromEvent(event);

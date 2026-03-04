@@ -16,6 +16,7 @@ import { eventSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { errorHandler } from '@/lib/error-handler';
 import { useEventStore } from '@/lib/stores/event-store';
+import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 
 interface FirebaseActionResponse {
   success: boolean;
@@ -97,7 +98,7 @@ export function useCalendarEvents() {
       location: firebaseEvent.location || undefined,
       meetingUrl: firebaseEvent.meetingUrl || undefined,
       meetingProvider: firebaseEvent.meetingProvider || undefined,
-      calendarId: firebaseEvent.calendarId || undefined,
+      calendarId: firebaseEvent.calendarId || PERSONAL_CALENDAR_ID,
       isAllDay: firebaseEvent.isAllDay || false,
       visibility: firebaseEvent.visibility || 'public',
       status: firebaseEvent.status || 'confirmed',
@@ -265,7 +266,7 @@ export function useCalendarEvents() {
         location: event.location || undefined,
         meetingUrl: event.meetingUrl || undefined,
         meetingProvider: event.meetingProvider || undefined,
-        calendarId: event.calendarId || undefined,
+        calendarId: event.calendarId || PERSONAL_CALENDAR_ID,
         isAllDay: event.isAllDay || false,
         visibility: event.visibility || 'public',
         status: event.status || 'confirmed',

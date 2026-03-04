@@ -15,8 +15,13 @@ import { springs } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { GridBackground } from "@/components/ui/grid-background";
 import RippleBorder from "@/components/ui/RippleBorder";
+import { useCalendarFilterBridge } from "@/hooks/use-calendar-filter-bridge";
+import TemplateToolbar from "@/components/calendar/TemplateToolbar";
 
 const Mainview = () => {
+  // Bridge calendar groups → legacy filter store so views auto-filter
+  useCalendarFilterBridge();
+
   const { selectedView } = useViewStore();
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -137,6 +142,9 @@ const Mainview = () => {
 
   return (
     <GridBackground>
+      {/* Template editing toolbar (floats on top when in template mode) */}
+      <TemplateToolbar />
+
       <div className="flex h-screen overflow-hidden">
         {/* Mobile Sidebar — iOS Sheet style */}
         {isMobile && (

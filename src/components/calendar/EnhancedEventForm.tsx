@@ -28,7 +28,8 @@ import { useFocusTimeCheck } from './FocusTimeBlocks';
 import { Shield } from 'lucide-react';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
-import { useCalendars } from '@/hooks/use-calendars';
+import { useCalendarGroups } from '@/hooks/use-calendar-groups';
+import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 import { RecurrenceRuleEditor } from './RecurrenceRuleEditor';
 import { FindTimeDialog } from './FindTimeDialog';
 
@@ -90,7 +91,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { events } = useCalendarEvents();
-  const { calendars } = useCalendars();
+  const { calendars: connectedCalendars } = useCalendarGroups();
   const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
   
@@ -518,18 +519,18 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         </div>
 
         {/* Calendar Selection */}
-        {calendars.length > 0 && (
+        {connectedCalendars.length > 0 && (
           <div className="mb-4">
             <Label htmlFor="calendar" className="mb-1 block">Calendar</Label>
             <Select
-              value={selectedCalendarId}
+              value={selectedCalendarId || PERSONAL_CALENDAR_ID}
               onValueChange={setSelectedCalendarId}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select calendar" />
               </SelectTrigger>
               <SelectContent>
-                {calendars.filter(c => c.isVisible && c.id).map((cal) => (
+                {connectedCalendars.filter(c => c.isActive && c.id).map((cal) => (
                   <SelectItem key={cal.id} value={cal.id}>
                     <div className="flex items-center">
                       <div 
@@ -537,6 +538,9 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
                         style={{ backgroundColor: cal.color }}
                       />
                       {cal.name}
+                      {cal.source === 'google' && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">(Google)</span>
+                      )}
                     </div>
                   </SelectItem>
                 ))}

@@ -45,6 +45,31 @@ service cloud.firestore {
         && request.resource.data.userId == resource.data.userId // Can't change userId
         && isNotRateLimited();
       allow delete: if isOwner(userId);
+
+      // Calendar Groups (subcollection)
+      match /calendarGroups/{groupId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Connected Calendars (subcollection)
+      match /connectedCalendars/{calendarId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Calendar Preferences (subcollection)
+      match /calendarPreferences/{prefId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Synced Events from external calendars (subcollection)
+      match /syncedEvents/{eventId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Calendar Templates (subcollection)
+      match /calendarTemplates/{templateId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Calendar Events

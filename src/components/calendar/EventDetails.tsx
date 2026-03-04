@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { useEventStore } from "@/lib/store";
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useEventCRUD } from '@/hooks/use-event-crud';
 import { useUndoRedo } from '@/hooks/use-undo-redo';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
@@ -84,7 +85,8 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const { selectedEvent } = useEventStore();
   console.log('🎯 EventDetails selectedEvent:', selectedEvent);
 
-  const { updateEvent, removeEvent, addRecurrenceException } = useCalendarEvents();
+  const { updateEvent, removeEvent } = useEventCRUD();
+  const { addRecurrenceException } = useCalendarEvents();
   const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();
   const { toggleTodo, deleteTodo } = useTodos();
   const [isEditing, setIsEditing] = useState(false);

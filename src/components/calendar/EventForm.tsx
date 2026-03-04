@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import EnhancedEventForm from "./EnhancedEventForm";
 import { toast } from "@/components/ui/use-toast";
 import { CalendarEventType } from "@/lib/stores/types";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 
 interface EventFormProps {
   open: boolean;
@@ -29,7 +29,7 @@ const EventForm: React.FC<EventFormProps> = ({
   todoData,
   onSave: propOnSave,
 }) => {
-  const { addEvent } = useCalendarEvents();
+  const { addEvent } = useEventCRUD();
   const [initialEvent, setInitialEvent] = useState<CalendarEventType | undefined>(undefined);
 
   // Use onCancel or onClose, whichever is provided

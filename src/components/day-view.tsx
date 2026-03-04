@@ -8,7 +8,7 @@ import EventForm from "@/components/calendar/EventForm";
 import EventDetails from "@/components/calendar/EventDetails";
 import DayHeader from "./day-view/DayHeader";
 import TimeSlotsGrid from "./day-view/TimeSlotsGrid";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
@@ -17,13 +17,14 @@ import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
+import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
   const { events, isEventSummaryOpen, closeEventSummary } = useEventStore();
-  const { addEvent } = useCalendarEvents();
+  const { addEvent } = useEventCRUD();
   const {
     isBulkMode,
     selectedIds,
@@ -87,8 +88,14 @@ const DayView = () => {
   const isToday =
     userSelectedDate.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
 
-  // Get calendar visibility filter
+  // Get calendar visibility filter — subscribe to hiddenCalendarIds for reactivity
+  const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
   const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+
+  // Template mode
+  const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
+  const draftEvents = useTemplateModeStore(s => s.draftEvents);
+  const addDraftEvent = useTemplateModeStore(s => s.addDraftEvent);
 
   // Expand recurring events into instances for the current day
   const expandedEvents = useMemo(() => {
@@ -115,9 +122,15 @@ const DayView = () => {
     });
 
     return allInstances;
-  }, [events, userSelectedDate, isCalendarVisible]);
+  }, [events, userSelectedDate, isCalendarVisible, hiddenCalendarIds]);
 
-  const dayEvents = expandedEvents.filter((event) => {
+  // Merge template draft events when in template mode
+  const displayEvents = useMemo(() => {
+    if (!isTemplateMode || draftEvents.length === 0) return expandedEvents;
+    return [...expandedEvents, ...draftEvents];
+  }, [expandedEvents, isTemplateMode, draftEvents]);
+
+  const dayEvents = displayEvents.filter((event) => {
     const dayStr = userSelectedDate.format("YYYY-MM-DD");
     if (event.date === dayStr) return true;
     if (event.startsAt) {
@@ -154,6 +167,16 @@ const DayView = () => {
 
   // Add this function to handle saving events via the form
   const handleSaveEvent = async (event: CalendarEventType) => {
+    // In template mode, save to draft events (not Firestore)
+    if (isTemplateMode) {
+      addDraftEvent(event);
+      setFormOpen(false);
+      toast({
+        title: "Draft Event Added",
+        description: `"${event.title}" added to template`,
+      });
+      return;
+    }
     try {
       const response = await addEvent(event);
 

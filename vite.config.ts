@@ -8,6 +8,10 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    headers: {
+      // Allow Google OAuth popup to communicate back to the opener
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
   },
   plugins: [
     react(),

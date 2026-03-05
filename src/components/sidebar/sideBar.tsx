@@ -50,9 +50,6 @@ const SideBar = () => {
       case 'alarms': defaultTitle = 'Reminders'; break;
       case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
       case 'invites': defaultTitle = 'Event Invites'; break;
-      case 'archives': defaultTitle = 'Calendar Archives'; break;
-      case 'templates': defaultTitle = 'Templates'; break;
-      case 'calendars': defaultTitle = 'Calendars'; break;
     }
 
     addModule(activePageId, { type: moduleType, title: defaultTitle });

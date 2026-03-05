@@ -571,7 +571,6 @@ export function useMallyActions() {
           const defaultTitles: Record<string, string> = {
             todo: 'Tasks', pomodoro: 'Focus Timer', alarms: 'Alarms',
             reminders: 'Reminders', eisenhower: 'Priorities', invites: 'Invites',
-            archives: 'Archives', templates: 'Templates', calendars: 'Calendars',
           };
           const result = await addModule(pid, {
             type: data.moduleType,

@@ -71,30 +71,6 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
         >
           Event Invites
         </button>
-        <button
-          onClick={() => handleSelect('templates')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-blue-500/30"
-        >
-          Templates
-        </button>
-        <button
-          onClick={() => handleSelect('calendars')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-green-500/30"
-        >
-          Calendars
-        </button>
-        <button
-          onClick={() => handleSelect('booking')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-purple-500/30"
-        >
-          Booking Pages
-        </button>
-        <button
-          onClick={() => handleSelect('teams')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all font-semibold border border-orange-500/30"
-        >
-          Teams
-        </button>
       </div>
     </div>
   );

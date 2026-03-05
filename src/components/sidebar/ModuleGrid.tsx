@@ -127,7 +127,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
       >
         {modules.map((module, index) => (
           <div
-            key={index}
+            key={module.id}
             draggable
             onDragStart={() => handleDragStart(index)}
             onDragOver={(e) => handleDragOver(e, index)}

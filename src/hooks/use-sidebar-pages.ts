@@ -16,7 +16,7 @@ import {
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
-import { SidebarPage, ModuleInstance } from '@/lib/stores/types';
+import { SidebarPage, ModuleInstance, ensureModuleId, generateModuleId } from '@/lib/stores/types';
 import { useTodoLists } from './use-todo-lists';
 
 export function useSidebarPages() {
@@ -82,8 +82,25 @@ export function useSidebarPages() {
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: doc.data().updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        modules: doc.data().modules || []
+        modules: (doc.data().modules || []).map(ensureModuleId)
       })) as SidebarPage[];
+
+      // ── Migrate: write module IDs back to Firestore for any modules that were missing them ──
+      for (const page of pagesData) {
+        const rawModules = snapshot.docs.find(d => d.id === page.id)?.data()?.modules || [];
+        const needsMigration = rawModules.some((m: any) => !m.id);
+        if (needsMigration) {
+          try {
+            await updateDoc(doc(db, 'sidebar_pages', page.id), {
+              modules: page.modules,
+              updatedAt: serverTimestamp()
+            });
+            console.log(`[SidebarPages] Migrated module IDs for page "${page.title}"`);
+          } catch (err) {
+            console.warn('[SidebarPages] Failed to migrate module IDs:', err);
+          }
+        }
+      }
 
       // If no pages, create default one
       if (pagesData.length === 0) {
@@ -196,15 +213,19 @@ export function useSidebarPages() {
   };
 
   // Add module to a page
-  const addModule = async (pageId: string, module: ModuleInstance) => {
+  const addModule = async (pageId: string, module: Omit<ModuleInstance, 'id'> & { id?: string }) => {
     if (!user?.uid) return { success: false };
 
     try {
       const page = pages.find(p => p.id === pageId);
       if (!page) return { success: false };
 
-      // For todo modules, create a new todo list
-      let moduleToAdd = { ...module, pageId };
+      // Always assign a unique module ID
+      let moduleToAdd: ModuleInstance = {
+        ...module,
+        id: module.id || generateModuleId(),
+        pageId,
+      };
       if (module.type === 'todo' && !module.listId) {
         const listResult = await createList(module.title || 'My Tasks');
         if (listResult.success && listResult.listId) {
@@ -331,6 +352,43 @@ export function useSidebarPages() {
   // Get active page
   const activePage = pages.find(p => p.id === activePageId);
 
+  // ── ID-based module operations (stable across reorders) ─────────────────
+
+  /** Find a module by its unique ID across all pages */
+  const findModuleById = useCallback((moduleId: string): { page: SidebarPage; module: ModuleInstance; index: number } | null => {
+    for (const page of pages) {
+      const index = page.modules.findIndex(m => m.id === moduleId);
+      if (index !== -1) {
+        return { page, module: page.modules[index], index };
+      }
+    }
+    return null;
+  }, [pages]);
+
+  /** Remove a module by its unique ID */
+  const removeModuleById = async (moduleId: string) => {
+    if (!user?.uid) return { success: false };
+    const found = findModuleById(moduleId);
+    if (!found) return { success: false };
+    return removeModule(found.page.id, found.index);
+  };
+
+  /** Update a module by its unique ID */
+  const updateModuleById = async (moduleId: string, updates: Partial<ModuleInstance>) => {
+    if (!user?.uid) return { success: false };
+    const found = findModuleById(moduleId);
+    if (!found) return { success: false };
+    return updateModule(found.page.id, found.index, updates);
+  };
+
+  /** Toggle minimize state by module ID */
+  const toggleModuleMinimizedById = async (moduleId: string) => {
+    if (!user?.uid) return { success: false };
+    const found = findModuleById(moduleId);
+    if (!found) return { success: false };
+    return toggleModuleMinimized(found.page.id, found.index);
+  };
+
   return {
     pages,
     activePage,
@@ -345,6 +403,11 @@ export function useSidebarPages() {
     removeModule,
     updateModule,
     reorderModules,
-    toggleModuleMinimized
+    toggleModuleMinimized,
+    // ID-based operations
+    findModuleById,
+    removeModuleById,
+    updateModuleById,
+    toggleModuleMinimizedById,
   };
 }

@@ -91,6 +91,12 @@ export const getDragData = (event: any, isLocked: boolean = false, color: string
     recurrenceParentId: event.recurrenceParentId,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
+    // Preserve calendar association so drag-drop doesn't lose the
+    // calendar/Google link and cause events to vanish or desync.
+    calendarId: event.calendarId,
+    googleEventId: event.googleEventId,
+    userId: event.userId,
+    source: event.source,
     // Template draft flag — signals that this event should be updated
     // in the draft store, not in Firestore
     _isDraft: event._isDraft || false,

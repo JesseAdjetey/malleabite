@@ -48,31 +48,31 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   switch (module.type) {
     case 'todo':
       return (
-        <div key={index} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <TodoModuleEnhanced {...moduleProps} />
         </div>
       );
     case 'pomodoro':
       return (
-        <div key={index} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <PomodoroModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'alarms': // Updated to use the new RemindersModule
       return (
-        <div key={index} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <RemindersModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'eisenhower':
       return (
-        <div key={index} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <EisenhowerModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'invites':
       return (
-        <div key={index} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <InvitesModule {...moduleProps} />
         </div>
       );

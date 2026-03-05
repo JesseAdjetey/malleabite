@@ -2,12 +2,26 @@
 export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites';
 
 export interface ModuleInstance {
+  id: string; // Unique identifier for this module instance — stable across reorders
   type: ModuleType;
   title: string;
   minimized?: boolean; // New property to track minimized state
   pageId?: string; // Reference to which page this module belongs to
   listId?: string; // For todo modules - reference to the specific todo list
   instanceId?: string; // Unique ID for stateful modules (e.g. Pomodoro) to scope state per-instance
+}
+
+/** Generate a unique module ID */
+export function generateModuleId(): string {
+  return crypto.randomUUID();
+}
+
+/** Ensure a module has an id — assigns one if missing (migration helper) */
+export function ensureModuleId(module: any): ModuleInstance {
+  if (!module.id) {
+    return { ...module, id: generateModuleId() };
+  }
+  return module as ModuleInstance;
 }
 
 export interface SidebarPage {

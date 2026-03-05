@@ -121,6 +121,9 @@ function getActiveToken(accountEmail?: string): string | null {
   return getAccountToken(accountEmail);
 }
 
+// Guard to prevent re-entrant popup calls
+let authInProgress = false;
+
 // Initialize Google OAuth — returns the token AND the account email
 export interface GoogleAuthResult {
   token: string;
@@ -134,9 +137,17 @@ export function initGoogleCalendarAuth(): Promise<GoogleAuthResult> {
       return;
     }
 
+    // Prevent re-entrant popup calls — if an auth is already in progress,
+    // reject immediately so callers don't stack up multiple popups.
+    if (authInProgress) {
+      reject(new Error('Google authentication is already in progress.'));
+      return;
+    }
+    authInProgress = true;
+
     let settled = false;
     const settle = (fn: () => void) => {
-      if (!settled) { settled = true; fn(); }
+      if (!settled) { settled = true; authInProgress = false; fn(); }
     };
 
     // Safety timeout — if the popup is blocked or GIS never calls back
@@ -219,24 +230,71 @@ export function isGoogleCalendarAuthenticated(accountEmail?: string): boolean {
 }
 
 /**
- * Silently attempt to obtain a new Google token using GIS.
- * Uses `prompt: 'none'` so no popup appears if the user has an active Google
- * session and has previously consented.  Falls back to the popup if silent
- * fails.  Returns true if a valid token was obtained.
+ * Silently attempt to refresh a Google token using GIS `prompt: 'none'`.
+ * Does NOT open any popup or redirect — only works if the user has an active
+ * Google session and has previously consented.  Background operations
+ * (polling, write-back) should call this instead of initGoogleCalendarAuth
+ * so they never trigger a visible popup.
+ * Returns true if a valid token was obtained.
  */
 export async function ensureGoogleToken(accountEmail?: string): Promise<boolean> {
+  // Fast path: token is already valid
   if (isGoogleCalendarAuthenticated(accountEmail)) return true;
-  try {
-    const result = await initGoogleCalendarAuth();
-    // If a specific account was requested, check that the user picked the right one
-    if (accountEmail && result.email !== accountEmail) {
-      console.warn(`[Google Auth] Requested ${accountEmail} but got ${result.email}`);
-      // Still valid — the user may have picked a different account
+
+  // Attempt a silent token refresh — no popup
+  if (!GOOGLE_CLIENT_ID) return false;
+  const gis = (window as any).google?.accounts?.oauth2;
+  if (!gis) return false;
+
+  return new Promise<boolean>((resolve) => {
+    // 10-second timeout for the silent attempt
+    const timeout = setTimeout(() => resolve(false), 10_000);
+
+    try {
+      const client = gis.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_CALENDAR_SCOPES,
+        callback: async (response: any) => {
+          clearTimeout(timeout);
+          if (response.error || !response.access_token) {
+            resolve(false);
+            return;
+          }
+          // Fetch email for the token
+          let email = accountEmail || '__unknown__';
+          if (!accountEmail) {
+            try {
+              const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${response.access_token}` },
+              }).then(r => r.json());
+              email = userInfo.email || '__unknown__';
+            } catch { /* use fallback */ }
+          }
+          persistAccountToken(email, response.access_token, response.expires_in || 3600);
+          resolve(true);
+        },
+        error_callback: () => {
+          clearTimeout(timeout);
+          resolve(false);
+        },
+      });
+
+      if (!client) {
+        clearTimeout(timeout);
+        resolve(false);
+        return;
+      }
+
+      // prompt: 'none' is the official GIS silent mode — no UI of any kind.
+      // If a valid session exists and the user previously consented to these
+      // scopes, a new token is returned silently.  Otherwise the error_callback
+      // fires and we resolve(false).
+      client.requestAccessToken({ prompt: 'none' });
+    } catch {
+      clearTimeout(timeout);
+      resolve(false);
     }
-    return true;
-  } catch {
-    return false;
-  }
+  });
 }
 
 // Disconnect a Google Calendar account (or all if no email given)

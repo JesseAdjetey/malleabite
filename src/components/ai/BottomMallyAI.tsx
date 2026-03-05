@@ -38,6 +38,7 @@ import { useUsageLimits } from "@/hooks/use-usage-limits";
 import { useMallyActions } from "@/hooks/use-mally-actions";
 import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proactive-suggestions";
 import { logger } from "@/lib/logger";
+import { useThemeStore } from "@/lib/stores/theme-store";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -45,6 +46,9 @@ import { cn } from "@/lib/utils";
 import { mallyTTS } from "@/lib/ai/tts-service";
 import { speechService } from "@/lib/ai/speech-recognition-service";
 import { haptics } from "@/lib/haptics";
+import { MentionPopover } from "./MentionPopover";
+import { MentionTagBar } from "./MentionTagBar";
+import { MentionReference, MentionOption, MentionTabId, createMentionReference, serializeReferences } from "./mention-types";
 
 interface Message {
   id: string;
@@ -135,6 +139,8 @@ const DoodleBackground = () => (
 export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const { resolvedTheme } = useThemeStore();
+  const isDark = resolvedTheme === "dark";
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -215,7 +221,20 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     todos,
     lists,
     activeListId,
+    pages,
+    eisenhowerItems,
+    alarms,
+    reminders,
+    sentInvites,
+    receivedInvites,
   } = useMallyActions();
+
+  // @ Mention system state
+  const [mentionRefs, setMentionRefs] = useState<MentionReference[]>([]);
+  const [showMentionPopover, setShowMentionPopover] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionTriggerIndex, setMentionTriggerIndex] = useState(-1);
+  const mentionPopoverPosition = useRef<'above' | 'below'>('above');
 
   const { memory: userMemory } = useUserMemory();
 
@@ -481,10 +500,19 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
     console.log('Adding user message');
 
-    // Add user message
+    // Capture and clear mention references before async work
+    const currentRefs = [...mentionRefs];
+    const refLabels = currentRefs.length > 0
+      ? currentRefs.map(r => `@${r.shortLabel}`).join(', ')
+      : '';
+
+    // Add user message (show ref chips in display text)
+    const displayText = refLabels
+      ? `${refLabels} — ${messageText || "Analyze this image"}`
+      : (messageText || "Analyze this image");
     const userMessage: Message = {
       id: crypto.randomUUID(),
-      text: messageText || "Analyze this image",
+      text: displayText,
       sender: "user",
       timestamp: new Date(),
       image: uploadedImage || undefined,
@@ -493,6 +521,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputText("");
     setUploadedImage(null);
+    setMentionRefs([]);
+    setShowMentionPopover(false);
     setIsLoading(true);
 
     // Add loading message
@@ -509,6 +539,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       // Build context
       const context = buildContext();
 
+      // Attach serialized @ mention references to context
+      if (currentRefs.length > 0) {
+        (context as any).mentionReferences = serializeReferences(currentRefs);
+      }
+
       // Prepare history for Gemini (limited to last 10 messages for token efficiency)
       const messageHistory = messages
         .filter(m => !m.isLoading && m.text !== "Thinking...")
@@ -524,9 +559,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         contextTodos: context.todos.length
       });
 
+      // Augment user message with reference context for the AI
+      let augmentedMessage = messageText;
+      if (currentRefs.length > 0) {
+        const refSummary = currentRefs.map(r => {
+          return `@${r.entityType}:${r.label} (id:${r.entityId})`;
+        }).join(', ');
+        augmentedMessage = `[Referenced: ${refSummary}] ${messageText}`;
+      }
+
       // Call Firebase function
       const response = await FirebaseFunctions.processScheduling({
-        userMessage: messageText,
+        userMessage: augmentedMessage,
         userId: user.uid,
         context: JSON.stringify(context),
         history: messageHistory,
@@ -615,10 +659,93 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
+    // When mention popover is open, let it handle navigation keys
+    if (showMentionPopover) {
+      if (['Enter', 'ArrowUp', 'ArrowDown', 'Tab', 'Escape'].includes(e.key)) {
+        // These are handled by MentionPopover's window keydown listener
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // Handle input text change — detect '@' trigger for mention popover
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputText(value);
+
+    // Detect '@' for mention trigger
+    const cursorPos = e.target.selectionStart || value.length;
+    // Look backwards from cursor to find an unmatched '@'
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex !== -1) {
+      // Check that '@' is at start or preceded by a space (not in an email)
+      const charBefore = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
+      if (charBefore === ' ' || charBefore === '\n' || lastAtIndex === 0) {
+        const filterAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+        // Don't trigger if there's a space in the filter (means they moved on)
+        if (!filterAfterAt.includes(' ')) {
+          setShowMentionPopover(true);
+          setMentionFilter(filterAfterAt);
+          setMentionTriggerIndex(lastAtIndex);
+
+          // Determine position based on input location
+          if (inputRef.current) {
+            const rect = inputRef.current.getBoundingClientRect();
+            mentionPopoverPosition.current = rect.top > window.innerHeight / 2 ? 'above' : 'below';
+          }
+          return;
+        }
+      }
+    }
+
+    // No valid '@' trigger — close popover if open
+    if (showMentionPopover) {
+      setShowMentionPopover(false);
+      setMentionFilter('');
+      setMentionTriggerIndex(-1);
+    }
+  };
+
+  // Handle mention selection from popover
+  const handleMentionSelect = (option: MentionOption, tabId: MentionTabId) => {
+    const ref = createMentionReference(option, tabId);
+
+    // Avoid duplicates
+    if (!mentionRefs.some(r => r.entityId === ref.entityId && r.entityType === ref.entityType)) {
+      setMentionRefs(prev => [...prev, ref]);
+    }
+
+    // Remove the '@filter' text from input
+    if (mentionTriggerIndex >= 0) {
+      const before = inputText.substring(0, mentionTriggerIndex);
+      const cursorPos = inputRef.current?.selectionStart || inputText.length;
+      const after = inputText.substring(cursorPos);
+      setInputText(before + after);
+    }
+
+    setShowMentionPopover(false);
+    setMentionFilter('');
+    setMentionTriggerIndex(-1);
+    inputRef.current?.focus();
+  };
+
+  // Remove a mention reference chip
+  const handleMentionRemove = (mentionId: string) => {
+    setMentionRefs(prev => prev.filter(r => r.mentionId !== mentionId));
+  };
+
+  // Close mention popover
+  const handleMentionClose = () => {
+    setShowMentionPopover(false);
+    setMentionFilter('');
+    setMentionTriggerIndex(-1);
+    inputRef.current?.focus();
   };
 
   // Toggle voice recording
@@ -672,7 +799,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => { if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); } }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-white/50 dark:bg-black/40 backdrop-blur-sm z-40"
           />
         )}
       </AnimatePresence>
@@ -734,17 +861,26 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             )}
             style={{
               maxHeight: isMobile ? "80vh" : "70vh",
-              /* Layered gradient: fully transparent at top fading into light base */
-              background: `
-                linear-gradient(
-                  to bottom,
-                  transparent 0%,
-                  rgba(248, 246, 255, 0) 0%,
-                  rgba(248, 246, 255, 0.75) 10%,
-                  rgba(248, 246, 255, 0.95) 28%,
-                  rgba(248, 246, 255, 1) 100%
-                )
-              `,
+              /* Layered gradient: fully transparent at top fading into base */
+              background: isDark
+                ? `linear-gradient(
+                    to bottom,
+                    rgba(0, 0, 0, 0) 0%,
+                    rgba(0, 0, 0, 0.05) 8%,
+                    rgba(0, 0, 0, 0.15) 18%,
+                    rgba(0, 0, 0, 0.35) 30%,
+                    rgba(0, 0, 0, 0.6) 45%,
+                    rgba(0, 0, 0, 0.85) 65%,
+                    rgba(0, 0, 0, 1) 100%
+                  )`
+                : `linear-gradient(
+                    to bottom,
+                    transparent 0%,
+                    rgba(248, 246, 255, 0) 0%,
+                    rgba(248, 246, 255, 0.75) 10%,
+                    rgba(248, 246, 255, 0.95) 28%,
+                    rgba(248, 246, 255, 1) 100%
+                  )`,
               /* No border, no shadow box — just the gradient itself as the visual */
             }}
             transition={{ type: "spring", damping: 32, stiffness: 220 }}
@@ -800,8 +936,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                               message.sender === "user"
                                 ? "bg-purple-600 text-white rounded-br-md"
                                 : message.isError
-                                  ? "bg-red-100 text-red-700 border border-red-300 rounded-bl-md"
-                                  : "bg-white/80 text-foreground border border-black/10 rounded-bl-md"
+                                  ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700 rounded-bl-md"
+                                  : "bg-white/80 dark:bg-white/10 text-foreground border border-black/10 dark:border-white/10 rounded-bl-md"
                             )}
                           >
                             {message.image && (
@@ -821,7 +957,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                             )}
                             {/* Source citations from Google Search grounding */}
                             {message.sources && message.sources.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-black/10">
+                              <div className="mt-2 pt-2 border-t border-black/10 dark:border-white/10">
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                                   <ExternalLink size={10} />
                                   <span>Sources</span>
@@ -833,7 +969,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                                       href={src.uri}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-200 hover:text-purple-800 transition-colors border border-purple-300"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 hover:text-purple-800 dark:hover:text-purple-200 transition-colors border border-purple-300 dark:border-purple-700"
                                     >
                                       {src.title.length > 30 ? src.title.slice(0, 30) + '...' : src.title}
                                     </a>
@@ -966,29 +1102,50 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="p-2.5 rounded-full bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors"
+                  className="p-2.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ImageIcon className="h-5 w-5" />
                 </button>
 
-                {/* Text input */}
+                {/* Text input with @ mention system */}
                 <div className="flex-1 relative">
+                  {/* Mention tag bar (chips above input) */}
+                  <MentionTagBar references={mentionRefs} onRemove={handleMentionRemove} />
+
                   <input
                     ref={inputRef}
                     type="text"
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
+                    onChange={handleInputChange}
                     onKeyPress={handleKeyPress}
                     onFocus={() => setIsExpanded(true)}
-                    placeholder="Ask Mally anything..."
+                    placeholder={mentionRefs.length > 0 ? "Type your message..." : "Ask Mally anything... (@ to reference)"}
                     className={cn(
                       "w-full px-4 py-2.5 rounded-full",
-                      "bg-white/80 border border-black/10",
+                      "bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10",
                       "text-foreground placeholder:text-muted-foreground",
                       "focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50",
                       "transition-all"
                     )}
                     disabled={isLoading}
+                  />
+
+                  {/* @ Mention popover */}
+                  <MentionPopover
+                    open={showMentionPopover}
+                    onClose={handleMentionClose}
+                    onSelect={handleMentionSelect}
+                    position={mentionPopoverPosition.current}
+                    pages={pages}
+                    events={events}
+                    todos={todos}
+                    lists={lists}
+                    eisenhowerItems={eisenhowerItems}
+                    alarms={alarms}
+                    reminders={reminders}
+                    sentInvites={sentInvites}
+                    receivedInvites={receivedInvites}
+                    filterText={mentionFilter}
                   />
                 </div>
 
@@ -1000,7 +1157,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     "p-2.5 rounded-full transition-all",
                     isRecording
                       ? "bg-red-500 text-white animate-pulse"
-                      : "bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground"
+                      : "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Mic className="h-5 w-5" />
@@ -1016,8 +1173,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   className={cn(
                     "p-2.5 rounded-full transition-all",
                     isMuted
-                      ? "bg-black/5 text-red-500 hover:bg-black/10"
-                      : "bg-black/5 hover:bg-black/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-black/5 dark:bg-white/10 text-red-500 hover:bg-black/10 dark:hover:bg-white/20"
+                      : "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground"
                   )}
                   title={isMuted ? "Unmute AI voice" : "Mute AI voice"}
                 >
@@ -1035,7 +1192,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     "p-2.5 rounded-full transition-all",
                     inputText.trim() || uploadedImage
                       ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : "bg-black/5 text-muted-foreground"
+                      : "bg-black/5 dark:bg-white/10 text-muted-foreground"
                   )}
                 >
                   <Send className="h-5 w-5" />

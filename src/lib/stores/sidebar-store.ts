@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import { ModuleInstance, ModuleType, SidebarPage } from "./types";
+import { ModuleInstance, ModuleType, SidebarPage, generateModuleId, ensureModuleId } from "./types";
 
 interface SidebarStoreType {
   pages: SidebarPage[];
@@ -24,8 +24,8 @@ export const useSidebarStore = create<SidebarStoreType>()(
             id: '1',
             title: 'Tasks',
             modules: [
-              { type: 'todo', title: 'To-Do List' },
-              { type: 'eisenhower', title: 'Eisenhower Matrix' }
+              { id: generateModuleId(), type: 'todo', title: 'To-Do List' },
+              { id: generateModuleId(), type: 'eisenhower', title: 'Eisenhower Matrix' }
             ],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -36,9 +36,9 @@ export const useSidebarStore = create<SidebarStoreType>()(
             id: '2',
             title: 'Tools',
             modules: [
-              { type: 'pomodoro', title: 'Pomodoro' },
-              { type: 'alarms', title: 'Reminders' },
-              { type: 'invites', title: 'Event Invites' }
+              { id: generateModuleId(), type: 'pomodoro', title: 'Pomodoro' },
+              { id: generateModuleId(), type: 'alarms', title: 'Reminders' },
+              { id: generateModuleId(), type: 'invites', title: 'Event Invites' }
             ],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -80,7 +80,7 @@ export const useSidebarStore = create<SidebarStoreType>()(
                 ...newPages[pageIndex],
                 modules: [
                   ...newPages[pageIndex].modules, 
-                  { type: moduleType, title: defaultTitle }
+                  { id: generateModuleId(), type: moduleType, title: defaultTitle }
                 ],
                 updatedAt: new Date().toISOString()
               };
@@ -168,7 +168,21 @@ export const useSidebarStore = create<SidebarStoreType>()(
           });
         }
       }),
-      { name: "sidebar_data", skipHydration: true }
+      {
+        name: "sidebar_data",
+        skipHydration: true,
+        merge: (persistedState: any, currentState) => {
+          const merged = { ...currentState, ...persistedState };
+          // Migrate: ensure all modules have IDs
+          if (merged.pages) {
+            merged.pages = merged.pages.map((page: SidebarPage) => ({
+              ...page,
+              modules: page.modules.map(m => ensureModuleId(m))
+            }));
+          }
+          return merged as SidebarStoreType;
+        }
+      }
     )
   )
 );

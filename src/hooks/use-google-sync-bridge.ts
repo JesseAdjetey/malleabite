@@ -40,6 +40,12 @@ export function useGoogleSyncBridge() {
   const { syncCalendar } = useCalendarSync();
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Keep a stable ref to calendars so the polling effect doesn't restart
+  // every time a Firestore update (e.g. lastSyncAt change) triggers a new
+  // calendars array.  The poll function reads from the ref instead.
+  const calendarsRef = useRef(calendars);
+  calendarsRef.current = calendars;
+
   // ─── Helpers ────────────────────────────────────────────────────────────
 
   /**
@@ -68,11 +74,11 @@ export function useGoogleSyncBridge() {
       const googleCal = getGoogleCalendar(event.calendarId);
       if (!googleCal) return null;
 
-      // Attempt to refresh the token if it's expired
+      // Try silent token refresh (no popup) if expired
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
         const ok = await ensureGoogleToken(googleCal.accountEmail);
         if (!ok) {
-          logger.warn('GoogleSyncBridge', 'Google token expired and re-auth failed; event not pushed');
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; event not pushed. Please reconnect.`);
           return null;
         }
       }
@@ -101,7 +107,10 @@ export function useGoogleSyncBridge() {
 
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
         const ok = await ensureGoogleToken(googleCal.accountEmail);
-        if (!ok) return false;
+        if (!ok) {
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; update not pushed. Please reconnect.`);
+          return false;
+        }
       }
 
       try {
@@ -128,7 +137,10 @@ export function useGoogleSyncBridge() {
 
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
         const ok = await ensureGoogleToken(googleCal.accountEmail);
-        if (!ok) return false;
+        if (!ok) {
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; delete not pushed. Please reconnect.`);
+          return false;
+        }
       }
 
       try {
@@ -149,11 +161,14 @@ export function useGoogleSyncBridge() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Get active Google calendars
-    const googleCalendars = calendars.filter(
-      (c) => c.source === 'google' && c.isActive && c.syncEnabled
-    );
+    // Read from the ref so this effect only depends on user.uid,
+    // NOT on the calendars array (which changes on every Firestore write).
+    const getGoogleCalendars = () =>
+      calendarsRef.current.filter(
+        (c) => c.source === 'google' && c.isActive && c.syncEnabled
+      );
 
+    const googleCalendars = getGoogleCalendars();
     if (googleCalendars.length === 0) return;
 
     // Use the shortest sync interval among all active Google calendars
@@ -172,7 +187,9 @@ export function useGoogleSyncBridge() {
     );
 
     const poll = async () => {
-      for (const cal of googleCalendars) {
+      // Re-read from the ref each poll so we pick up newly added/removed calendars
+      const currentGoogleCals = getGoogleCalendars();
+      for (const cal of currentGoogleCals) {
         // Skip calendars with no accountEmail — they were created before
         // multi-account support and need to be re-connected.
         if (!cal.accountEmail) {
@@ -180,10 +197,14 @@ export function useGoogleSyncBridge() {
           continue;
         }
 
-        // Check token per-account so multi-account setups work
+        // Check token per-account so multi-account setups work.
+        // Try silent refresh if expired (no popup).
         if (!isGoogleCalendarAuthenticated(cal.accountEmail)) {
           const ok = await ensureGoogleToken(cal.accountEmail);
-          if (!ok) continue; // skip this calendar, try the rest
+          if (!ok) {
+            logger.warn('GoogleSyncBridge', `Skipping poll for ${cal.name}: token expired for ${cal.accountEmail}. Please reconnect.`);
+            continue;
+          }
         }
 
         try {
@@ -208,7 +229,10 @@ export function useGoogleSyncBridge() {
         pollTimerRef.current = null;
       }
     };
-  }, [user?.uid, calendars, syncCalendar]);
+    // Only restart the effect when the user changes — NOT when calendars update.
+    // The poll function reads from calendarsRef.current each tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, syncCalendar]);
 
   return {
     pushCreateToGoogle,

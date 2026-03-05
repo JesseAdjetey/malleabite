@@ -20,6 +20,25 @@ import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import dayjs from "dayjs";
 
+// ── New imports for expanded AI capabilities ─────────────────────────────────
+import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { useUndoRedo } from "@/hooks/use-undo-redo";
+import { useThemeStore } from "@/lib/stores/theme-store";
+import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useCalendarGroups } from "@/hooks/use-calendar-groups";
+import { useGoals } from "@/hooks/use-goals";
+import { useAppointmentScheduling } from "@/hooks/use-appointment-scheduling";
+import { useFindTime } from "@/hooks/use-find-time";
+import { useCalendarSnapshots } from "@/hooks/use-calendar-snapshots";
+import { useEventSearch } from "@/hooks/use-event-search";
+import { useWorkingHours } from "@/hooks/use-working-hours";
+import { useRecurringEvents } from "@/hooks/use-recurring-events";
+import { useAnalyticsData } from "@/hooks/use-analytics-data";
+import { exportToICalendar, downloadICalendar } from "@/lib/utils/calendar-import-export";
+import { usePrintCalendar } from "@/hooks/use-print-calendar";
+import { useVideoConferencing } from "@/hooks/use-video-conferencing";
+import { useEmailNotifications } from "@/hooks/use-email-notifications";
+
 export function useMallyActions() {
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
@@ -44,14 +63,18 @@ export function useMallyActions() {
     toggleModuleMinimized,
     createPage,
     deletePage,
+    findModuleById,
+    removeModuleById,
+    updateModuleById,
+    toggleModuleMinimizedById,
   } = useSidebarPages();
 
   // Eisenhower
   const { items: eisenhowerItems, addItem: addEisenhowerItem, updateQuadrant, removeItem: removeEisenhowerItem } = useEisenhower();
 
   // Alarms & Reminders
-  const { addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo } = useAlarms();
-  const { addReminder, updateReminder, deleteReminder, toggleReminderActive } = useReminders();
+  const { alarms, addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo } = useAlarms();
+  const { reminders, addReminder, updateReminder, deleteReminder, toggleReminderActive } = useReminders();
 
   // Pomodoro
   const {
@@ -62,7 +85,7 @@ export function useMallyActions() {
 
   // Templates & Invites
   const { templates, applyTemplate, useTemplate, createTemplate, deleteTemplate } = useTemplates();
-  const { sendInvite, respondToInvite, deleteInvite } = useInvites();
+  const { sentInvites, receivedInvites, sendInvite, respondToInvite, deleteInvite } = useInvites();
 
   // View & Date
   const { setView } = useViewStore();
@@ -72,6 +95,78 @@ export function useMallyActions() {
   const calendarAccounts = useCalendarFilterStore(state => state.accounts);
   const toggleVisibility = useCalendarFilterStore(state => state.toggleVisibility);
   const setAllVisible = useCalendarFilterStore(state => state.setAllVisible);
+
+  // ── New capabilities ───────────────────────────────────────────────────────
+
+  // Bulk operations
+  const {
+    bulkDelete, bulkUpdateColor, bulkReschedule, bulkDuplicate,
+    enableBulkMode, disableBulkMode, toggleSelection, selectAll, deselectAll,
+    getSelectedEvents, selectedCount, isBulkMode,
+  } = useBulkSelection();
+
+  // Undo / Redo
+  const { performUndo, performRedo, canUndo, canRedo } = useUndoRedo();
+
+  // Theme & Settings
+  const { setTheme } = useThemeStore();
+  const { setBackgroundColor } = useSettingsStore();
+
+  // Calendar groups & calendars
+  const {
+    groups: calendarGroups,
+    createGroup: createCalendarGroup,
+    updateGroup: updateCalendarGroup,
+    deleteGroup: deleteCalendarGroup,
+    addCalendar, updateCalendar, deleteCalendar, moveCalendar,
+    getActiveCalendars,
+  } = useCalendarGroups();
+
+  // Goals
+  const {
+    goals, goalsWithProgress,
+    createGoal, updateGoal, deleteGoal,
+    scheduleGoalSessions, completeSession, skipSession,
+    pauseGoal, resumeGoal,
+  } = useGoals();
+
+  // Appointment scheduling / Booking
+  const {
+    bookingPages, bookings,
+    createBookingPage, updateBookingPage, deleteBookingPage, togglePageActive,
+    getAvailableSlots, createBooking, cancelBooking, getBookingUrl, copyBookingUrl,
+  } = useAppointmentScheduling();
+
+  // Find time
+  const { findAvailableTimes, suggestNextAvailable } = useFindTime([]);
+
+  // Snapshots
+  const {
+    snapshots,
+    createSnapshot, restoreSnapshot, deleteSnapshot: deleteCalendarSnapshot,
+    clearCalendar, saveAndStartFresh,
+  } = useCalendarSnapshots();
+
+  // Event search
+  const { search: searchEvents, searchResults } = useEventSearch(events);
+
+  // Working hours
+  const { workingHours, saveWorkingHours, isWithinWorkingHours } = useWorkingHours();
+
+  // Recurring events
+  const { editRecurringEvent, deleteRecurringEvent } = useRecurringEvents();
+
+  // Analytics
+  const { metrics: analyticsMetrics, timeDistribution } = useAnalyticsData();
+
+  // Print / export
+  const { printCalendar, downloadPDF } = usePrintCalendar();
+
+  // Video conferencing
+  const { createMeeting, addMeetingToEvent } = useVideoConferencing();
+
+  // Email notifications
+  const { updatePreferences: updateNotificationPrefs, scheduleEventReminders } = useEmailNotifications();
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
@@ -120,7 +215,23 @@ export function useMallyActions() {
     return { pageId: activePageId, page: activePage ?? null };
   }, [pages, activePage, activePageId]);
 
-  /** Find a module's index in a page by type and/or title. */
+  /** Find a module's index in a page by ID, type, and/or title. Prefers moduleId. */
+  const resolveModuleRef = useCallback((page: SidebarPage, data: { moduleId?: string; moduleType?: string; title?: string }) => {
+    // Prefer direct ID lookup (stable across reorders)
+    if (data.moduleId) {
+      const idx = page.modules.findIndex(m => m.id === data.moduleId);
+      if (idx !== -1) return { index: idx, module: page.modules[idx] };
+    }
+    // Fallback: match by type + title
+    const idx = page.modules.findIndex(m => {
+      const typeMatch = !data.moduleType || m.type === data.moduleType;
+      const titleMatch = !data.title || m.title.toLowerCase().trim() === (data.title as string).toLowerCase().trim();
+      return typeMatch && titleMatch;
+    });
+    return idx !== -1 ? { index: idx, module: page.modules[idx] } : null;
+  }, []);
+
+  /** @deprecated Use resolveModuleRef instead — kept for backward compat */
   const resolveModuleIndex = useCallback((page: SidebarPage, data: { moduleType?: string; title?: string }) => {
     return page.modules.findIndex(m => {
       const typeMatch = !data.moduleType || m.type === data.moduleType;
@@ -586,40 +697,64 @@ export function useMallyActions() {
         }
 
         case 'remove_module': {
+          // Prefer direct moduleId lookup (works across pages, stable across reorders)
+          if (data.moduleId) {
+            const found = findModuleById(data.moduleId);
+            if (!found) { toast.error('Module not found'); return false; }
+            const result = await removeModuleById(data.moduleId);
+            if (result?.success) { toast.success(`Removed ${found.module.title} module`); return true; }
+            return false;
+          }
+          // Fallback: page + type/title search
           const { pageId: pid, page: pg } = resolvePageRef(data);
           if (!pid || !pg) { toast.error('Page not found'); return false; }
-          const idx = resolveModuleIndex(pg, data);
-          if (idx === -1) {
+          const ref = resolveModuleRef(pg, data);
+          if (!ref) {
             toast.error(`Module "${data.title || data.moduleType}" not found on this page`);
             return false;
           }
-          const modTitle = pg.modules[idx].title;
-          const result = await removeModule(pid, idx);
-          if (result?.success) { toast.success(`Removed ${modTitle} module`); return true; }
+          const result = await removeModule(pid, ref.index);
+          if (result?.success) { toast.success(`Removed ${ref.module.title} module`); return true; }
           return false;
         }
 
         case 'minimize_module': {
+          // Prefer moduleId
+          if (data.moduleId) {
+            const found = findModuleById(data.moduleId);
+            if (!found) { toast.error('Module not found'); return false; }
+            if (found.module.minimized) { toast.info(`${found.module.title} is already minimized`); return true; }
+            const result = await toggleModuleMinimizedById(data.moduleId);
+            if (result?.success) { toast.success(`${found.module.title} minimized`); return true; }
+            return false;
+          }
           const { pageId: pid, page: pg } = resolvePageRef(data);
           if (!pid || !pg) { toast.error('Page not found'); return false; }
-          const idx = resolveModuleIndex(pg, data);
-          if (idx === -1) { toast.error(`Module "${data.title || data.moduleType}" not found`); return false; }
-          const mod = pg.modules[idx];
-          if (mod.minimized) { toast.info(`${mod.title} is already minimized`); return true; }
-          const result = await toggleModuleMinimized(pid, idx);
-          if (result?.success) { toast.success(`${mod.title} minimized`); return true; }
+          const minRef = resolveModuleRef(pg, data);
+          if (!minRef) { toast.error(`Module "${data.title || data.moduleType}" not found`); return false; }
+          if (minRef.module.minimized) { toast.info(`${minRef.module.title} is already minimized`); return true; }
+          const minResult = await toggleModuleMinimized(pid, minRef.index);
+          if (minResult?.success) { toast.success(`${minRef.module.title} minimized`); return true; }
           return false;
         }
 
         case 'maximize_module': {
-          const { pageId: pid, page: pg } = resolvePageRef(data);
-          if (!pid || !pg) { toast.error('Page not found'); return false; }
-          const idx = resolveModuleIndex(pg, data);
-          if (idx === -1) { toast.error(`Module "${data.title || data.moduleType}" not found`); return false; }
-          const mod = pg.modules[idx];
-          if (!mod.minimized) { toast.info(`${mod.title} is already expanded`); return true; }
-          const result = await toggleModuleMinimized(pid, idx);
-          if (result?.success) { toast.success(`${mod.title} expanded`); return true; }
+          // Prefer moduleId
+          if (data.moduleId) {
+            const found = findModuleById(data.moduleId);
+            if (!found) { toast.error('Module not found'); return false; }
+            if (!found.module.minimized) { toast.info(`${found.module.title} is already expanded`); return true; }
+            const result = await toggleModuleMinimizedById(data.moduleId);
+            if (result?.success) { toast.success(`${found.module.title} expanded`); return true; }
+            return false;
+          }
+          const { pageId: pid2, page: pg2 } = resolvePageRef(data);
+          if (!pid2 || !pg2) { toast.error('Page not found'); return false; }
+          const maxRef = resolveModuleRef(pg2, data);
+          if (!maxRef) { toast.error(`Module "${data.title || data.moduleType}" not found`); return false; }
+          if (!maxRef.module.minimized) { toast.info(`${maxRef.module.title} is already expanded`); return true; }
+          const maxResult = await toggleModuleMinimized(pid2, maxRef.index);
+          if (maxResult?.success) { toast.success(`${maxRef.module.title} expanded`); return true; }
           return false;
         }
 
@@ -711,6 +846,521 @@ export function useMallyActions() {
           return true;
         }
 
+        // ══════════════════════════════════════════════════════════════════════
+        //  NEW EXPANDED AI CAPABILITIES
+        // ══════════════════════════════════════════════════════════════════════
+
+        // ── Bulk Operations ──────────────────────────────────────────────────
+
+        case 'bulk_select_events': {
+          if (!data.eventIds || !Array.isArray(data.eventIds)) { toast.error('No event IDs provided'); return false; }
+          enableBulkMode();
+          for (const id of data.eventIds) { toggleSelection(id); }
+          toast.success(`Selected ${data.eventIds.length} events`);
+          return true;
+        }
+
+        case 'bulk_select_all': {
+          enableBulkMode();
+          selectAll();
+          toast.success('All events selected');
+          return true;
+        }
+
+        case 'bulk_deselect_all': {
+          deselectAll();
+          disableBulkMode();
+          toast.success('Selection cleared');
+          return true;
+        }
+
+        case 'bulk_delete': {
+          if (selectedCount === 0) { toast.error('No events selected for bulk delete'); return false; }
+          await bulkDelete(data.recurringScope);
+          disableBulkMode();
+          toast.success('Bulk delete complete');
+          return true;
+        }
+
+        case 'bulk_update_color': {
+          if (selectedCount === 0) { toast.error('No events selected'); return false; }
+          if (!data.color) { toast.error('No color specified'); return false; }
+          await bulkUpdateColor(data.color);
+          disableBulkMode();
+          toast.success(`Updated color for ${selectedCount} events`);
+          return true;
+        }
+
+        case 'bulk_reschedule': {
+          if (selectedCount === 0) { toast.error('No events selected'); return false; }
+          if (data.daysOffset === undefined) { toast.error('No days offset provided'); return false; }
+          await bulkReschedule(data.daysOffset);
+          disableBulkMode();
+          toast.success(`Rescheduled ${selectedCount} events by ${data.daysOffset} days`);
+          return true;
+        }
+
+        case 'bulk_duplicate': {
+          if (selectedCount === 0) { toast.error('No events selected'); return false; }
+          await bulkDuplicate();
+          disableBulkMode();
+          toast.success(`Duplicated ${selectedCount} events`);
+          return true;
+        }
+
+        // ── Duplicate single event ───────────────────────────────────────────
+
+        case 'duplicate_event': {
+          if (!data.eventId) { toast.error('No event ID provided'); return false; }
+          const srcEvent = events.find(e => e.id === data.eventId);
+          if (!srcEvent) { toast.error('Event not found'); return false; }
+          const dupEvent = {
+            ...srcEvent,
+            id: undefined,
+            title: data.title || `${srcEvent.title} (copy)`,
+            startsAt: data.start ? new Date(data.start).toISOString() : srcEvent.startsAt,
+            endsAt: data.end ? new Date(data.end).toISOString() : srcEvent.endsAt,
+          };
+          delete (dupEvent as any).id;
+          const dupResult = await addEvent(dupEvent as any);
+          if (dupResult?.success) { toast.success(`Event duplicated`); return true; }
+          return false;
+        }
+
+        // ── Undo / Redo ──────────────────────────────────────────────────────
+
+        case 'undo': {
+          if (!canUndo) { toast.info('Nothing to undo'); return false; }
+          await performUndo();
+          toast.success('Undone');
+          return true;
+        }
+
+        case 'redo': {
+          if (!canRedo) { toast.info('Nothing to redo'); return false; }
+          await performRedo();
+          toast.success('Redone');
+          return true;
+        }
+
+        // ── Theme & Settings ─────────────────────────────────────────────────
+
+        case 'set_theme': {
+          const theme = data.theme?.toLowerCase();
+          if (!['light', 'dark', 'system'].includes(theme)) { toast.error('Invalid theme. Use light, dark, or system'); return false; }
+          setTheme(theme as 'light' | 'dark' | 'system');
+          toast.success(`Theme set to ${theme}`);
+          return true;
+        }
+
+        case 'set_background_color': {
+          if (!data.color) { toast.error('No color specified'); return false; }
+          setBackgroundColor(data.color);
+          toast.success('Background color updated');
+          return true;
+        }
+
+        case 'set_working_hours': {
+          const whResult = await saveWorkingHours(data);
+          if (whResult?.success) { toast.success('Working hours updated'); return true; }
+          return false;
+        }
+
+        // ── Calendar & Group Management ──────────────────────────────────────
+
+        case 'create_calendar_group': {
+          if (!data.name) { toast.error('Group name required'); return false; }
+          const grpResult = await createCalendarGroup(data.name, data.icon, data.color);
+          if (grpResult) { toast.success(`Calendar group "${data.name}" created`); return true; }
+          return false;
+        }
+
+        case 'update_calendar_group': {
+          if (!data.groupId) { toast.error('Group ID required'); return false; }
+          await updateCalendarGroup(data.groupId, { name: data.name, color: data.color });
+          toast.success('Calendar group updated');
+          return true;
+        }
+
+        case 'delete_calendar_group': {
+          if (!data.groupId && !data.groupName) { toast.error('Group ID or name required'); return false; }
+          let grpId = data.groupId;
+          if (!grpId && data.groupName) {
+            const found = calendarGroups.find(g =>
+              (g as any).name?.toLowerCase().trim() === (data.groupName as string).toLowerCase().trim()
+            );
+            grpId = found?.id;
+          }
+          if (!grpId) { toast.error(`Group "${data.groupName}" not found`); return false; }
+          await deleteCalendarGroup(grpId, data.moveToGroupId);
+          toast.success('Calendar group deleted');
+          return true;
+        }
+
+        case 'create_calendar': {
+          if (!data.name) { toast.error('Calendar name required'); return false; }
+          const calResult = await addCalendar(data);
+          if (calResult) { toast.success(`Calendar "${data.name}" created`); return true; }
+          return false;
+        }
+
+        case 'update_calendar': {
+          if (!data.calendarId) { toast.error('Calendar ID required'); return false; }
+          await updateCalendar(data.calendarId, { name: data.name, color: data.color });
+          toast.success('Calendar updated');
+          return true;
+        }
+
+        case 'delete_calendar': {
+          if (!data.calendarId) { toast.error('Calendar ID required'); return false; }
+          await deleteCalendar(data.calendarId);
+          toast.success('Calendar deleted');
+          return true;
+        }
+
+        case 'move_calendar': {
+          if (!data.calendarId || !data.groupId) { toast.error('Calendar ID and target group required'); return false; }
+          await moveCalendar(data.calendarId, data.groupId);
+          toast.success('Calendar moved');
+          return true;
+        }
+
+        // ── Recurring Event Scoped Operations ────────────────────────────────
+
+        case 'update_recurring_event': {
+          if (!data.eventId || !data.scope) { toast.error('Event ID and scope required'); return false; }
+          const recEvent = events.find(e => e.id === data.eventId);
+          if (!recEvent) { toast.error('Event not found'); return false; }
+          const updates: any = {};
+          if (data.title) updates.title = data.title;
+          if (data.start) updates.startsAt = new Date(data.start).toISOString();
+          if (data.end) updates.endsAt = new Date(data.end).toISOString();
+          if (data.description) updates.description = data.description;
+          const occDate = data.occurrenceDate ? new Date(data.occurrenceDate) : new Date();
+          const recResult = await editRecurringEvent(
+            recEvent, updates, data.scope,
+            occDate,
+            (e: any) => updateEvent(e),
+            (e: any) => addEvent(e),
+            (id: string) => removeEvent(id),
+          );
+          if (recResult?.success) { toast.success(`Recurring event updated (${data.scope})`); return true; }
+          return false;
+        }
+
+        case 'delete_recurring_event': {
+          if (!data.eventId || !data.scope) { toast.error('Event ID and scope required'); return false; }
+          const recDelEvent = events.find(e => e.id === data.eventId);
+          if (!recDelEvent) { toast.error('Event not found'); return false; }
+          const occDate2 = data.occurrenceDate ? new Date(data.occurrenceDate) : new Date();
+          const recDelResult = await deleteRecurringEvent(
+            recDelEvent, data.scope,
+            occDate2,
+            (e: any) => updateEvent(e),
+            (id: string) => removeEvent(id),
+          );
+          if (recDelResult?.success) { toast.success(`Recurring event deleted (${data.scope})`); return true; }
+          return false;
+        }
+
+        // ── Change Event Color (post-creation) ──────────────────────────────
+
+        case 'change_event_color': {
+          if (!data.eventId || !data.color) { toast.error('Event ID and color required'); return false; }
+          const colorEvent = events.find(e => e.id === data.eventId);
+          if (!colorEvent) { toast.error('Event not found'); return false; }
+          const colorResult = await updateEvent({ ...colorEvent, color: data.color });
+          if (colorResult?.success) { toast.success('Event color updated'); return true; }
+          return false;
+        }
+
+        // ── Goals ────────────────────────────────────────────────────────────
+
+        case 'create_goal': {
+          if (!data.title) { toast.error('Goal title required'); return false; }
+          const goalResult = await createGoal({
+            title: data.title,
+            description: data.description,
+            category: data.category || 'personal',
+            frequency: data.frequency || 'weekly',
+            targetCount: data.targetCount || 1,
+            duration: data.duration || 60,
+            color: data.color || '#8b5cf6',
+            isActive: true,
+            preferredTimes: data.preferredTimes,
+            preferredDays: data.preferredDays,
+          });
+          if (goalResult?.success) { toast.success(`Goal "${data.title}" created`); return true; }
+          return false;
+        }
+
+        case 'update_goal': {
+          if (!data.goalId) { toast.error('Goal ID required'); return false; }
+          const goalUpdates: any = {};
+          if (data.title) goalUpdates.title = data.title;
+          if (data.description) goalUpdates.description = data.description;
+          if (data.category) goalUpdates.category = data.category;
+          if (data.frequency) goalUpdates.frequency = data.frequency;
+          if (data.targetCount) goalUpdates.targetCount = data.targetCount;
+          if (data.duration) goalUpdates.duration = data.duration;
+          const gResult = await updateGoal(data.goalId, goalUpdates);
+          if (gResult?.success) { toast.success('Goal updated'); return true; }
+          return false;
+        }
+
+        case 'delete_goal': {
+          if (!data.goalId && !data.goalTitle) { toast.error('Goal ID or title required'); return false; }
+          let gId = data.goalId;
+          if (!gId && data.goalTitle) {
+            const found = goals.find(g =>
+              g.title.toLowerCase().trim() === (data.goalTitle as string).toLowerCase().trim()
+            );
+            gId = found?.id;
+          }
+          if (!gId) { toast.error(`Goal "${data.goalTitle}" not found`); return false; }
+          const gDelResult = await deleteGoal(gId);
+          if (gDelResult?.success) { toast.success('Goal deleted'); return true; }
+          return false;
+        }
+
+        case 'pause_goal': {
+          if (!data.goalId) { toast.error('Goal ID required'); return false; }
+          const pgResult = await pauseGoal(data.goalId, data.until ? dayjs(data.until) : undefined);
+          if (pgResult?.success) { toast.success('Goal paused'); return true; }
+          return false;
+        }
+
+        case 'resume_goal': {
+          if (!data.goalId) { toast.error('Goal ID required'); return false; }
+          const rgResult = await resumeGoal(data.goalId);
+          if (rgResult?.success) { toast.success('Goal resumed'); return true; }
+          return false;
+        }
+
+        case 'schedule_goal': {
+          if (!data.goalId) { toast.error('Goal ID required'); return false; }
+          const goalToSchedule = goals.find(g => g.id === data.goalId);
+          if (!goalToSchedule) { toast.error('Goal not found'); return false; }
+          const sgResult = await scheduleGoalSessions(goalToSchedule);
+          if (sgResult?.success) { toast.success(`Scheduled ${sgResult.scheduledCount || 0} goal sessions`); return true; }
+          return false;
+        }
+
+        case 'complete_goal_session': {
+          if (!data.sessionId) { toast.error('Session ID required'); return false; }
+          const csResult = await completeSession(data.sessionId, data.notes);
+          if (csResult?.success) { toast.success('Goal session completed'); return true; }
+          return false;
+        }
+
+        // ── Appointment Scheduling / Booking ─────────────────────────────────
+
+        case 'create_booking_page': {
+          if (!data.title) { toast.error('Booking page title required'); return false; }
+          const bpResult = await createBookingPage({
+            title: data.title,
+            description: data.description,
+            duration: data.duration || 30,
+            bufferBefore: data.bufferBefore || 0,
+            bufferAfter: data.bufferAfter || 0,
+            availability: data.availability,
+            customFields: data.customFields,
+            color: data.color,
+          } as any);
+          if (bpResult?.success) { toast.success(`Booking page "${data.title}" created`); return true; }
+          return false;
+        }
+
+        case 'update_booking_page': {
+          if (!data.pageId) { toast.error('Booking page ID required'); return false; }
+          const bpuResult = await updateBookingPage(data.pageId, data);
+          if (bpuResult?.success) { toast.success('Booking page updated'); return true; }
+          return false;
+        }
+
+        case 'delete_booking_page': {
+          if (!data.pageId) { toast.error('Booking page ID required'); return false; }
+          const bpdResult = await deleteBookingPage(data.pageId);
+          if (bpdResult?.success) { toast.success('Booking page deleted'); return true; }
+          return false;
+        }
+
+        case 'toggle_booking_page': {
+          if (!data.pageId) { toast.error('Booking page ID required'); return false; }
+          await togglePageActive(data.pageId);
+          toast.success('Booking page toggled');
+          return true;
+        }
+
+        case 'get_booking_url': {
+          if (!data.pageId) { toast.error('Booking page ID required'); return false; }
+          const bkPage = bookingPages.find(p => p.id === data.pageId);
+          if (!bkPage) { toast.error('Booking page not found'); return false; }
+          copyBookingUrl(bkPage);
+          return true;
+        }
+
+        case 'cancel_booking': {
+          if (!data.bookingId) { toast.error('Booking ID required'); return false; }
+          const cbResult = await cancelBooking(data.bookingId, data.cancelledBy || 'host', data.reason);
+          if (cbResult?.success) { toast.success('Booking cancelled'); return true; }
+          return false;
+        }
+
+        // ── Find Time ────────────────────────────────────────────────────────
+
+        case 'find_available_time': {
+          const ftResult = await findAvailableTimes({
+            duration: data.duration || 60,
+            startDate: data.startDate ? new Date(data.startDate) : new Date(),
+            endDate: data.endDate ? new Date(data.endDate) : dayjs().add(7, 'day').toDate(),
+            startHour: data.startHour,
+            endHour: data.endHour,
+            excludeWeekends: data.excludeWeekends,
+          });
+          // The results are returned to the AI via the response — the AI can reference them in conversation
+          toast.success(`Found ${ftResult.length} available time slots`);
+          return true;
+        }
+
+        case 'suggest_next_slot': {
+          const slot = await suggestNextAvailable(data.duration || 60, data.startFrom ? new Date(data.startFrom) : undefined);
+          if (slot) {
+            toast.success(`Next available: ${dayjs(slot.start).format('ddd MMM D, h:mm A')}`);
+          } else {
+            toast.info('No available slots found in the next week');
+          }
+          return true;
+        }
+
+        // ── Calendar Snapshots ───────────────────────────────────────────────
+
+        case 'save_snapshot': {
+          if (!data.name) { toast.error('Snapshot name required'); return false; }
+          const ssResult = await createSnapshot(data.name, data.description);
+          if (ssResult?.success) { toast.success(`Snapshot "${data.name}" saved`); return true; }
+          return false;
+        }
+
+        case 'restore_snapshot': {
+          if (!data.snapshotId && !data.snapshotName) { toast.error('Snapshot ID or name required'); return false; }
+          let ssId = data.snapshotId;
+          if (!ssId && data.snapshotName) {
+            const found = snapshots.find(s =>
+              (s as any).name?.toLowerCase().trim() === (data.snapshotName as string).toLowerCase().trim()
+            );
+            ssId = found?.id;
+          }
+          if (!ssId) { toast.error(`Snapshot "${data.snapshotName}" not found`); return false; }
+          const rsResult = await restoreSnapshot(ssId);
+          if (rsResult) { toast.success('Snapshot restored'); return true; }
+          return false;
+        }
+
+        case 'delete_snapshot': {
+          if (!data.snapshotId) { toast.error('Snapshot ID required'); return false; }
+          const dsResult = await deleteCalendarSnapshot(data.snapshotId);
+          if (dsResult) { toast.success('Snapshot deleted'); return true; }
+          return false;
+        }
+
+        case 'clear_calendar': {
+          const ccResult = await clearCalendar();
+          if (ccResult) { toast.success('Calendar cleared'); return true; }
+          return false;
+        }
+
+        case 'save_and_start_fresh': {
+          if (!data.name) { toast.error('Snapshot name required'); return false; }
+          const sfResult = await saveAndStartFresh(data.name, data.description);
+          if (sfResult) { toast.success('Calendar saved and cleared'); return true; }
+          return false;
+        }
+
+        // ── Search Events ────────────────────────────────────────────────────
+
+        case 'search_events': {
+          if (!data.query) { toast.error('Search query required'); return false; }
+          const results = searchEvents(data.query, data.filters);
+          toast.success(`Found ${results.length} matching events`);
+          return true;
+        }
+
+        // ── Export / Print ───────────────────────────────────────────────────
+
+        case 'export_calendar': {
+          const icsContent = exportToICalendar(events, data.calendarName || 'Malleabite Calendar');
+          downloadICalendar(icsContent, data.filename || 'malleabite-calendar.ics');
+          toast.success('Calendar exported as ICS');
+          return true;
+        }
+
+        case 'print_calendar': {
+          printCalendar(events, {
+            layout: data.layout || 'week',
+            title: data.title || 'Calendar',
+          });
+          toast.success('Print dialog opened');
+          return true;
+        }
+
+        case 'download_pdf': {
+          downloadPDF(events, {
+            layout: data.layout || 'week',
+            title: data.title || 'Calendar',
+          });
+          toast.success('PDF downloaded');
+          return true;
+        }
+
+        // ── Analytics ────────────────────────────────────────────────────────
+
+        case 'get_analytics': {
+          // The analytics data is available in context — this action just ensures AI reports it
+          toast.success('Analytics data loaded');
+          return true;
+        }
+
+        // ── Video Conferencing / Meeting Links ───────────────────────────────
+
+        case 'create_meeting_link': {
+          if (!data.eventTitle) { toast.error('Event title required for meeting link'); return false; }
+          const meetResult = await createMeeting(
+            data.eventTitle,
+            data.startTime ? new Date(data.startTime) : new Date(),
+            data.duration || 60,
+            data.provider,
+          );
+          if (meetResult) { toast.success(`Meeting link created: ${meetResult.url}`); return true; }
+          toast.error('Failed to create meeting link');
+          return false;
+        }
+
+        case 'add_meeting_to_event': {
+          if (!data.eventId) { toast.error('Event ID required'); return false; }
+          const meetAddResult = await addMeetingToEvent(data.eventId, data.provider);
+          if (meetAddResult) { toast.success('Meeting link added to event'); return true; }
+          toast.error('Failed to add meeting link');
+          return false;
+        }
+
+        // ── Email Notification Preferences ───────────────────────────────────
+
+        case 'update_notification_preferences': {
+          await updateNotificationPrefs(data);
+          toast.success('Notification preferences updated');
+          return true;
+        }
+
+        case 'schedule_event_reminders': {
+          if (!data.eventId) { toast.error('Event ID required'); return false; }
+          const remEvent = events.find(e => e.id === data.eventId);
+          if (!remEvent) { toast.error('Event not found'); return false; }
+          const serResult = await scheduleEventReminders(remEvent, data.reminders);
+          if (serResult?.success) { toast.success('Event reminders scheduled'); return true; }
+          return false;
+        }
+
         default:
           console.log('[MallyActions] Unknown action type:', type);
           return false;
@@ -722,10 +1372,12 @@ export function useMallyActions() {
       return false;
     }
   }, [
+    // Original deps
     addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder,
     createList, deleteList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo, moveTodo,
     pages, activePage, activePageId, setActivePageId,
     addModule, removeModule, toggleModuleMinimized, createPage, deletePage,
+    findModuleById, removeModuleById, updateModuleById, toggleModuleMinimizedById,
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
     addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
     addReminder, updateReminder, deleteReminder, toggleReminderActive,
@@ -735,6 +1387,27 @@ export function useMallyActions() {
     calendarAccounts, toggleVisibility, setAllVisible,
     resolvePageRef, resolveModuleIndex, ensureModuleVisible,
     syncEnabled, pushEventToGoogle,
+    // New deps
+    bulkDelete, bulkUpdateColor, bulkReschedule, bulkDuplicate,
+    enableBulkMode, disableBulkMode, toggleSelection, selectAll, deselectAll,
+    getSelectedEvents, selectedCount, isBulkMode,
+    performUndo, performRedo, canUndo, canRedo,
+    setTheme, setBackgroundColor,
+    calendarGroups, createCalendarGroup, updateCalendarGroup, deleteCalendarGroup,
+    addCalendar, updateCalendar, deleteCalendar, moveCalendar,
+    goals, goalsWithProgress, createGoal, updateGoal, deleteGoal,
+    scheduleGoalSessions, completeSession, skipSession, pauseGoal, resumeGoal,
+    bookingPages, bookings, createBookingPage, updateBookingPage, deleteBookingPage,
+    togglePageActive, getAvailableSlots, createBooking, cancelBooking, copyBookingUrl,
+    findAvailableTimes, suggestNextAvailable,
+    snapshots, createSnapshot, restoreSnapshot, deleteCalendarSnapshot,
+    clearCalendar, saveAndStartFresh,
+    searchEvents, searchResults,
+    saveWorkingHours,
+    editRecurringEvent, deleteRecurringEvent,
+    printCalendar, downloadPDF,
+    createMeeting, addMeetingToEvent,
+    updateNotificationPrefs, scheduleEventReminders,
   ]);
 
   // ─── Context builder ───────────────────────────────────────────────────────
@@ -751,11 +1424,13 @@ export function useMallyActions() {
       title: p.title,
       isActive: p.id === activePageId,
       modules: p.modules.slice(0, 20).map((m, idx) => ({
+        id: m.id,  // Unique module instance ID — use this for targeted operations
         index: idx,
         type: m.type,
         title: m.title,
         minimized: m.minimized ?? false,
         listId: m.listId,
+        instanceId: m.instanceId,
       })),
     })),
     todoLists: lists.map(l => ({ id: l.id, name: (l as any).name, isActive: l.id === activeListId })),
@@ -770,10 +1445,63 @@ export function useMallyActions() {
       goals: userMemory.goals,
       observations: (userMemory.observations || []).slice(-5),
     } : undefined,
+
+    // ── Extended context for new capabilities ────────────────────────────
+
+    // Calendar groups
+    calendarGroups: calendarGroups.slice(0, 10).map(g => ({
+      id: g.id, name: (g as any).name, color: (g as any).color,
+    })),
+
+    // Goals
+    goals: goalsWithProgress.slice(0, 15).map(g => ({
+      id: g.id, title: g.title, category: g.category,
+      frequency: g.frequency, isActive: g.isActive,
+      progress: g.progress ? {
+        completed: g.progress.completedCount,
+        target: g.progress.targetCount,
+        streak: g.progress.currentStreak,
+      } : undefined,
+    })),
+
+    // Booking pages
+    bookingPages: bookingPages.slice(0, 5).map(p => ({
+      id: p.id, title: p.title, duration: p.duration, isActive: (p as any).isActive,
+    })),
+
+    // Snapshots
+    snapshots: snapshots.slice(0, 5).map(s => ({
+      id: s.id, name: (s as any).name, createdAt: (s as any).createdAt,
+    })),
+
+    // Working hours
+    workingHours: workingHours ? {
+      enabled: (workingHours as any).enabled,
+      days: (workingHours as any).days,
+    } : undefined,
+
+    // Analytics summary (lightweight)
+    analytics: analyticsMetrics ? {
+      thisWeek: (analyticsMetrics as any).thisWeek,
+      trends: (analyticsMetrics as any).trends,
+    } : undefined,
+
+    // Bulk selection state
+    bulkSelection: { isBulkMode, selectedCount },
+
+    // Undo/Redo availability
+    undoRedo: { canUndo, canRedo },
+
+    // Theme
+    theme: useThemeStore.getState().theme,
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
     eisenhowerItems, events, todos, userMemory,
+    // New deps
+    calendarGroups, goalsWithProgress, bookingPages, snapshots,
+    workingHours, analyticsMetrics,
+    isBulkMode, selectedCount, canUndo, canRedo,
   ]);
 
   return {
@@ -786,5 +1514,10 @@ export function useMallyActions() {
     pages,
     activePage,
     activePageId,
+    eisenhowerItems,
+    alarms: alarms || [],
+    reminders: reminders || [],
+    sentInvites: sentInvites || [],
+    receivedInvites: receivedInvites || [],
   };
 }

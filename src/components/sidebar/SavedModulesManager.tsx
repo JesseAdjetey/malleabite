@@ -60,7 +60,7 @@ const SavedModulesManager: React.FC<SavedModulesManagerProps> = ({ pageIndex }) 
           {modules.length > 0 ? (
             modules.map((module, index) => (
               <div 
-                key={index} 
+                key={module.id} 
                 className="flex justify-between items-center p-3 rounded-md bg-card hover:bg-card/80 transition-colors"
               >
                 <div className="flex items-center gap-2">

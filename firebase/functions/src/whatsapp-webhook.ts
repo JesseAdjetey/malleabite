@@ -64,8 +64,9 @@ export const whatsappWebhook = onRequest(
 
             const value = change.value;
             const messages = value?.messages || [];
-            const metadata = value?.metadata;
-            const contacts = value?.contacts || [];
+            // metadata and contacts available for future use
+            // const metadata = value?.metadata;
+            // const contacts = value?.contacts || [];
 
             for (const message of messages) {
               const from = message.from; // sender's phone number

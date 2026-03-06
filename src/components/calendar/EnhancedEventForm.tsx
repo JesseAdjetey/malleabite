@@ -375,6 +375,28 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           </Popover>
         </div>
 
+        {/* All-Day Event Toggle — placed before time pickers */}
+        <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">
+          <div className="flex items-center space-x-2">
+            <Sun className="h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="isAllDay">All-day event</Label>
+          </div>
+          <Switch
+            id="isAllDay"
+            checked={isAllDay}
+            onCheckedChange={(checked) => {
+              setIsAllDay(checked);
+              if (checked) {
+                setStartTime('00:00');
+                setEndTime('23:59');
+              }
+            }}
+          />
+        </div>
+
+        {/* Time pickers — hidden when all-day is toggled */}
+        {!isAllDay && (
+          <>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <Label htmlFor="startTime" className="mb-1 block">Start Time</Label>
@@ -444,25 +466,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
               : 60
           }
         />
-
-        {/* All-Day Event Toggle */}
-        <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">
-          <div className="flex items-center space-x-2">
-            <Sun className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="isAllDay">All-day event</Label>
-          </div>
-          <Switch
-            id="isAllDay"
-            checked={isAllDay}
-            onCheckedChange={(checked) => {
-              setIsAllDay(checked);
-              if (checked) {
-                setStartTime('00:00');
-                setEndTime('23:59');
-              }
-            }}
-          />
-        </div>
+          </>
+        )}
 
         {/* Location Input */}
         <div className="mb-4">

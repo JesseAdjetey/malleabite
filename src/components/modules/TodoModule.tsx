@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ModuleContainer from "./ModuleContainer";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,9 @@ import { useEventStore } from "@/lib/store";
 import { useTodos, TodoItem } from "@/hooks/use-todos";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { Loader2 } from "lucide-react";
+import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
+import { useMirrorSync } from "@/hooks/use-mirror-sync";
+import { CalendarEventType } from "@/lib/stores/types";
 
 interface TodoModuleProps {
   title: string;
@@ -37,6 +40,7 @@ const TodoModule: React.FC<TodoModuleProps> = ({
     success?: boolean;
     message?: string;
   } | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const { addEvent, events } = useEventStore();
   const {
     todos,
@@ -49,6 +53,8 @@ const TodoModule: React.FC<TodoModuleProps> = ({
     lastResponse,
   } = useTodos();
   const { user } = useAuth();
+  const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
+  const { syncTodoCompletion } = useMirrorSync();
 
   useEffect(() => {
     if (submitStatus) {
@@ -104,6 +110,8 @@ const TodoModule: React.FC<TodoModuleProps> = ({
 
   const handleToggleCompleted = async (id: string, completed: boolean) => {
     await toggleTodo(id);
+    // S2: Propagate completion to linked events
+    await syncTodoCompletion(id, !completed);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -121,6 +129,7 @@ const TodoModule: React.FC<TodoModuleProps> = ({
       text: item.title,
       source: "todo-module",
       completed: item.completed,
+      collectionName: "todos" as const,
     };
 
     console.log("🚀 DRAG START - Todo item:", todoData);
@@ -146,6 +155,57 @@ const TodoModule: React.FC<TodoModuleProps> = ({
       e.currentTarget.classList.remove("opacity-50");
     }
   };
+
+  // ─── Option F: Accept calendar event drops ────────────────────────
+  const handleEventDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    try {
+      const dataString = e.dataTransfer.getData("application/json");
+      if (!dataString) return;
+
+      const data = JSON.parse(dataString);
+
+      // Only handle calendar event drops (not todo-module or eisenhower drags)
+      if (data.source === "todo-module" || data.source === "eisenhower") return;
+
+      // It's a calendar event — must have id and title
+      if (!data.id || !data.title) return;
+
+      // Build a minimal CalendarEventType from the drag data
+      const eventData: CalendarEventType = {
+        id: data.id,
+        title: data.title,
+        description: data.description || "",
+        startsAt: data.startsAt || new Date().toISOString(),
+        endsAt: data.endsAt || new Date().toISOString(),
+        isTodo: data.isTodo,
+        color: data.color,
+        calendarId: data.calendarId,
+      };
+
+      await handleCreateTodoFromEvent(eventData);
+    } catch (error) {
+      console.error("Error handling event drop in TodoModule:", error);
+      toast.error("Failed to create todo from event");
+    }
+  }, [handleCreateTodoFromEvent]);
+
+  const handleEventDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes("application/json")) {
+      e.dataTransfer.dropEffect = "copy";
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleEventDragLeave = useCallback((e: React.DragEvent) => {
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setIsDragOver(false);
+    }
+  }, []);
 
   if (isMinimized) {
     return (
@@ -187,6 +247,15 @@ const TodoModule: React.FC<TodoModuleProps> = ({
       isMinimized={isMinimized}
       onMinimize={onMinimize}
     >
+      <div
+        className={cn(
+          "transition-all duration-150 rounded-lg",
+          isDragOver && "ring-2 ring-primary/50 bg-primary/10"
+        )}
+        onDrop={handleEventDrop}
+        onDragOver={handleEventDragOver}
+        onDragLeave={handleEventDragLeave}
+      >
       <div className="max-h-60 overflow-y-auto mb-3">
         {loading ? (
           <div className="flex items-center justify-center py-4">
@@ -271,6 +340,7 @@ const TodoModule: React.FC<TodoModuleProps> = ({
           Add
         </button>
       </div>
+      </div> {/* Close droppable area */}
     </ModuleContainer>
   );
 };

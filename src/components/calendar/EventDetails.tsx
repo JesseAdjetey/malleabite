@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import EnhancedEventForm from './EnhancedEventForm';
 import { CalendarEventType } from '@/lib/stores/types';
 import { useTodos } from '@/hooks/use-todos';
+import { useMirrorSync } from '@/hooks/use-mirror-sync';
 import { Calendar, Clock, CheckCircle, Lock, Users, Repeat, AlertTriangle } from 'lucide-react';
 import { RecurringEventEditDialog } from './RecurringEventEditDialog';
 import { EditScope } from '@/hooks/use-recurring-events';
@@ -89,6 +90,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const { addRecurrenceException } = useCalendarEvents();
   const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();
   const { toggleTodo, deleteTodo } = useTodos();
+  const { syncEventTitle, syncEventCompletion, deleteWithSync, getLinksForFast } = useMirrorSync();
   const [isEditing, setIsEditing] = useState(false);
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
   const [showRecurringEditDialog, setShowRecurringEditDialog] = useState(false);
@@ -216,9 +218,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
       // Track for undo before deleting
       trackDeleteEvent(selectedEvent);
-      
-      await removeEvent(selectedEvent.id);
-      toast.success("Event deleted");
+
+      // S2: Check for linked entities and unlink them (keep linked entities, just remove links)
+      const links = getLinksForFast('event', selectedEvent.id);
+      if (links.length > 0) {
+        await deleteWithSync('event', selectedEvent.id, 'unlink');
+        toast.success("Event deleted · linked items kept");
+      } else {
+        await removeEvent(selectedEvent.id);
+        toast.success("Event deleted");
+      }
       onClose();
     } catch (error) {
       console.error("Error deleting event:", error);
@@ -235,7 +244,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
       // Toggle the todo to complete it
       await toggleTodo(selectedEvent.todoId);
-      toast.success("Todo marked as complete");
 
       // Update calendar event to reflect completion
       const updatedEvent = {
@@ -244,6 +252,11 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       };
 
       await updateEvent(updatedEvent);
+
+      // S2: Propagate completion to any other linked entities
+      await syncEventCompletion(selectedEvent.id, true);
+
+      toast.success("Todo marked as complete");
       onClose();
     } catch (error) {
       console.error("Error completing todo:", error);
@@ -280,6 +293,12 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       } else {
         await updateEvent(updatedEvent);
       }
+
+      // S2: If the title changed, propagate to linked entities
+      if (updatedEvent.title && updatedEvent.title !== selectedEvent.title) {
+        await syncEventTitle(selectedEvent.id, updatedEvent.title);
+      }
+
       toast.success("Event updated");
       setIsEditing(false);
       setEditScope(null);

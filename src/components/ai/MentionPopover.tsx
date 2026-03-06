@@ -73,13 +73,13 @@ interface TabMeta {
 }
 
 const TABS: TabMeta[] = [
-  { id: 'todo-lists', label: 'To Do Lists', iconName: 'list-todo' },
-  { id: 'pomodoro',   label: 'Pomodoro',    iconName: 'timer' },
-  { id: 'alarms',     label: 'Alarms',      iconName: 'bell' },
-  { id: 'eisenhower', label: 'Eisenhower',  iconName: 'grid-2x2' },
-  { id: 'invites',    label: 'Invites',     iconName: 'mail' },
-  { id: 'events',     label: 'Events',      iconName: 'calendar' },
   { id: 'pages',      label: 'Pages',       iconName: 'file-text' },
+  { id: 'events',     label: 'Events',      iconName: 'calendar' },
+  { id: 'todo-lists', label: 'To Do Lists', iconName: 'list-todo' },
+  { id: 'alarms',     label: 'Alarms',      iconName: 'bell' },
+  { id: 'invites',    label: 'Invites',     iconName: 'mail' },
+  { id: 'eisenhower', label: 'Eisenhower',  iconName: 'grid-2x2' },
+  { id: 'pomodoro',   label: 'Pomodoro',    iconName: 'timer' },
 ];
 
 /* ─── Local Interfaces ───────────────────────────────────────────────── */
@@ -165,7 +165,7 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
   receivedInvites,
   filterText,
 }) => {
-  const [activeTab, setActiveTab] = useState<MentionTabId>('todo-lists');
+  const [activeTab, setActiveTab] = useState<MentionTabId>('pages');
   const [drillStack, setDrillStack] = useState<DrillLevel[]>([]);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);

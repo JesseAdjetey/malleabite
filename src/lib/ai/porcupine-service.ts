@@ -42,7 +42,13 @@ class PorcupineWakeWordService {
 
   /** Returns true when both env vars are set AND WebAssembly is available. */
   isConfigured(): boolean {
-    return !!(ACCESS_KEY && (KEYWORD_B64 || KEYWORD_PATH) && typeof WebAssembly !== 'undefined');
+    const configured = !!(ACCESS_KEY && (KEYWORD_B64 || KEYWORD_PATH) && typeof WebAssembly !== 'undefined');
+    console.info('[Porcupine] isConfigured:', configured, {
+      hasAccessKey: !!ACCESS_KEY,
+      hasKeyword: !!(KEYWORD_B64 || KEYWORD_PATH),
+      hasWasm: typeof WebAssembly !== 'undefined',
+    });
+    return configured;
   }
 
   /**
@@ -143,7 +149,7 @@ class PorcupineWakeWordService {
       return true;
 
     } catch (err: any) {
-      console.warn('[Porcupine] Initialisation failed — falling back to Web Speech API:', err?.message ?? err);
+      console.warn('[Porcupine] Initialisation failed — falling back to Web Speech API:', err?.message ?? err, err);
       // Clean up anything partially started
       await this._teardown();
       return false;

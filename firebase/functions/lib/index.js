@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -46,6 +46,9 @@ Object.defineProperty(exports, "createPortalSession", { enumerable: true, get: f
 // Export TTS (Text-to-Speech) handler
 var tts_1 = require("./tts");
 Object.defineProperty(exports, "synthesizeSpeech", { enumerable: true, get: function () { return tts_1.synthesizeSpeech; } });
+// Export scheduling streaming handler
+var scheduling_1 = require("./scheduling");
+Object.defineProperty(exports, "processSchedulingStream", { enumerable: true, get: function () { return scheduling_1.processSchedulingStream; } });
 // Initialize Firebase Admin
 admin.initializeApp();
 // Define the Gemini API key secret
@@ -405,7 +408,8 @@ exports.processAIRequest = (0, https_1.onRequest)({
                     ? p.modules.map((m) => {
                         const minMarker = m.minimized ? ' [minimized]' : '';
                         const listInfo = m.listId ? ` (listId: ${m.listId})` : '';
-                        return `    - [index: ${m.index}] type="${m.type}" title="${m.title}"${minMarker}${listInfo}`;
+                        const moduleIdInfo = m.id ? ` (moduleId: ${m.id})` : '';
+                        return `    - [index: ${m.index}] type="${m.type}" title="${m.title}"${moduleIdInfo}${minMarker}${listInfo}`;
                     }).join('\n')
                     : '    (no modules)';
                 return `  Page: "${p.title}" (id: ${p.id})${activeMarker}\n${moduleList}`;
@@ -416,6 +420,36 @@ exports.processAIRequest = (0, https_1.onRequest)({
         const todoListsContext = todoListsCtx.length > 0
             ? todoListsCtx.map((l) => `  - [ID: ${l.id}] "${l.name}"${l.isActive ? ' [ACTIVE]' : ''}`).join('\n')
             : '  (no todo lists)';
+        // ── Build extended context from client ─────────────────────────────
+        const goalsCtx = clientContext?.goals || [];
+        const goalsContext = goalsCtx.length > 0
+            ? goalsCtx.map((g) => {
+                const progress = g.progress ? ` (${g.progress.completed}/${g.progress.target}, streak: ${g.progress.streak})` : '';
+                return `  - [ID: ${g.id}] "${g.title}" (${g.category}, ${g.frequency}) ${g.isActive ? '[Active]' : '[Paused]'}${progress}`;
+            }).join('\n')
+            : '  (no goals)';
+        const bookingCtx = clientContext?.bookingPages || [];
+        const bookingContext = bookingCtx.length > 0
+            ? bookingCtx.map((p) => `  - [ID: ${p.id}] "${p.title}" (${p.duration}min) ${p.isActive ? '[Active]' : '[Inactive]'}`).join('\n')
+            : '  (no booking pages)';
+        const snapshotCtx = clientContext?.snapshots || [];
+        const snapshotContext = snapshotCtx.length > 0
+            ? snapshotCtx.map((s) => `  - [ID: ${s.id}] "${s.name}" (${s.createdAt})`).join('\n')
+            : '  (no snapshots)';
+        const calGroupCtx = clientContext?.calendarGroups || [];
+        const calGroupContext = calGroupCtx.length > 0
+            ? calGroupCtx.map((g) => `  - [ID: ${g.id}] "${g.name}" (color: ${g.color || 'default'})`).join('\n')
+            : '  (no calendar groups)';
+        const bulkCtx = clientContext?.bulkSelection || {};
+        const undoRedoCtx = clientContext?.undoRedo || {};
+        const themeCtx = clientContext?.theme || 'system';
+        const analyticsCtx = clientContext?.analytics;
+        const workingHoursCtx = clientContext?.workingHours;
+        // Parse @ mention references from client context
+        const mentionRefs = clientContext?.mentionReferences || [];
+        const mentionRefsContext = mentionRefs.length > 0
+            ? mentionRefs.map((r) => `  - @${r.entityType}:${r.label} (entityId: ${r.entityId}, type: ${r.entityType})`).join('\n')
+            : '';
         // ── Load persistent memory ────────────────────────────────────────────
         const userMemory = await loadUserMemory(db, userId);
         const memoryContext = formatMemoryForPrompt(userMemory);
@@ -588,11 +622,63 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
 
 5. MODULE & PAGE MANAGEMENT:
    - Add/remove/minimize/maximize modules. Create/delete/switch pages.
+   - Each module has a unique moduleId. ALWAYS use moduleId when targeting a specific module instance.
    - Check SIDEBAR_PAGES to avoid duplicates. Valid types: "todo", "pomodoro", "alarms", "reminders", "eisenhower", "invites", "archives", "templates", "calendars"
 
 6. TODO LIST & POMODORO: Use listName for targeting. Use start/pause/reset/set_pomodoro_settings.
 
 7. CALENDAR FILTER: showAll/hideAll for bulk, calendarName + visible for individual.
+
+8. BULK OPERATIONS:
+   - You can select multiple events and perform bulk operations: bulk delete, bulk color change, bulk reschedule (by N days), bulk duplicate.
+   - First use bulk_select_events with eventIds, then perform the bulk operation.
+   - Or use bulk_select_all for all events.
+
+9. UNDO / REDO:
+   - You can undo and redo the user's last actions. Check undoRedo.canUndo and undoRedo.canRedo in context.
+
+10. THEME & SETTINGS:
+    - Set theme (light/dark/system), background color, working hours.
+    - Check current theme in context.
+
+11. CALENDAR GROUPS & CALENDARS:
+    - Create/update/delete calendar groups and individual calendars.
+    - Move calendars between groups.
+
+12. RECURRING EVENTS (SCOPED):
+    - Use update_recurring_event or delete_recurring_event with scope: "single", "all", or "thisAndFuture".
+    - Include occurrenceDate for the specific instance being modified.
+
+13. GOALS:
+    - Full goal lifecycle: create, update, delete, pause, resume, schedule sessions, complete sessions.
+    - Check GOALS section for existing goals + progress.
+
+14. APPOINTMENT SCHEDULING / BOOKING:
+    - Create booking pages with availability windows, manage bookings, get booking URLs.
+    - Check BOOKING_PAGES in context.
+
+15. FIND TIME:
+    - Use find_available_time to find free slots across attendees.
+    - Use suggest_next_slot for quick "when's the next free hour?" queries.
+
+16. CALENDAR SNAPSHOTS:
+    - Save/restore/delete calendar snapshots. Use save_and_start_fresh to backup and clear.
+    - Check SNAPSHOTS in context.
+
+17. SEARCH:
+    - Use search_events to find events by text query.
+
+18. EXPORT / PRINT:
+    - Export calendar as ICS, print calendar, or download as PDF.
+
+19. EVENT COLOR:
+    - Use change_event_color to update an event's color after creation.
+
+20. VIDEO CONFERENCING:
+    - Use create_meeting_link or add_meeting_to_event to generate Zoom/Meet/Teams/Jitsi links.
+
+21. NOTIFICATIONS:
+    - Update notification preferences, schedule event reminders with custom delivery methods.
 
 ═══════════════════════════════════════════════════
   EXISTING DATA
@@ -622,6 +708,29 @@ ${sidebarContext}
 TODO_LISTS:
 ${todoListsContext}
 
+CALENDAR_GROUPS:
+${calGroupContext}
+
+GOALS:
+${goalsContext}
+
+BOOKING_PAGES:
+${bookingContext}
+
+SNAPSHOTS:
+${snapshotContext}
+
+WORKING_HOURS:
+${workingHoursCtx ? JSON.stringify(workingHoursCtx) : '  (not configured)'}
+
+ANALYTICS:
+${analyticsCtx ? JSON.stringify(analyticsCtx) : '  (no analytics data)'}
+
+THEME: ${themeCtx}
+BULK_SELECTION: ${bulkCtx.isBulkMode ? `Active (${bulkCtx.selectedCount} selected)` : 'Inactive'}
+UNDO: ${undoRedoCtx.canUndo ? 'Available' : 'Nothing to undo'} | REDO: ${undoRedoCtx.canRedo ? 'Available' : 'Nothing to redo'}
+${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these entities — use their entityId for precise targeting):\n${mentionRefsContext}\n` : ''}
+
 ═══════════════════════════════════════════════════
   RULES
 ═══════════════════════════════════════════════════
@@ -632,6 +741,7 @@ ${todoListsContext}
 - MULTI-EVENT PLANNING: Produce ALL events in one actions array.
 - DURATION: Default 1 hour. Never start == end.
 - ISO DATES: Full ISO 8601 ("2026-02-17T09:00:00"). Use user's timezone.
+- @MENTIONS: When the user's message starts with [Referenced: ...], they used the @ mention picker to target specific entities. Use the entityId from @MENTION_REFERENCES to fill moduleId, eventId, listId, or other ID fields in your actions. This is the user's EXPLICIT target — always honor it.
 - FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks, no preamble).
 - CRITICAL: Your response must be PARSABLE JSON. Start with '{' and end with '}'.
 
@@ -691,16 +801,104 @@ ${todoListsContext}
     { "type": "change_view", "data": { "view": "Day|Week|Month" } },
     // ── Module Control ──
     { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "optional" } },
-    { "type": "remove_module", "data": { "moduleType": "...", "title": "optional", "pageName": "optional" } },
-    { "type": "minimize_module", "data": { "moduleType": "...", "pageName": "optional" } },
-    { "type": "maximize_module", "data": { "moduleType": "...", "pageName": "optional" } },
+    { "type": "remove_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "title": "optional", "pageName": "optional" } },
+    { "type": "minimize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },
+    { "type": "maximize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },
     // ── Page Control ──
     { "type": "create_page", "data": { "title": "...", "icon": "optional" } },
     { "type": "delete_page", "data": { "title": "..." } },
     { "type": "switch_page", "data": { "title": "..." } },
     // ── Calendar Filters ──
     { "type": "set_calendar_filter", "data": { "calendarName": "...", "visible": true } },
-    { "type": "set_calendar_filter", "data": { "showAll": true } }
+    { "type": "set_calendar_filter", "data": { "showAll": true } },
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  EXPANDED CAPABILITIES
+    // ══════════════════════════════════════════════════════════════════════
+
+    // ── Bulk Operations ──
+    { "type": "bulk_select_events", "data": { "eventIds": ["id1", "id2"] } },
+    { "type": "bulk_select_all", "data": {} },
+    { "type": "bulk_deselect_all", "data": {} },
+    { "type": "bulk_delete", "data": { "recurringScope": "single|all|thisAndFuture (optional)" } },
+    { "type": "bulk_update_color", "data": { "color": "#hex" } },
+    { "type": "bulk_reschedule", "data": { "daysOffset": 1 } },
+    { "type": "bulk_duplicate", "data": {} },
+
+    // ── Duplicate Event ──
+    { "type": "duplicate_event", "data": { "eventId": "...", "title": "optional new title", "start": "optional ISO", "end": "optional ISO" } },
+
+    // ── Undo / Redo ──
+    { "type": "undo", "data": {} },
+    { "type": "redo", "data": {} },
+
+    // ── Theme & Settings ──
+    { "type": "set_theme", "data": { "theme": "light|dark|system" } },
+    { "type": "set_background_color", "data": { "color": "#hex" } },
+    { "type": "set_working_hours", "data": { "enabled": true, "days": [{ "enabled": true, "slots": [{ "start": "09:00", "end": "17:00" }] }] } },
+
+    // ── Calendar Groups & Calendar Management ──
+    { "type": "create_calendar_group", "data": { "name": "...", "color": "#hex", "icon": "optional" } },
+    { "type": "update_calendar_group", "data": { "groupId": "...", "name": "...", "color": "#hex" } },
+    { "type": "delete_calendar_group", "data": { "groupId": "...", "moveToGroupId": "optional" } },
+    { "type": "create_calendar", "data": { "name": "...", "color": "#hex", "groupId": "optional" } },
+    { "type": "update_calendar", "data": { "calendarId": "...", "name": "...", "color": "#hex" } },
+    { "type": "delete_calendar", "data": { "calendarId": "..." } },
+    { "type": "move_calendar", "data": { "calendarId": "...", "groupId": "..." } },
+
+    // ── Recurring Events (Scoped Editing) ──
+    { "type": "update_recurring_event", "data": { "eventId": "...", "scope": "single|all|thisAndFuture", "occurrenceDate": "ISO", "title": "optional", "start": "optional ISO", "end": "optional ISO" } },
+    { "type": "delete_recurring_event", "data": { "eventId": "...", "scope": "single|all|thisAndFuture", "occurrenceDate": "ISO" } },
+
+    // ── Change Event Color ──
+    { "type": "change_event_color", "data": { "eventId": "...", "color": "#hex" } },
+
+    // ── Goals ──
+    { "type": "create_goal", "data": { "title": "...", "description": "optional", "category": "health|career|learning|personal|social|financial|creative|spiritual", "frequency": "daily|weekly|monthly", "targetCount": 1, "duration": 60, "color": "#hex" } },
+    { "type": "update_goal", "data": { "goalId": "...", "title": "optional", "description": "optional", "category": "optional", "frequency": "optional", "targetCount": 0 } },
+    { "type": "delete_goal", "data": { "goalId": "..." } },
+    { "type": "pause_goal", "data": { "goalId": "...", "until": "optional ISO" } },
+    { "type": "resume_goal", "data": { "goalId": "..." } },
+    { "type": "schedule_goal", "data": { "goalId": "..." } },
+    { "type": "complete_goal_session", "data": { "sessionId": "...", "notes": "optional" } },
+
+    // ── Appointment Scheduling / Booking ──
+    { "type": "create_booking_page", "data": { "title": "...", "description": "optional", "duration": 30, "color": "#hex" } },
+    { "type": "update_booking_page", "data": { "pageId": "...", "title": "...", "duration": 30 } },
+    { "type": "delete_booking_page", "data": { "pageId": "..." } },
+    { "type": "toggle_booking_page", "data": { "pageId": "..." } },
+    { "type": "get_booking_url", "data": { "pageId": "..." } },
+    { "type": "cancel_booking", "data": { "bookingId": "...", "cancelledBy": "host|guest", "reason": "optional" } },
+
+    // ── Find Time ──
+    { "type": "find_available_time", "data": { "duration": 60, "startDate": "optional ISO", "endDate": "optional ISO", "startHour": 9, "endHour": 17, "excludeWeekends": false } },
+    { "type": "suggest_next_slot", "data": { "duration": 60, "startFrom": "optional ISO" } },
+
+    // ── Calendar Snapshots ──
+    { "type": "save_snapshot", "data": { "name": "...", "description": "optional" } },
+    { "type": "restore_snapshot", "data": { "snapshotId": "...", "snapshotName": "optional (use name OR id)" } },
+    { "type": "delete_snapshot", "data": { "snapshotId": "..." } },
+    { "type": "clear_calendar", "data": {} },
+    { "type": "save_and_start_fresh", "data": { "name": "...", "description": "optional" } },
+
+    // ── Search ──
+    { "type": "search_events", "data": { "query": "..." } },
+
+    // ── Export / Print ──
+    { "type": "export_calendar", "data": { "calendarName": "optional", "filename": "optional" } },
+    { "type": "print_calendar", "data": { "layout": "day|week|month|agenda", "title": "optional" } },
+    { "type": "download_pdf", "data": { "layout": "day|week|month|agenda", "title": "optional" } },
+
+    // ── Analytics ──
+    { "type": "get_analytics", "data": {} },
+
+    // ── Video Conferencing / Meeting Links ──
+    { "type": "create_meeting_link", "data": { "eventTitle": "...", "startTime": "optional ISO", "duration": 60, "provider": "zoom|google_meet|teams|jitsi" } },
+    { "type": "add_meeting_to_event", "data": { "eventId": "...", "provider": "zoom|google_meet|teams|jitsi" } },
+
+    // ── Notification Preferences ──
+    { "type": "update_notification_preferences", "data": { "emailReminders": true, "pushNotifications": true, "quietHoursStart": "22:00", "quietHoursEnd": "07:00" } },
+    { "type": "schedule_event_reminders", "data": { "eventId": "...", "reminders": [{ "method": "push|email", "value": 15, "unit": "minutes|hours|days" }] } }
   ],
   "memoryUpdate": {
     "preferences": { "key": "value" },

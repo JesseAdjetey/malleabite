@@ -13,6 +13,7 @@ type OnErrorCallback = (error: string) => void;
 class SpeechRecognitionService {
   private webRecognition: any = null;
   private nativeListenerRegistered = false;
+  private _stopped = false; // Flag to prevent onend auto-restart after explicit stop
 
   /** Check if speech recognition is available on this platform */
   async isAvailable(): Promise<boolean> {
@@ -49,6 +50,12 @@ class SpeechRecognitionService {
     onError: OnErrorCallback,
     options?: { continuous?: boolean; language?: string }
   ): Promise<void> {
+    // Ensure any previous instance is fully cleaned up
+    this._stopped = false;
+    if (this.webRecognition) {
+      try { this.webRecognition.abort(); } catch {}
+      this.webRecognition = null;
+    }
     if (isNative) {
       await this.startNativeListening(onResult, onError, options);
     } else {
@@ -58,6 +65,7 @@ class SpeechRecognitionService {
 
   /** Stop listening and return final transcript (native only) */
   async stopListening(): Promise<string | null> {
+    this._stopped = true;
     if (isNative) {
       try {
         const { SpeechRecognition } = await import('@capacitor-community/speech-recognition');
@@ -70,7 +78,7 @@ class SpeechRecognitionService {
       }
     } else {
       if (this.webRecognition) {
-        this.webRecognition.stop();
+        try { this.webRecognition.abort(); } catch {}
         this.webRecognition = null;
       }
       return null; // Web fires onresult callback instead
@@ -133,22 +141,36 @@ class SpeechRecognitionService {
     this.webRecognition.continuous = options?.continuous ?? false;
     this.webRecognition.interimResults = true;
     this.webRecognition.lang = options?.language || 'en-US';
+    // More alternatives = better chance of catching quiet/accented speech
+    this.webRecognition.maxAlternatives = 5;
 
     this.webRecognition.onresult = (event: any) => {
       const last = event.results[event.results.length - 1];
+      // Pick the alternative with the highest confidence (index 0 is already best,
+      // but fall back if confidence is very low)
+      let bestTranscript = last[0].transcript;
+      let bestConfidence = last[0].confidence ?? 1;
+      for (let i = 1; i < last.length; i++) {
+        if ((last[i].confidence ?? 0) > bestConfidence) {
+          bestTranscript = last[i].transcript;
+          bestConfidence = last[i].confidence;
+        }
+      }
       onResult({
-        transcript: last[0].transcript,
+        transcript: bestTranscript,
         isFinal: last.isFinal,
       });
     };
 
     this.webRecognition.onerror = (event: any) => {
-      onError(event.error || 'Recognition error');
+      const err = event.error || 'Recognition error';
+      // 'aborted' means .abort() was called explicitly — not an error to retry
+      onError(err);
     };
 
     this.webRecognition.onend = () => {
-      // If continuous mode, auto-restart
-      if (options?.continuous && this.webRecognition) {
+      // If continuous mode and not explicitly stopped, auto-restart
+      if (options?.continuous && this.webRecognition && !this._stopped) {
         try {
           this.webRecognition.start();
         } catch {

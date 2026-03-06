@@ -49,6 +49,7 @@ import { haptics } from "@/lib/haptics";
 import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
 import { MentionReference, MentionOption, MentionTabId, createMentionReference, serializeReferences } from "./mention-types";
+import { MallyVoiceOverlay } from "./MallyVoiceOverlay";
 
 interface Message {
   id: string;
@@ -149,6 +150,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const voiceSessionActiveRef = useRef(false); // ref mirror for use in callbacks
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // VAD — auto-submit interim transcript after silence instead of waiting for isFinal
+  const vadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -157,6 +160,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     return saved !== null ? saved === 'true' : false; // Voice ON by default
   });
   const [isSpeaking, setIsSpeaking] = useState(false);
+  // Siri-like full-screen voice overlay state
+  const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false);
+  const [overlayTranscript, setOverlayTranscript] = useState('');
+  const [overlayResponse, setOverlayResponse] = useState('');
+  const [overlayProcessing, setOverlayProcessing] = useState(false);
 
   // Keep ref in sync with state for use inside callbacks/timers
   useEffect(() => { voiceSessionActiveRef.current = voiceSessionActive; }, [voiceSessionActive]);
@@ -180,7 +188,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             if (voiceSessionActiveRef.current && !isRecording && !isLoading) {
               startVoiceListeningRef.current?.();
             }
-          }, 600);
+          }, 150);
         } else {
           // Legacy behavior: auto-dismiss after single voice command
           setTimeout(() => {
@@ -240,6 +248,32 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos, memory: userMemory });
   const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
+
+  // ── Pre-warm Firebase TTS + AI functions on login to eliminate cold-start latency ──
+  useEffect(() => {
+    if (!user?.uid) return;
+    // Warm TTS cache with common short phrases (plays from cache in <300ms after warming)
+    mallyTTS.warmCommonPhrases();
+    // Ping TTS Cloud function to keep it warm (avoids 2-3s cold start)
+    mallyTTS.pingTTSFunction();
+    // Ping AI streaming function — fire-and-forget
+    const t = setTimeout(async () => {
+      try {
+        const { auth: fbAuth } = await import('@/integrations/firebase/config');
+        const token = await fbAuth.currentUser?.getIdToken(false);
+        if (!token) return;
+        fetch(
+          'https://us-central1-malleabite-97d35.cloudfunctions.net/processSchedulingStream',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ userMessage: '.', userId: user.uid }),
+          }
+        ).catch(() => {});
+      } catch {}
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [user?.uid]);
 
   // MIGRATION: Effect to move old todos to new list
   useEffect(() => {
@@ -329,6 +363,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
     const available = await speechService.isAvailable();
     if (!available) return;
+
+    // Minimal delay to ensure previous recognition is released
+    await new Promise(r => setTimeout(r, 50));
 
     setIsRecording(true);
     setInputText('');
@@ -420,30 +457,280 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
   }, [location.pathname]);
 
-  // Listen for Hey Mally activation — conversational voice-first flow
+  // Close the Siri-like voice overlay and end voice session
+  const closeVoiceOverlay = useCallback(() => {
+    setVoiceOverlayOpen(false);
+    setOverlayTranscript('');
+    setOverlayResponse('');
+    setOverlayProcessing(false);
+    if (isRecording) {
+      speechService.stopListening();
+      setIsRecording(false);
+    }
+    overlayWakePausedRef.current = false;
+    overlayAbortRetryRef.current = 0;
+    prevIsSpeakingRef.current = false;
+    setVoiceSessionActive(false);
+    wasVoiceActivatedRef.current = false;
+    resumeWakeWord?.();
+    mallyTTS.stop();
+  }, [isRecording, resumeWakeWord]);
+
+  // Handle sending a voice message from the overlay — uses streaming Gemini for Siri-like speed.
+  // Pipeline:
+  //   1. Reset TTS stream queue
+  //   2. Fire streaming request to Firebase (Gemini streaming endpoint)
+  //   3. Each 'speech' chunk → enqueueChunk() to TTS (starts playing on first sentence boundary)
+  //   4. Also update overlayResponse progressively (text appears as speech streams)
+  //   5. 'done' event → execute actions, add to chat history
+  //   Falls back to the classic non-streaming path if streaming endpoint unavailable.
+  const handleOverlayVoiceMessage = useCallback(async (transcript: string) => {
+    // Cancel any pending VAD timer
+    if (vadTimerRef.current) { clearTimeout(vadTimerRef.current); vadTimerRef.current = null; }
+
+    setOverlayProcessing(true);
+    setOverlayTranscript(transcript);
+    setIsRecording(false);
+
+    if (isDismissalPhrase(transcript)) {
+      closeVoiceOverlay();
+      return;
+    }
+
+    const context = buildContext();
+    const messageHistory = messages
+      .filter(m => !m.isLoading && m.text !== 'Thinking...')
+      .slice(-10)
+      .map(m => ({ role: (m.sender === 'user' ? 'user' : 'model') as 'user' | 'model', parts: m.text || '' }));
+
+    let usedStreamingPath = false;
+
+    try {
+      // ── STREAMING PATH ─────────────────────────────────────────────────────
+      usedStreamingPath = true;
+      mallyTTS.resetStreamQueue();
+      let speechText = '';
+      let actionsToExecute: any[] = [];
+
+      for await (const event of FirebaseFunctions.processSchedulingStreamEvents({
+        userMessage: transcript,
+        userId: user?.uid || '',
+        context: JSON.stringify(context),
+        history: messageHistory,
+      })) {
+        if (event.type === 'speech' && event.text) {
+          speechText += event.text;
+          setOverlayResponse(speechText); // progressive display
+          if (!isMuted) mallyTTS.enqueueChunk(event.text, false); // start TTS immediately
+        } else if (event.type === 'speech_done') {
+          if (!isMuted) mallyTTS.enqueueChunk('', true); // flush remaining
+          setOverlayProcessing(false);
+        } else if (event.type === 'done') {
+          const finalText = event.speechText || speechText;
+          setOverlayResponse(finalText);
+          actionsToExecute = event.actions || [];
+          // If speech_done wasn't emitted (unexpected), flush now
+          if (!isMuted && mallyTTS.isSpeaking === false) {
+            mallyTTS.enqueueChunk('', true);
+          }
+          // Execute calendar/todo actions
+          for (const action of actionsToExecute) {
+            const ok = await executeAction(action);
+            if (ok) haptics.success();
+          }
+          await incrementAICount();
+          setMessages(prev => [
+            ...prev,
+            { id: crypto.randomUUID(), text: transcript, sender: 'user' as const, timestamp: new Date() },
+            { id: crypto.randomUUID(), text: finalText, sender: 'ai' as const, timestamp: new Date() },
+          ]);
+          setOverlayProcessing(false);
+        } else if (event.type === 'error') {
+          throw new Error(event.message || 'Stream error');
+        }
+      }
+    } catch (streamError: any) {
+      // ── FALLBACK: classic non-streaming path ──────────────────────────────
+      if (usedStreamingPath) {
+        console.warn('[Mally] Streaming path failed, falling back to classic:', streamError?.message);
+      }
+      mallyTTS.stop();
+      mallyTTS.resetStreamQueue();
+      try {
+        const response = await FirebaseFunctions.processScheduling({
+          userMessage: transcript,
+          userId: user?.uid || '',
+          context: JSON.stringify(context),
+          history: messageHistory,
+        });
+        await incrementAICount();
+        const aiResponse = response.message || "I couldn't process that.";
+        if (response.action) { const ok = await executeAction(response.action); if (ok) haptics.success(); }
+        if ((response as any).actions) { for (const a of (response as any).actions) { const ok = await executeAction(a); if (ok) haptics.success(); } }
+        setOverlayResponse(aiResponse);
+        setOverlayProcessing(false);
+        // Pipelined TTS — sentences play back-to-back with parallel prefetch
+        if (!isMuted) {
+          mallyTTS.speakPipelined(
+            { text: aiResponse },
+            (idx, _total, sentence) => {
+              if (idx > 0) setOverlayResponse(prev => prev); // keep full text visible
+            },
+          );
+        }
+        setMessages(prev => [
+          ...prev,
+          { id: crypto.randomUUID(), text: transcript, sender: 'user' as const, timestamp: new Date() },
+          { id: crypto.randomUUID(), text: aiResponse, sender: 'ai' as const, timestamp: new Date() },
+        ]);
+      } catch (fallbackError) {
+        logger.error('VoiceOverlay', 'Both streaming and classic path failed', fallbackError as Error);
+        const errMsg = "Sorry, I encountered an error. Please try again.";
+        setOverlayResponse(errMsg);
+        if (!isMuted) mallyTTS.speakFallback(errMsg);
+      } finally {
+        setOverlayProcessing(false); // always clear processing state
+      }
+    }
+  }, [user?.uid, messages, isMuted, buildContext, incrementAICount, executeAction, closeVoiceOverlay]);
+
+  // Start listening in overlay mode
+  const voiceOverlayOpenRef = useRef(false);
+  useEffect(() => { voiceOverlayOpenRef.current = voiceOverlayOpen; }, [voiceOverlayOpen]);
+
+  // Track whether overlay wake-word pause was already applied for this session
+  const overlayWakePausedRef = useRef(false);
+  // Retry counter for transient aborted errors — reset on each new speech round
+  const overlayAbortRetryRef = useRef(0);
+
+  const startOverlayListening = useCallback(async (isRetry = false) => {
+    if (!isRetry) overlayAbortRetryRef.current = 0;
+    setOverlayTranscript('');
+    setOverlayResponse('');
+
+    // Pause wake word only once per overlay session (not on every retry)
+    if (!overlayWakePausedRef.current) {
+      pauseWakeWord?.();
+      overlayWakePausedRef.current = true;
+    }
+
+    // Brief pause for mic release (kept minimal for responsiveness)
+    await new Promise(r => setTimeout(r, isRetry ? 80 : 120));
+
+    if (!voiceOverlayOpenRef.current) return; // Overlay closed while waiting
+
+    setIsRecording(true);
+
+    await speechService.startListening(
+      (result) => {
+        overlayAbortRetryRef.current = 0; // Got audio — reset retry counter
+        setOverlayTranscript(result.transcript);
+
+        // VAD: auto-submit after 400ms of no new speech — eliminates isFinal lag.
+        // This makes Mally feel instant (like Siri) vs waiting for Web Speech isFinal.
+        if (vadTimerRef.current) clearTimeout(vadTimerRef.current);
+
+        if (result.isFinal) {
+          vadTimerRef.current = null;
+          handleOverlayVoiceMessage(result.transcript);
+        } else if (result.transcript.trim().length > 3) {
+          vadTimerRef.current = setTimeout(() => {
+            vadTimerRef.current = null;
+            if (voiceOverlayOpenRef.current) {
+              speechService.stopListening();
+              setIsRecording(false);
+              handleOverlayVoiceMessage(result.transcript.trim());
+            }
+          }, 400);
+        }
+      },
+      (err) => {
+        setIsRecording(false);
+        if (!voiceOverlayOpenRef.current) return;
+        // 'no-speech' — user hasn't spoken; keep waiting quietly
+        if (err === 'no-speech') {
+          setTimeout(() => startOverlayListening(true), 300);
+          return;
+        }
+        // 'aborted' can happen transiently after TTS or mic transitions — retry a few times
+        if (err === 'aborted' && overlayAbortRetryRef.current < 5) {
+          overlayAbortRetryRef.current++;
+          setTimeout(() => startOverlayListening(true), 500);
+          return;
+        }
+        if (err !== 'aborted') {
+          console.error('[Mally] Overlay speech error:', err);
+        }
+      }
+    );
+  }, [pauseWakeWord, handleOverlayVoiceMessage]);
+
+  // Re-listen after TTS finishes speaking in overlay mode.
+  const prevIsSpeakingRef = useRef(false);
+  useEffect(() => {
+    if (!voiceOverlayOpen) return;
+    const wasSpeaking = prevIsSpeakingRef.current;
+    prevIsSpeakingRef.current = isSpeaking;
+    // Trigger when TTS transitions from speaking → not speaking
+    if (wasSpeaking && !isSpeaking && !overlayProcessing && !isRecording) {
+      // If speechSynthesis fallback was used it conflicts with SpeechRecognition — needs longer release.
+      // AudioContext playback has no conflict — can restart mic almost immediately.
+      const delay = mallyTTS.lastUsedFallback ? 700 : 100;
+      const timer = setTimeout(() => {
+        if (voiceOverlayOpen && !isRecording && !isSpeaking && !overlayProcessing) {
+          startOverlayListening();
+        }
+      }, delay);
+      return () => clearTimeout(timer);
+    }
+  }, [voiceOverlayOpen, isSpeaking, overlayProcessing, isRecording, startOverlayListening]);
+
+  // Interrupt Mally mid-speech: stop TTS and start listening immediately
+  const handleOverlayInterrupt = useCallback(() => {
+    mallyTTS.stop();
+    overlayAbortRetryRef.current = 0;
+    startOverlayListening();
+  }, [startOverlayListening]);
+
+  // Listen for Hey Mally activation — Siri-like full-screen voice overlay
   useEffect(() => {
     const handleHeyMallyActivation = () => {
+      overlayWakePausedRef.current = false; // Reset so first startOverlayListening pauses wake word
       wasVoiceActivatedRef.current = true;
       setVoiceSessionActive(true);
-      setIsExpanded(true);
+      setVoiceOverlayOpen(true);
+      setOverlayTranscript('');
+      setOverlayResponse('');
       haptics.medium();
 
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(),
-        text: "I'm listening... speak freely, no need to say 'Hey Mally' again.",
-        sender: 'ai',
-        timestamp: new Date(),
-      }]);
+      // Instant audio ACK — zero-latency local speech so user knows Mally heard them
+      mallyTTS.playInstantACK();
 
-      // Auto-start recording after brief delay
+      // Kill the wake word mic immediately so the overlay can use it
+      pauseWakeWord?.();
+      overlayWakePausedRef.current = true;
+
+      // Auto-start recording after mic is released — kept fast for responsiveness
       setTimeout(() => {
-        startVoiceListeningRef.current?.();
-      }, 400);
+        startOverlayListening();
+      }, 150);
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, []);
+  }, [startOverlayListening]);
+
+  // Auto-dismiss overlay after inactivity (like Siri)
+  useEffect(() => {
+    if (!voiceOverlayOpen) return;
+    // If nothing is happening for 15s, close overlay
+    const timeout = setTimeout(() => {
+      if (!isRecording && !isSpeaking && !overlayProcessing) {
+        closeVoiceOverlay();
+      }
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [voiceOverlayOpen, isRecording, isSpeaking, overlayProcessing, overlayTranscript, overlayResponse, closeVoiceOverlay]);
 
   // Handle image upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -748,7 +1035,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     inputRef.current?.focus();
   };
 
-  // Toggle voice recording
+  // Toggle voice recording (mic button in chat bar)
   const toggleRecording = async () => {
     if (isRecording) {
       setIsRecording(false);
@@ -766,8 +1053,12 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         return;
       }
 
-      setIsRecording(true);
+      // Pause wake word and wait for it to fully release the microphone
       pauseWakeWord?.();
+      await new Promise(r => setTimeout(r, 350));
+
+      setIsRecording(true);
+      setIsExpanded(true);
       haptics.medium();
 
       await speechService.startListening(
@@ -783,7 +1074,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
           console.error('[Mally] Speech recognition error:', error);
           setIsRecording(false);
           resumeWakeWord?.();
-          toast.error('Voice recognition failed');
+          toast.error('Voice recognition failed. Please try again.');
         }
       );
     }
@@ -791,6 +1082,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   return (
     <>
+      {/* Siri-like full-screen voice overlay for Hey Mally activation */}
+      <MallyVoiceOverlay
+        isOpen={voiceOverlayOpen}
+        isListening={isRecording && voiceOverlayOpen}
+        isSpeaking={isSpeaking && voiceOverlayOpen}
+        isProcessing={overlayProcessing}
+        transcript={overlayTranscript}
+        responseText={overlayResponse}
+        onClose={closeVoiceOverlay}
+        onInterrupt={handleOverlayInterrupt}
+      />
+
       {/* Dark overlay when expanded */}
       <AnimatePresence>
         {isExpanded && (
@@ -891,7 +1194,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             {/* Minimize button - top right, shifted closer */}
             <button
               onClick={() => setIsMinimized(true)}
-              className="absolute top-3 right-8 p-2 rounded-full hover:bg-black/10 text-muted-foreground hover:text-foreground transition-colors z-10"
+              className="absolute top-3 right-8 p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors z-10"
               title="Minimize"
             >
               <Minimize2 className="h-5 w-5" />
@@ -1001,7 +1304,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     onClick={() => handleQuickAction(action)}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
-                      "bg-black/5 hover:bg-black/10 border border-black/10",
+                      "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/10 dark:border-white/10",
                       "text-muted-foreground hover:text-foreground",
                       "transition-all whitespace-nowrap flex-shrink-0"
                     )}
@@ -1080,7 +1383,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   <img
                     src={uploadedImage.dataUrl}
                     alt="Upload preview"
-                    className="h-16 rounded-lg border border-black/20"
+                    className="h-16 rounded-lg border border-black/20 dark:border-white/20"
                   />
                   <button
                     onClick={() => setUploadedImage(null)}
@@ -1173,7 +1476,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   className={cn(
                     "p-2.5 rounded-full transition-all",
                     isMuted
-                      ? "bg-black/5 dark:bg-white/10 text-red-500 hover:bg-black/10 dark:hover:bg-white/20"
+                      ? "bg-black/5 dark:bg-white/10 text-red-500 dark:text-red-400 hover:bg-black/10 dark:hover:bg-white/20"
                       : "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground"
                   )}
                   title={isMuted ? "Unmute AI voice" : "Mute AI voice"}

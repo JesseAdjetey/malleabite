@@ -5,6 +5,7 @@ import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
 import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
+import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
 import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -403,6 +404,7 @@ const Settings = () => {
 
           <div className="space-y-4">
             <GoogleCalendarSync />
+            <WhatsAppLink />
             <SlackNotifications />
           </div>
         </div>

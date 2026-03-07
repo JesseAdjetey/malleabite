@@ -60,9 +60,11 @@ interface HeyMallyProviderProps {
 
 export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
   const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(() => {
-    // Load preference from localStorage
+    // Load preference from localStorage, default to ON (like Siri/Google Assistant)
     const saved = localStorage.getItem('heyMallyEnabled');
-    return saved === 'true';
+    if (saved !== null) return saved === 'true';
+    // Default to enabled — voice-first mobile experience
+    return true;
   });
   const [isMallyOpen, setIsMallyOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -74,11 +76,6 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
       toast.info("Please sign in to use Hey Mally");
       return;
     }
-    
-    toast.success("Hey Mally activated!", {
-      icon: <Volume2 className="h-4 w-4 text-primary" />,
-      duration: 2000,
-    });
     
     setIsMallyOpen(true);
     
@@ -142,9 +139,12 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
   }, [isWakeWordEnabled, enableWakeWord, disableWakeWord]);
 
   // Pause wake word detection temporarily (when MallyAI is recording)
+  // MUST call stopListening synchronously so the mic is released immediately,
+  // not deferred to the React effect cycle.
   const pauseWakeWord = useCallback(() => {
-    setIsPaused(true);
-  }, []);
+    stopListening();   // Immediately abort the recognition & release mic
+    setIsPaused(true); // Prevent the effect from restarting it
+  }, [stopListening]);
 
   // Resume wake word detection
   const resumeWakeWord = useCallback(() => {
@@ -179,15 +179,14 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     <HeyMallyContext.Provider value={value}>
       {children}
       
-      {/* Listening indicator - shows when wake word detection is active */}
+      {/* Listening indicator - subtle dot when wake word detection is active */}
       {isListening && isWakeWordEnabled && (
-        <div className="fixed bottom-20 left-4 z-50 flex items-center gap-2 px-3 py-2 bg-primary/20 backdrop-blur-sm rounded-full border border-primary/30 animate-pulse">
+        <div className="fixed bottom-20 left-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100/80 dark:bg-primary/20 backdrop-blur-sm rounded-full border border-purple-200/60 dark:border-primary/30">
           <div className="relative">
-            <Mic className="h-4 w-4 text-primary" />
-            <span className="absolute -top-1 -right-1 h-2 w-2 bg-green-500 rounded-full animate-ping" />
-            <span className="absolute -top-1 -right-1 h-2 w-2 bg-green-500 rounded-full" />
+            <Mic className="h-3 w-3 text-purple-600 dark:text-primary" />
+            <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 bg-green-500 rounded-full" />
           </div>
-          <span className="text-xs text-primary font-medium">Hey Mally</span>
+          <span className="text-[10px] text-purple-600 dark:text-primary font-medium">Hey Mally</span>
         </div>
       )}
     </HeyMallyContext.Provider>

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -46,6 +46,9 @@ Object.defineProperty(exports, "createPortalSession", { enumerable: true, get: f
 // Export TTS (Text-to-Speech) handler
 var tts_1 = require("./tts");
 Object.defineProperty(exports, "synthesizeSpeech", { enumerable: true, get: function () { return tts_1.synthesizeSpeech; } });
+// Export scheduling streaming handler
+var scheduling_1 = require("./scheduling");
+Object.defineProperty(exports, "processSchedulingStream", { enumerable: true, get: function () { return scheduling_1.processSchedulingStream; } });
 // Export WhatsApp Bot handlers
 var whatsapp_webhook_1 = require("./whatsapp-webhook");
 Object.defineProperty(exports, "whatsappWebhook", { enumerable: true, get: function () { return whatsapp_webhook_1.whatsappWebhook; } });

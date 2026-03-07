@@ -6,6 +6,7 @@ import {
   getDoc, 
   getDocs, 
   addDoc, 
+  setDoc,
   updateDoc, 
   deleteDoc, 
   query, 
@@ -323,7 +324,7 @@ export function useEmailNotifications() {
             updatedAt: new Date().toISOString(),
           };
           
-          await addDoc(collection(db, 'notification_preferences'), {
+          await setDoc(doc(db, 'notification_preferences', user.uid), {
             ...defaultPrefs,
             userId: user.uid,
           });

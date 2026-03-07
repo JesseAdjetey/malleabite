@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import AnimatedLogo from '@/components/auth/AnimatedLogo';
 import { Check, ChevronRight, Star, Award, Gift, Trophy, Timer, Calendar, BrainCircuit, Compass, Mail } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { authSchema, signUpSchema, sanitizeInput } from '@/lib/validation';
+import { authSchema, sanitizeInput } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { ZodError } from 'zod';
 
@@ -255,13 +255,17 @@ const Auth = () => {
       const sanitizedName = name ? sanitizeInput(name) : undefined;
 
       if (isSignUp) {
-        // Validate signup data
+        // Validate signup data (use authSchema since we don't have a confirmPassword field)
         try {
-          signUpSchema.parse({
+          authSchema.parse({
             email: sanitizedEmail,
             password,
-            name: sanitizedName
           });
+          // Additional name validation
+          if (sanitizedName && (sanitizedName.length < 2 || sanitizedName.length > 50)) {
+            setValidationErrors({ name: 'Name must be between 2 and 50 characters' });
+            return;
+          }
         } catch (validationError) {
           if (validationError instanceof ZodError) {
             const errors: Record<string, string> = {};

@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { isNative } from '@/lib/platform';
 import { speechService } from '@/lib/ai/speech-recognition-service';
+import { porcupineService } from '@/lib/ai/porcupine-service';
+import { unlockAudioContext } from '@/lib/ai/tts-service';
 
 interface UseWakeWordOptions {
   onWakeWordDetected: () => void;
@@ -78,6 +80,8 @@ export function useWakeWord({
   const isListeningRef = useRef(false);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const cooldownRef = useRef(false);
+  // Tracks whether Porcupine (vs Web Speech) is the active engine this session
+  const usingPorcupineRef = useRef(false);
 
   // Check if speech recognition is supported (native or web)
   useEffect(() => {
@@ -99,7 +103,9 @@ export function useWakeWord({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
+      if (usingPorcupineRef.current) {
+        porcupineService.stop();
+      } else if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {
@@ -112,9 +118,15 @@ export function useWakeWord({
     };
   }, []);
 
-  // Check if transcript contains wake word
+  // Check if transcript contains wake word (with fuzzy phonetic matching)
   const containsWakeWord = useCallback((transcript: string): boolean => {
-    const normalized = transcript.toLowerCase().trim();
+    const normalized = transcript.toLowerCase().trim()
+      // Normalize common speech-to-text mishearings of "Mally"
+      .replace(/\bm[ao]ll?[eiy]+\b/g, 'mally')
+      .replace(/\bm[ao]l[eiy]+\b/g,   'mally')
+      .replace(/\bm[ao]le\b/g,        'mally')
+      .replace(/\bmol+y\b/g,          'mally')
+      .replace(/\b(hey|hi|ok|okay|ey|hé|hel+o)\b\s+m[ao]l/g, 'hey mally');
     return wakeWords.some(word => normalized.includes(word.toLowerCase()));
   }, [wakeWords]);
 
@@ -145,8 +157,134 @@ export function useWakeWord({
   const startListening = useCallback(() => {
     if (!isSupported || isListeningRef.current) return;
 
+    // ── Inner helper: Web Speech API path ─────────────────────────────────
+    // Extracted so both the normal code path and the Porcupine fallback can
+    // call it without duplicating logic.
+    const _startWebSpeech = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition ||
+                                (window as any).webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        setError('Speech recognition not supported');
+        return;
+      }
+
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = navigator.language || 'en-US';
+        recognition.maxAlternatives = 5; // More alternatives = catches quiet/accented speech better
+
+        recognition.onstart = () => {
+          if (!isListeningRef.current) {
+            logger.info('WakeWord', 'Wake word detection started (Web Speech API)');
+          }
+          setIsListening(true);
+          isListeningRef.current = true;
+          setError(null);
+        };
+
+        recognition.onresult = (event: any) => {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            for (let j = 0; j < result.length; j++) {
+              const transcript = result[j].transcript;
+              handleTranscript(transcript);
+
+              if (cooldownRef.current) {
+                // Wake word was just detected — abort immediately so the
+                // overlay can take the mic. Do NOT use .stop() (graceful)
+                // because onend would auto-restart before the overlay gets a chance.
+                isListeningRef.current = false;
+                try { recognition.abort(); } catch {}
+                recognitionRef.current = null;
+                return;
+              }
+            }
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          if (event.error === 'no-speech' || event.error === 'aborted') return;
+          if (event.error === 'not-allowed') {
+            setError('Microphone access denied. Please allow microphone access for "Hey Mally" to work.');
+            logger.warn('WakeWord', 'Microphone access denied');
+            setIsListening(false);
+            isListeningRef.current = false;
+            return;
+          }
+          logger.warn('WakeWord', 'Recognition error', { error: event.error });
+        };
+
+        recognition.onend = () => {
+          if (isListeningRef.current && enabled) {
+            restartTimeoutRef.current = setTimeout(() => {
+              if (isListeningRef.current) {
+                // Re-enter startListening so Porcupine can take over if configured
+                try { recognition.start(); } catch { startListening(); }
+              }
+            }, 100);
+          } else {
+            setIsListening(false);
+          }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+
+      } catch (err) {
+        logger.error('WakeWord', 'Failed to start wake word detection', err as Error);
+        setError('Failed to start voice detection');
+        setIsListening(false);
+        isListeningRef.current = false;
+      }
+    };
+
+    // ── Porcupine: on-device, no network needed ────────────────────────────
+    // Preferred over Web Speech on browsers when configured. Falls through
+    // to Web Speech automatically if Porcupine fails or isn't configured.
+    if (!isNative && porcupineService.isConfigured()) {
+      isListeningRef.current = true;
+      setIsListening(true);
+      setError(null);
+      usingPorcupineRef.current = true;
+
+      porcupineService.start(() => {
+        // Porcupine detection callback — same flow as Web Speech path
+        if (cooldownRef.current) return;
+        cooldownRef.current = true;
+        setTimeout(() => { cooldownRef.current = false; }, 3_000);
+
+        logger.info('WakeWord', 'Porcupine wake word detected!');
+        playActivationSound();
+        onWakeWordDetected();
+
+        // Release mic so the overlay can acquire it
+        porcupineService.stop();
+        isListeningRef.current = false;
+        usingPorcupineRef.current = false;
+        setIsListening(false);
+
+        // Restart Porcupine after the overlay is done (1s grace period)
+        restartTimeoutRef.current = setTimeout(() => {
+          if (enabled) startListening();
+        }, 1_000);
+      }).then((ok) => {
+        if (!ok) {
+          // Porcupine failed (e.g. bad access key) — fall back silently to Web Speech
+          logger.warn('WakeWord', 'Porcupine init failed — falling back to Web Speech API');
+          usingPorcupineRef.current = false;
+          isListeningRef.current = false;
+          setIsListening(false);
+          _startWebSpeech();
+        }
+      });
+      return;
+    }
+
+    // ── Native: Capacitor speech recognition ──────────────────────────────
     if (isNative) {
-      // ── Native: use Capacitor speech recognition ──
       isListeningRef.current = true;
       setIsListening(true);
       setError(null);
@@ -172,86 +310,11 @@ export function useWakeWord({
       return;
     }
 
-    // ── Web: use Web Speech API ──
-    const SpeechRecognition = (window as any).SpeechRecognition ||
-                              (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setError('Speech recognition not supported');
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = navigator.language || 'en-US';
-      recognition.maxAlternatives = 3;
-
-      recognition.onstart = () => {
-        if (!isListeningRef.current) {
-          logger.info('WakeWord', 'Wake word detection started');
-        }
-        setIsListening(true);
-        isListeningRef.current = true;
-        setError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          for (let j = 0; j < result.length; j++) {
-            const transcript = result[j].transcript;
-            handleTranscript(transcript);
-
-            if (cooldownRef.current) {
-              // Wake word was just detected, stop and restart
-              try { recognition.stop(); } catch {}
-              restartTimeoutRef.current = setTimeout(() => {
-                if (isListeningRef.current && enabled) startListening();
-              }, 2000);
-              return;
-            }
-          }
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        if (event.error === 'no-speech' || event.error === 'aborted') return;
-        if (event.error === 'not-allowed') {
-          setError('Microphone access denied. Please allow microphone access for "Hey Mally" to work.');
-          logger.warn('WakeWord', 'Microphone access denied');
-          setIsListening(false);
-          isListeningRef.current = false;
-          return;
-        }
-        logger.warn('WakeWord', 'Recognition error', { error: event.error });
-      };
-
-      recognition.onend = () => {
-        if (isListeningRef.current && enabled) {
-          restartTimeoutRef.current = setTimeout(() => {
-            if (isListeningRef.current) {
-              try { recognition.start(); } catch { startListening(); }
-            }
-          }, 100);
-        } else {
-          setIsListening(false);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-
-    } catch (err) {
-      logger.error('WakeWord', 'Failed to start wake word detection', err as Error);
-      setError('Failed to start voice detection');
-      setIsListening(false);
-      isListeningRef.current = false;
-    }
+    // ── Web Speech API fallback (Porcupine not configured) ─────────────────
+    _startWebSpeech();
   }, [isSupported, handleTranscript, enabled]);
 
-  // Stop listening
+  // Stop listening - returns a promise that resolves when fully stopped
   const stopListening = useCallback(() => {
     isListeningRef.current = false;
     setIsListening(false);
@@ -261,10 +324,13 @@ export function useWakeWord({
       restartTimeoutRef.current = null;
     }
 
-    if (isNative) {
+    if (usingPorcupineRef.current) {
+      porcupineService.stop();
+      usingPorcupineRef.current = false;
+    } else if (isNative) {
       speechService.stopListening();
     } else if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
 
@@ -292,49 +358,79 @@ export function useWakeWord({
 }
 
 // Play a subtle activation sound
+// Track whether the user has made a gesture (click/tap/key) so we know
+// whether AudioContext / navigator.vibrate are allowed.
+let _hasUserGesture = false;
+let _sharedAudioCtx: AudioContext | null = null;
+
+if (typeof window !== 'undefined') {
+  const markGesture = () => {
+    _hasUserGesture = true;
+    // Unlock the TTS AudioContext (shared singleton) while we have a gesture
+    unlockAudioContext();
+    // Create & resume the local AudioContext for activation sounds
+    try {
+      if (!_sharedAudioCtx) {
+        _sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (_sharedAudioCtx.state === 'suspended') {
+        _sharedAudioCtx.resume().catch(() => {});
+      }
+    } catch { /* ok */ }
+    window.removeEventListener('click', markGesture, true);
+    window.removeEventListener('touchstart', markGesture, true);
+    window.removeEventListener('keydown', markGesture, true);
+  };
+  window.addEventListener('click', markGesture, true);
+  window.addEventListener('touchstart', markGesture, true);
+  window.addEventListener('keydown', markGesture, true);
+}
+
+/**
+ * Play a subtle two-tone beep when the wake word is detected.
+ * If the browser hasn't received a user gesture yet (which is the normal
+ * case — "Hey Mally" fires from continuous speech recognition, not a tap),
+ * we silently skip the sound. No AudioContext warnings, no vibrate warnings.
+ */
 function playActivationSound() {
+  // No user gesture yet → nothing we can do, just skip silently
+  if (!_hasUserGesture || !_sharedAudioCtx || _sharedAudioCtx.state === 'suspended') {
+    return;
+  }
+
   try {
-    // Create a simple beep using Web Audio API
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
+    const ctx = _sharedAudioCtx;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
     oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 800; // Hz
+    gainNode.connect(ctx.destination);
+
+    oscillator.frequency.value = 800;
     oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.2);
-    
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.2);
+
     // Second beep (higher pitch)
     setTimeout(() => {
-      const osc2 = audioContext.createOscillator();
-      const gain2 = audioContext.createGain();
-      
-      osc2.connect(gain2);
-      gain2.connect(audioContext.destination);
-      
-      osc2.frequency.value = 1200; // Hz
-      osc2.type = 'sine';
-      
-      gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-      
-      osc2.start(audioContext.currentTime);
-      osc2.stop(audioContext.currentTime + 0.15);
+      try {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.frequency.value = 1200;
+        osc2.type = 'sine';
+        gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        osc2.start(ctx.currentTime);
+        osc2.stop(ctx.currentTime + 0.15);
+      } catch { /* ignore */ }
     }, 150);
-    
-  } catch (e) {
-    // Audio not supported, use vibration on mobile
-    if (navigator.vibrate) {
-      navigator.vibrate([100, 50, 100]);
-    }
+  } catch {
+    // Silently ignore — no sound is fine
   }
 }
 

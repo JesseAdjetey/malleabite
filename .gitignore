@@ -44,3 +44,7 @@ android/build/
 android/captures/
 android/.idea/
 android/local.properties
+
+# Picovoice Porcupine — acoustic model binary (~1.9 MB)
+# Downloaded once via `npm run setup:porcupine`, not committed
+public/porcupine-params.pv

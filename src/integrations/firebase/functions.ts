@@ -231,6 +231,62 @@ export class FirebaseFunctions {
       throw error;
     }
   }
+
+  // ─── Streaming endpoint — real-time Gemini speech + TTS ─────────────────────
+  // Yields events as they arrive from the Firebase SSE stream.
+  // event.type === 'speech'      → partial text chunk (for progressive display + TTS queue)
+  // event.type === 'speech_done' → all speech text has been sent (JSON actions coming)
+  // event.type === 'done'        → { speechText, actions, intent, actionRequired }
+  // event.type === 'error'       → { message }
+  static async *processSchedulingStreamEvents(
+    data: SchedulingRequest,
+  ): AsyncGenerator<{ type: string; text?: string; speechText?: string; actions?: any[]; intent?: string; actionRequired?: boolean; message?: string }> {
+    const STREAM_URL = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processSchedulingStream';
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+
+    const token = await currentUser.getIdToken(false);
+
+    const response = await fetch(STREAM_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        userMessage: data.userMessage,
+        userId: data.userId,
+        context: data.context,
+        history: data.history,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Stream request failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            yield JSON.parse(line.slice(6));
+          } catch { /* malformed chunk — skip */ }
+        }
+      }
+    }
+  }
 }
 
 export default FirebaseFunctions;

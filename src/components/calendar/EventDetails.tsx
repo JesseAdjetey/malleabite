@@ -81,10 +81,7 @@ interface EventDetailsProps {
 }
 
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
-  console.log('🎯 EventDetails rendering, open:', open);
-
   const { selectedEvent } = useEventStore();
-  console.log('🎯 EventDetails selectedEvent:', selectedEvent);
 
   const { updateEvent, removeEvent } = useEventCRUD();
   const { addRecurrenceException } = useCalendarEvents();
@@ -145,11 +142,8 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
   // Early return if no event selected - AFTER all hooks
   if (!selectedEvent) {
-    console.log('⚠️ EventDetails: No selectedEvent, returning null');
     return null;
   }
-
-  console.log('✅ EventDetails: selectedEvent exists, proceeding with render');
 
   // Format time from startsAt and endsAt fields (wrapped in try-catch)
   const timeRange = (() => {

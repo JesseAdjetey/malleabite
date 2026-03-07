@@ -13,6 +13,9 @@ export {
 // Export TTS (Text-to-Speech) handler
 export { synthesizeSpeech } from './tts';
 
+// Export scheduling streaming handler
+export { processSchedulingStream } from './scheduling';
+
 // Export WhatsApp Bot handlers
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 

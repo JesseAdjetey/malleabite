@@ -170,9 +170,9 @@ async function loadUpcomingEvents(userId: string): Promise<any[]> {
   const snap = await db()
     .collection('calendar_events')
     .where('userId', '==', userId)
-    .where('startAt', '>=', admin.firestore.Timestamp.fromDate(now))
-    .where('startAt', '<=', admin.firestore.Timestamp.fromDate(weekLater))
-    .orderBy('startAt', 'asc')
+    .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(now))
+    .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(weekLater))
+    .orderBy('startsAt', 'asc')
     .limit(20)
     .get();
 
@@ -202,7 +202,7 @@ function formatEvents(events: any[]): string {
   if (!events.length) return 'No upcoming events.';
   return events
     .map((e) => {
-      const start = e.startAt?.toDate?.();
+      const start = e.startsAt?.toDate?.();
       return `- "${e.title}" at ${start?.toLocaleString() || 'unknown time'}`;
     })
     .join('\n');

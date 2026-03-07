@@ -255,8 +255,8 @@ async function executePendingAction(
     const docRef = await db().collection('calendar_events').add({
       userId,
       title: action.title || 'Untitled Event',
-      startAt: start ? admin.firestore.Timestamp.fromDate(start) : admin.firestore.FieldValue.serverTimestamp(),
-      endAt: end ? admin.firestore.Timestamp.fromDate(end) : admin.firestore.FieldValue.serverTimestamp(),
+      startsAt: start ? admin.firestore.Timestamp.fromDate(start) : admin.firestore.FieldValue.serverTimestamp(),
+      endsAt: end ? admin.firestore.Timestamp.fromDate(end) : admin.firestore.FieldValue.serverTimestamp(),
       description: action.description || '',
       color: '#6C63FF',
       source: 'malleabite',
@@ -645,9 +645,9 @@ async function sendTodaySchedule(send: SendOpts, userId: string): Promise<void> 
   const snap = await db()
     .collection('calendar_events')
     .where('userId', '==', userId)
-    .where('startAt', '>=', admin.firestore.Timestamp.fromDate(start))
-    .where('startAt', '<=', admin.firestore.Timestamp.fromDate(end))
-    .orderBy('startAt', 'asc')
+    .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(start))
+    .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(end))
+    .orderBy('startsAt', 'asc')
     .get();
 
   if (snap.empty) {
@@ -657,8 +657,8 @@ async function sendTodaySchedule(send: SendOpts, userId: string): Promise<void> 
 
   const lines = snap.docs.map((d) => {
     const e = d.data();
-    const s = e.startAt?.toDate?.();
-    const en = e.endAt?.toDate?.();
+    const s = e.startsAt?.toDate?.();
+    const en = e.endsAt?.toDate?.();
     const time = e.isAllDay ? 'All day' : (s ? fmtRange(s, en) : '');
     return `• *${e.title}* · ${time}`;
   });

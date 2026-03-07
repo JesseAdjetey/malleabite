@@ -306,9 +306,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         ).catch(() => {});
       } catch {}
     }, 5000);
-    // Pre-warm Vapi WebRTC connection in the background so first "Hey Mally" is instant
-    const preWarmT = setTimeout(() => { mallyVapi.preWarm(); }, 8000);
-    return () => { clearTimeout(t); clearTimeout(preWarmT); };
+    // Vapi pre-warm is triggered at module load (vapi-service.ts) — no delay needed here.
+    // This call is a no-op if already pre-warmed or pre-warming.
+    mallyVapi.preWarm();
+    return () => { clearTimeout(t); };
   }, [user?.uid]);
 
   // MIGRATION: Effect to move old todos to new list
@@ -844,9 +845,10 @@ RULES:
       setVapiConnecting(true); // Show "Connecting..." in overlay while WebRTC handshakes
       await mallyVapi.startSession({
         systemPrompt,
-        // No firstMessage — Vapi listens immediately. The overlay visual shows "Listening"
-        // so the user knows Mally is ready. Starting without a greeting removes connection
-        // latency (no TTS round-trip before the user can speak).
+        // Greeting spoken immediately after activation on both pre-warm and cold-start paths.
+        // Pre-warm: vapi.say() is called after mic unmute (~150ms after activation).
+        // Cold-start: firstMessage goes into the Vapi config and is spoken on call-start.
+        firstMessage: "Hey! What do you need?",
       });
     } catch (err) {
       console.error('[Mally] Vapi session failed, falling back to custom pipeline');

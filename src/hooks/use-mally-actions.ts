@@ -623,6 +623,10 @@ export function useMallyActions() {
 
         case 'create_template': {
           if (!data.title) { toast.error('Template title is required'); return false; }
+          // If user has auth, redirect to CalendarTemplate system instead of legacy EventTemplate
+          if (user?.uid && data.events) {
+            return executeAction({ type: 'create_calendar_template', data: { name: data.title, ...data } });
+          }
           await ensureModuleVisible('templates', 'Templates');
           const result = await createTemplate({
             title: data.title,
@@ -633,7 +637,7 @@ export function useMallyActions() {
             notes: data.notes,
             isAllDay: data.isAllDay || false,
           });
-          if (result?.success) { toast.success(`Template "${data.title}" created`); return true; }
+          if (result) { toast.success(`Template "${data.title}" created`); return true; }
           return false;
         }
 

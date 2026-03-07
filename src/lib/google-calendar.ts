@@ -467,19 +467,34 @@ export function malleabiteEventToGoogle(event: CalendarEventType): Partial<Googl
   const endISO = event.endsAt || dayjs(event.startsAt).add(1, 'hour').toISOString();
   const tz = event.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  return {
+  // Clean description — strip the internal "HH:mm - HH:mm | text" format
+  let cleanDescription = event.description || '';
+  if (typeof cleanDescription === 'string' && cleanDescription.includes('|')) {
+    const afterPipe = cleanDescription.split('|').slice(1).join('|').trim();
+    if (afterPipe) cleanDescription = afterPipe;
+  }
+
+  // All-day events use date (YYYY-MM-DD) not dateTime
+  const isAllDay = event.isAllDay;
+
+  const result: Partial<GoogleCalendarEvent> = {
     summary: event.title,
-    description: event.description,
+    description: cleanDescription,
     location: event.location,
-    start: {
-      dateTime: startISO,
-      timeZone: tz,
-    },
-    end: {
-      dateTime: endISO,
-      timeZone: tz,
-    },
   };
+
+  if (isAllDay) {
+    const startDate = dayjs(startISO).format('YYYY-MM-DD');
+    // Google all-day end date is exclusive, so add 1 day
+    const endDate = dayjs(endISO || startISO).add(1, 'day').format('YYYY-MM-DD');
+    result.start = { date: startDate };
+    result.end = { date: endDate };
+  } else {
+    result.start = { dateTime: startISO, timeZone: tz };
+    result.end = { dateTime: endISO, timeZone: tz };
+  }
+
+  return result;
 }
 
 // Create event in Google Calendar
@@ -530,10 +545,12 @@ export async function updateGoogleCalendarEvent(
 
   const googleEvent = malleabiteEventToGoogle(event);
 
+  // Use PATCH instead of PUT so we only update the fields we send,
+  // preserving recurrence rules, reminders, color, attendees, etc.
   const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     {
-      method: 'PUT',
+      method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -543,7 +560,9 @@ export async function updateGoogleCalendarEvent(
   );
 
   if (!response.ok) {
-    throw new Error('Failed to update event in Google Calendar');
+    const errorText = await response.text().catch(() => 'unknown error');
+    console.error(`[GoogleCalendar] PATCH failed for event ${eventId}:`, response.status, errorText);
+    throw new Error(`Failed to update event in Google Calendar: ${response.status}`);
   }
 
   return response.json();
@@ -561,7 +580,7 @@ export async function deleteGoogleCalendarEvent(
   }
 
   const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },

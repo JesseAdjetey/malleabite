@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getWeekDays } from "@/lib/getTime";
 import { useDateStore, useEventStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import AddEventButton from "@/components/calendar/AddEventButton";
@@ -32,6 +33,7 @@ import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { WeekAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -76,6 +78,17 @@ const WeekView = () => {
 
   // Week range ribbon
   const { rangeStart, rangeEnd } = useWeekRangeStore();
+  const isMobile = useIsMobile();
+
+  // On mobile, default to a 3-day window centered on today (once, on mount)
+  useEffect(() => {
+    if (isMobile && rangeStart === 0 && rangeEnd === 6) {
+      const todayIdx = dayjs().day(); // 0=Sun … 6=Sat
+      const start = Math.max(0, Math.min(todayIdx - 1, 4)); // max start=4 so end≤6
+      useWeekRangeStore.getState().setRange(start, start + 2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
@@ -574,6 +587,25 @@ const WeekView = () => {
 
       <div className="mx-2 mb-2 rounded-2xl overflow-hidden">
         <ScrollArea className="h-[calc(100vh-170px)]">
+          {/* Sticky day column labels — matches the grid below for clear mapping */}
+          <div
+            className="sticky top-0 z-10 bg-gradient-to-b from-background via-background to-background/80 backdrop-blur-sm px-4 pt-1.5 pb-1 border-b border-purple-100/50 dark:border-white/5"
+            style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}
+          >
+            <div className="w-16" />
+            {visibleWeekDays.map(({ currentDate, today }, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "text-center text-[11px] font-medium",
+                  today ? "text-primary" : "text-muted-foreground/70"
+                )}
+              >
+                {currentDate.format("ddd D")}
+              </div>
+            ))}
+          </div>
+
           <div className="px-4 py-2" style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}>
             <TimeColumn />
             {visibleWeekDays.map(({ currentDate }, index) => {

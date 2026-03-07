@@ -102,8 +102,22 @@ export function useGoogleSyncBridge() {
   const pushUpdateToGoogle = useCallback(
     async (event: CalendarEventType): Promise<boolean> => {
       const googleCal = getGoogleCalendar(event.calendarId);
-      if (!googleCal) return false;
-      if (!event.googleEventId) return false;
+      console.log('[GoogleSyncBridge] pushUpdateToGoogle:', {
+        calendarId: event.calendarId,
+        googleEventId: event.googleEventId,
+        foundGoogleCal: !!googleCal,
+        googleCalSource: googleCal?.source,
+        googleCalEmail: googleCal?.accountEmail,
+        sourceCalendarId: googleCal?.sourceCalendarId,
+      });
+      if (!googleCal) {
+        console.warn('[GoogleSyncBridge] No matching Google calendar found for calendarId:', event.calendarId);
+        return false;
+      }
+      if (!event.googleEventId) {
+        console.warn('[GoogleSyncBridge] No googleEventId on event');
+        return false;
+      }
 
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
         const ok = await ensureGoogleToken(googleCal.accountEmail);

@@ -29,7 +29,16 @@ export function generateRecurringInstances(
   let instanceCount = 0;
   const maxInstances = rule.count || 365; // Default to 365 occurrences max
 
-  // Generate instances up to endDate or count limit
+  // Fast-forward: skip past instances before the view window to avoid wasting
+  // the instance budget on dates the caller doesn't care about.
+  while (currentDate < startDate) {
+    currentDate = getNextOccurrence(currentDate, rule);
+    // Safety: stop if we've already gone past the end date or rule end
+    if (currentDate > endDate) break;
+    if (rule.endDate && currentDate > new Date(rule.endDate)) break;
+  }
+
+  // Generate instances within [startDate, endDate]
   while (currentDate <= endDate && instanceCount < maxInstances) {
     // Check if this date should be skipped (in exceptions)
     const dateStr = currentDate.toISOString().split('T')[0];
@@ -47,6 +56,7 @@ export function generateRecurringInstances(
       instances.push({
         ...baseEvent,
         id: `${baseEvent.id}_${dateStr}`,
+        date: dateStr, // Use the instance date, not the original event date
         startsAt: instanceStart.toISOString(),
         endsAt: instanceEnd.toISOString(),
         recurrenceParentId: baseEvent.id,
@@ -137,8 +147,9 @@ function getNextOccurrence(currentDate: Date, rule: RecurrenceRule): Date {
       break;
 
     case 'weekly':
-      // When byDay is set, step 1 day at a time so we can match each day
-      if (rule.byDay && rule.byDay.length > 1) {
+      // When multiple days per week are specified (byDay or daysOfWeek),
+      // step 1 day at a time so we can match each day within the week.
+      if ((rule.byDay && rule.byDay.length > 1) || (rule.daysOfWeek && rule.daysOfWeek.length > 1)) {
         next.setDate(next.getDate() + 1);
       } else {
         next.setDate(next.getDate() + (7 * (rule.interval || 1)));

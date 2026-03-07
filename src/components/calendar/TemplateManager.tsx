@@ -23,14 +23,18 @@ import {
   Calendar,
   X,
   Layers,
+  ChevronRight,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import {
   CalendarTemplate,
+  CalendarGroup,
+  ConnectedCalendar,
 } from '@/types/calendar';
 import * as calendarService from '@/lib/services/calendarService';
 import { useTemplateModeStore } from '@/lib/stores/template-mode-store';
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
 import { springs } from '@/lib/animations';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
@@ -52,15 +56,27 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
   const [loading, setLoading] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // Group selection state for applying templates
+  const [groups, setGroups] = useState<CalendarGroup[]>([]);
+  const [calendars, setCalendars] = useState<ConnectedCalendar[]>([]);
+  const [applyingTemplate, setApplyingTemplate] = useState<CalendarTemplate | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
   const enterTemplateMode = useTemplateModeStore(s => s.enterTemplateMode);
   const { addEvent: persistEvent } = useCalendarEvents();
 
-  // Load templates
+  // Load templates + groups + calendars
   const loadTemplates = useCallback(async () => {
     if (!user?.uid) return;
     setLoading(true);
-    const data = await calendarService.getCalendarTemplates(user.uid);
+    const [data, grps, cals] = await Promise.all([
+      calendarService.getCalendarTemplates(user.uid),
+      calendarService.getCalendarGroups(user.uid),
+      calendarService.getConnectedCalendars(user.uid),
+    ]);
     setTemplates(data);
+    setGroups(grps);
+    setCalendars(cals);
     setLoading(false);
   }, [user?.uid]);
 
@@ -93,6 +109,13 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
       const [sh, sm] = (tmplEvt.startTime || '09:00').split(':').map(Number);
       const [eh, em] = (tmplEvt.endTime || '10:00').split(':').map(Number);
 
+      // Restore recurrence data from the template event
+      const recurrenceRule = tmplEvt.recurrenceRule || {
+        frequency: 'weekly' as const,
+        interval: 1,
+        daysOfWeek: [tmplEvt.dayOfWeek],
+      };
+
       return {
         id: nanoid(),
         title: tmplEvt.title,
@@ -104,6 +127,8 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
         timeStart: tmplEvt.startTime,
         timeEnd: tmplEvt.endTime,
         isAllDay: tmplEvt.isAllDay || false,
+        isRecurring: tmplEvt.isRecurring !== false,
+        recurrenceRule,
       };
     });
 
@@ -117,14 +142,29 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
     toast.info(`Editing template "${template.name}" — modify events, then save`);
   };
 
-  // ─── Apply Template (creates real persisted events for current week) ──
+  // ─── Apply Template — Step 1: Show group picker ──────────────────────
 
-  const handleApply = async (template: CalendarTemplate) => {
+  const handleApplyClick = (template: CalendarTemplate) => {
+    // Pre-select the template's saved group or the first available group
+    const defaultGroupId = template.targetGroupId || groups.find(g => g.name.toLowerCase() === 'personal')?.id || groups[0]?.id || null;
+    setSelectedGroupId(defaultGroupId);
+    setApplyingTemplate(template);
+  };
+
+  // ─── Apply Template — Step 2: Confirm and create events ───────────────
+
+  const handleApplyConfirm = async () => {
+    if (!applyingTemplate || !selectedGroupId || !user?.uid) return;
+
+    // Find a calendar in the selected group to assign events to
+    const calendar = calendars.find(c => c.groupId === selectedGroupId && c.isActive);
+    const calendarId = calendar?.id || undefined;
+
     const today = dayjs();
     const startOfWeek = today.startOf('week');
     let created = 0;
 
-    for (const tmplEvent of template.events) {
+    for (const tmplEvent of applyingTemplate.events) {
       const eventDay = startOfWeek.add(tmplEvent.dayOfWeek, 'day');
       if (eventDay.isBefore(today, 'day')) continue;
 
@@ -134,24 +174,55 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
       const startsAt = eventDay.hour(sh).minute(sm).second(0).toISOString();
       const endsAt = eventDay.hour(eh).minute(em).second(0).toISOString();
 
+      // Use the recurrence rule stored on the template event,
+      // or default to weekly on the event's day
+      const recurrenceRule = tmplEvent.recurrenceRule || {
+        frequency: 'weekly' as const,
+        interval: 1,
+        daysOfWeek: [tmplEvent.dayOfWeek],
+      };
+      const isRecurring = tmplEvent.isRecurring !== false; // default true
+
       const event: CalendarEventType = {
         id: nanoid(),
         title: tmplEvent.title,
-        description: `From template: ${template.name}`,
+        description: tmplEvent.description || `From template: ${applyingTemplate.name}`,
         startsAt,
         endsAt,
         color: tmplEvent.color || '#8B5CF6',
         date: eventDay.format('YYYY-MM-DD'),
         timeStart: tmplEvent.startTime,
         timeEnd: tmplEvent.endTime,
+        calendarId,
+        isRecurring,
+        recurrenceRule,
       };
 
       await persistEvent(event);
       created++;
     }
 
+    // Remember the selected group on the template for next time
+    if (applyingTemplate.targetGroupId !== selectedGroupId) {
+      try {
+        await calendarService.updateCalendarTemplate(user.uid, applyingTemplate.id, {
+          targetGroupId: selectedGroupId,
+        });
+        // Update local state
+        setTemplates(prev => prev.map(t =>
+          t.id === applyingTemplate.id ? { ...t, targetGroupId: selectedGroupId } : t
+        ));
+      } catch {
+        // Non-critical — group preference just won't be saved
+      }
+    }
+
+    setApplyingTemplate(null);
+    setSelectedGroupId(null);
+
     if (created > 0) {
-      toast.success(`Applied ${created} event${created !== 1 ? 's' : ''} from "${template.name}"`);
+      const groupName = groups.find(g => g.id === selectedGroupId)?.name || 'selected group';
+      toast.success(`Applied ${created} event${created !== 1 ? 's' : ''} from "${applyingTemplate.name}" to ${groupName}`);
     } else {
       toast.info('No upcoming events to apply from this template');
     }
@@ -242,7 +313,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-primary/60 hover:text-primary"
-                          onClick={() => handleApply(tmpl)}
+                          onClick={() => handleApplyClick(tmpl)}
                           title="Apply to this week"
                         >
                           <Play size={13} />
@@ -306,6 +377,70 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* ─── Group Selection Dialog (shown when applying a template) ────── */}
+      <Dialog open={!!applyingTemplate} onOpenChange={(v) => { if (!v) { setApplyingTemplate(null); setSelectedGroupId(null); } }}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="text-title3">Apply to Group</DialogTitle>
+            <DialogDescription>
+              Choose which group the events from &ldquo;{applyingTemplate?.name}&rdquo; should be added to.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5 py-2">
+            {groups.map((group) => {
+              const isSelected = selectedGroupId === group.id;
+              const calCount = calendars.filter(c => c.groupId === group.id).length;
+              return (
+                <button
+                  key={group.id}
+                  onClick={() => setSelectedGroupId(group.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all
+                    ${isSelected
+                      ? 'bg-primary/10 border border-primary/30 ring-1 ring-primary/20'
+                      : 'border border-border/50 hover:border-border/80 hover:bg-muted/30'
+                    }`}
+                >
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: group.color + '20' }}
+                  >
+                    <FolderOpen size={14} style={{ color: group.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{group.name}</div>
+                    <div className="text-[10px] text-muted-foreground/60">
+                      {calCount} calendar{calCount !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+            {groups.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No groups found.</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setApplyingTemplate(null); setSelectedGroupId(null); }}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selectedGroupId}
+              onClick={handleApplyConfirm}
+              className="gap-1.5"
+            >
+              <Play size={13} />
+              Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

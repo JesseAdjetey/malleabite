@@ -13,6 +13,7 @@ import { handleIncomingMessage } from './whatsapp/message-handler';
 const whatsappAccessToken = defineSecret('WHATSAPP_ACCESS_TOKEN');
 const whatsappVerifyToken = defineSecret('WHATSAPP_VERIFY_TOKEN');
 const whatsappPhoneNumberId = defineSecret('WHATSAPP_PHONE_NUMBER_ID');
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 /**
  * Main WhatsApp webhook endpoint.
@@ -20,7 +21,7 @@ const whatsappPhoneNumberId = defineSecret('WHATSAPP_PHONE_NUMBER_ID');
  */
 export const whatsappWebhook = onRequest(
   {
-    secrets: [whatsappAccessToken, whatsappVerifyToken, whatsappPhoneNumberId],
+    secrets: [whatsappAccessToken, whatsappVerifyToken, whatsappPhoneNumberId, geminiApiKey],
     cors: false,
     // Allow larger payloads for media messages
     invoker: 'public', // Meta needs to call this without auth
@@ -72,8 +73,9 @@ export const whatsappWebhook = onRequest(
               const from = message.from; // sender's phone number
               const messageId = message.id;
               const isGroup = !!message.group_id || !!value?.group_id;
+              const isForwarded = !!(message.context?.forwarded || message.context?.frequently_forwarded);
 
-              console.log(`📩 Message from ${from}: type=${message.type}`);
+              console.log(`📩 Message from ${from}: type=${message.type}${isForwarded ? ' (forwarded)' : ''}`);
 
               // Process asynchronously — we already sent 200
               await handleIncomingMessage(
@@ -84,9 +86,10 @@ export const whatsappWebhook = onRequest(
                   messageId,
                   isGroup,
                   groupId: message.group_id || value?.group_id,
+                  isForwarded,
                 },
                 message
-              ).catch((err) => {
+              ).catch((err: unknown) => {
                 console.error('Error handling message:', err);
               });
             }

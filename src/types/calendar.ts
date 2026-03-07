@@ -160,6 +160,17 @@ export interface CalendarTemplateEvent {
   color?: string;
   isAllDay?: boolean;
   location?: string;
+  // Recurrence — stored so templates can produce recurring events on apply
+  isRecurring?: boolean;
+  recurrenceRule?: {
+    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval: number;
+    daysOfWeek?: number[];
+    dayOfMonth?: number;
+    monthOfYear?: number;
+    endDate?: string;
+    count?: number;
+  };
 }
 
 export interface CalendarTemplate {

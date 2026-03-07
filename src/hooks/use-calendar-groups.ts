@@ -149,6 +149,14 @@ export function useCalendarGroups(): UseCalendarGroupsReturn {
   useEffect(() => {
     if (user?.uid && groups.length > 0 && !dedupRanRef.current) {
       dedupRanRef.current = true;
+
+      // First adopt orphaned calendars (from prior dedup bugs), then dedup groups
+      calendarService.adoptOrphanedCalendars(user.uid).then((adopted) => {
+        if (adopted > 0) {
+          logger.info('useCalendarGroups', `Adopted ${adopted} orphaned calendar(s)`);
+        }
+      });
+
       calendarService.deduplicateGroups(user.uid).then((removed) => {
         if (removed > 0) {
           logger.info('useCalendarGroups', `Cleaned up ${removed} duplicate groups`);

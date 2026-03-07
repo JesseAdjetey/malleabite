@@ -114,6 +114,7 @@ export function useCalendarEvents() {
         byDay: firebaseEvent.recurrenceRule.byDay,
         byMonth: firebaseEvent.recurrenceRule.byMonth,
         byMonthDay: firebaseEvent.recurrenceRule.byMonthDay,
+        daysOfWeek: firebaseEvent.recurrenceRule.daysOfWeek,
       } : undefined,
       recurrenceParentId: firebaseEvent.recurrenceParentId || undefined,
       recurrenceExceptions: firebaseEvent.recurrenceExceptions || undefined,
@@ -282,6 +283,7 @@ export function useCalendarEvents() {
           byDay: event.recurrenceRule.byDay,
           byMonth: event.recurrenceRule.byMonth,
           byMonthDay: event.recurrenceRule.byMonthDay,
+          daysOfWeek: event.recurrenceRule.daysOfWeek,
         } : undefined,
         recurrenceParentId: event.recurrenceParentId || undefined,
         recurrenceExceptions: event.recurrenceExceptions || undefined,
@@ -408,6 +410,7 @@ export function useCalendarEvents() {
           byDay: updates.recurrenceRule.byDay,
           byMonth: updates.recurrenceRule.byMonth,
           byMonthDay: updates.recurrenceRule.byMonthDay,
+          daysOfWeek: updates.recurrenceRule.daysOfWeek,
         } : undefined;
       }
       if (updates.recurrenceParentId !== undefined) firebaseUpdates.recurrenceParentId = updates.recurrenceParentId;

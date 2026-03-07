@@ -9,7 +9,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, MapPin, Video, Globe, Sun, Repeat } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from '@/lib/utils';
 import { Switch } from "@/components/ui/switch";
-import dayjs from 'dayjs';
+
 import { useConflictDetection } from '@/hooks/use-conflict-detection';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import ConflictWarning from './ConflictWarning';
@@ -29,9 +29,10 @@ import { Shield } from 'lucide-react';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 import { useCalendarGroups } from '@/hooks/use-calendar-groups';
-import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
+import { PERSONAL_CALENDAR_ID, useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { RecurrenceRuleEditor } from './RecurrenceRuleEditor';
-import { FindTimeDialog } from './FindTimeDialog';
+import { useTemplateModeStore } from '@/lib/stores/template-mode-store';
+
 
 interface EnhancedEventFormProps {
   event?: CalendarEventType | null;
@@ -70,28 +71,27 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [showFindTime, setShowFindTime] = useState(false);
+
   const [isLocked, setIsLocked] = useState(false);
   const [isTodo, setIsTodo] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [hasAlarm, setHasAlarm] = useState(false);
   const [hasReminder, setHasReminder] = useState(false);
-  const [participants, setParticipants] = useState('');
+
   const [category, setCategory] = useState<import('@/lib/algorithms/event-classifier').EventCategory | undefined>();
   
-  // NEW: Google Calendar-style fields
-  const [location, setLocation] = useState('');
+  // Calendar-style fields
   const [isAllDay, setIsAllDay] = useState(false);
-  const [meetingUrl, setMeetingUrl] = useState('');
-  const [meetingProvider, setMeetingProvider] = useState<'zoom' | 'google_meet' | 'teams' | 'other' | ''>('');
-  const [selectedCalendarId, setSelectedCalendarId] = useState('');
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | undefined>(undefined);
+
+  const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { events } = useCalendarEvents();
   const { calendars: connectedCalendars } = useCalendarGroups();
+  const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
   const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
   
@@ -193,21 +193,35 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         setSelectedDate(new Date(eventData.startsAt));
       }
       
-      // Handle participants
-      if (eventData.participants && Array.isArray(eventData.participants)) {
-        setParticipants(eventData.participants.join(', '));
-      }
-      
-      // NEW: Load Google Calendar-style fields
-      setLocation(eventData.location || '');
+      // Load calendar-style fields
       setIsAllDay(eventData.isAllDay || false);
-      setMeetingUrl(eventData.meetingUrl || '');
-      setMeetingProvider(eventData.meetingProvider || '');
-      setSelectedCalendarId(eventData.calendarId || '');
-      setVisibility(eventData.visibility === 'private' ? 'private' : 'public');
+      if (eventData.calendarId) {
+        setSelectedCalendarIds([eventData.calendarId]);
+      }
       setRecurrenceRule(eventData.recurrenceRule);
     }
   }, [eventData]);
+
+  // In template mode, auto-default to weekly recurrence when creating a new event
+  useEffect(() => {
+    if (isTemplateMode && !eventData?.recurrenceRule && !recurrenceRule && selectedDate) {
+      setRecurrenceRule({
+        frequency: 'weekly',
+        interval: 1,
+        daysOfWeek: [selectedDate.getDay()],
+      });
+    }
+  }, [isTemplateMode, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select the first active calendar whenever none are selected
+  useEffect(() => {
+    if (connectedCalendars.length > 0 && selectedCalendarIds.length === 0) {
+      const firstActive = connectedCalendars.find(c => c.isActive && c.id);
+      if (firstActive) {
+        setSelectedCalendarIds([firstActive.id]);
+      }
+    }
+  }, [connectedCalendars, selectedCalendarIds.length]);
 
   const handleSubmit = () => {
     if (!title) {
@@ -241,11 +255,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     const endsAtDate = new Date(selectedDate);
     endsAtDate.setHours(endHour, endMinute, 0);
     
-    // Parse participants string to array
-    const participantsArray = participants
-      ? participants.split(',').map(p => p.trim()).filter(Boolean)
-      : undefined;
-    
     const updatedEvent: CalendarEventType = {
       ...(eventData || { id: crypto.randomUUID() }),
       title,
@@ -258,25 +267,30 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       startsAt: startsAtDate.toISOString(),
       endsAt: endsAtDate.toISOString(),
       color: selectedColor,
-      participants: participantsArray,
       timeStart: startTime,
       timeEnd: endTime,
-      // NEW: Google Calendar-style fields
-      location: location || undefined,
       isAllDay,
-      meetingUrl: meetingUrl || undefined,
-      meetingProvider: meetingProvider || undefined,
-      calendarId: selectedCalendarId || undefined,
-      visibility: visibility,
+      calendarId: selectedCalendarIds[0] || undefined,
       // Recurring event fields
       isRecurring: !!recurrenceRule,
       recurrenceRule: recurrenceRule,
     };
 
-    if (onUpdateEvent) {
-      onUpdateEvent(updatedEvent);
-    } else if (onSave) {
-      onSave(updatedEvent);
+    // If multiple calendars selected, save a copy to each
+    const calendarsToSave = selectedCalendarIds.length > 1 ? selectedCalendarIds : [selectedCalendarIds[0] || undefined];
+    
+    for (const calId of calendarsToSave) {
+      const eventForCalendar: CalendarEventType = {
+        ...updatedEvent,
+        id: calId === calendarsToSave[0] ? updatedEvent.id : crypto.randomUUID(),
+        calendarId: calId,
+      };
+
+      if (onUpdateEvent) {
+        onUpdateEvent(eventForCalendar);
+      } else if (onSave) {
+        onSave(eventForCalendar);
+      }
     }
     
     if (onClose) onClose();
@@ -328,12 +342,40 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
   return (
     <div className="p-4 relative overflow-hidden">
+      {/* Template mode indicator */}
+      {isTemplateMode && (
+        <div className="mb-3 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-2 text-xs text-primary font-medium">
+          <Repeat size={13} />
+          Template mode — events will repeat weekly by default
+        </div>
+      )}
       {/* Subtle background animation */}
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-background/5 to-background/20 bg-[size:200%_200%] animate-subtle-gradient opacity-10" />
+      <div className="absolute inset-0 -z-10 pointer-events-none bg-gradient-to-r from-background/5 to-background/20 bg-[size:200%_200%] animate-subtle-gradient opacity-10" />
       
-      <h2 className="text-lg font-semibold mb-4">
-        {eventData ? "Edit Event" : "Add New Event"}
-      </h2>
+      {/* Header with Save button */}
+      <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center gap-2">
+          {(onCancel || onClose) && (
+            <Button 
+              type="button"
+              variant="ghost" 
+              size="sm"
+              onClick={onCancel || onClose}
+              className="hover:bg-secondary/80 transition-colors"
+            >
+              Cancel
+            </Button>
+          )}
+          <Button 
+            type="button"
+            size="sm"
+            onClick={handleSubmit}
+            className="transition-all hover:bg-primary/90"
+          >
+            {onUpdateEvent ? "Update" : "Save"}
+          </Button>
+        </div>
+      </div>
 
       <div className="space-y-4">
         <div className="mb-4">
@@ -440,132 +482,52 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mb-4 w-full"
-          onClick={() => setShowFindTime(true)}
-        >
-          <Clock className="h-4 w-4 mr-1.5" />
-          Find a Time
-        </Button>
-
-        <FindTimeDialog
-          open={showFindTime}
-          onOpenChange={setShowFindTime}
-          onSelectTime={(start, end) => {
-            setStartTime(dayjs(start).format('HH:mm'));
-            setEndTime(dayjs(end).format('HH:mm'));
-            setSelectedDate(new Date(start));
-            setShowFindTime(false);
-          }}
-          initialDuration={
-            startTime && endTime
-              ? dayjs(`2000-01-01 ${endTime}`).diff(dayjs(`2000-01-01 ${startTime}`), 'minute')
-              : 60
-          }
-        />
           </>
         )}
 
-        {/* Location Input */}
-        <div className="mb-4">
-          <Label htmlFor="location" className="mb-1 block">Location</Label>
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              id="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Add location or address"
-              className="pl-9 transition-all duration-200 focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-        </div>
-
-        {/* Video Conferencing */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <Label htmlFor="meetingProvider" className="mb-1 block">Video Call</Label>
-            <Select
-              value={meetingProvider || 'none'}
-              onValueChange={(v) => setMeetingProvider(v === 'none' ? '' : v as any)}
-            >
-              <SelectTrigger className="w-full">
-                <div className="flex items-center">
-                  <Video className="h-4 w-4 mr-2 text-muted-foreground" />
-                  <SelectValue placeholder="Add video conferencing" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="zoom">Zoom</SelectItem>
-                <SelectItem value="google_meet">Google Meet</SelectItem>
-                <SelectItem value="teams">Microsoft Teams</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {meetingProvider && (
-            <div>
-              <Label htmlFor="meetingUrl" className="mb-1 block">Meeting URL</Label>
-              <Input
-                type="url"
-                id="meetingUrl"
-                value={meetingUrl}
-                onChange={(e) => setMeetingUrl(e.target.value)}
-                placeholder="https://..."
-                className="transition-all duration-200"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Calendar Selection */}
-        {connectedCalendars.length > 0 && (
-          <div className="mb-4">
-            <Label htmlFor="calendar" className="mb-1 block">Calendar</Label>
-            <Select
-              value={selectedCalendarId || PERSONAL_CALENDAR_ID}
-              onValueChange={setSelectedCalendarId}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select calendar" />
-              </SelectTrigger>
-              <SelectContent>
-                {connectedCalendars.filter(c => c.isActive && c.id).map((cal) => (
-                  <SelectItem key={cal.id} value={cal.id}>
-                    <div className="flex items-center">
-                      <div 
-                        className="h-3 w-3 rounded-full mr-2" 
+        {/* Calendar Selection — multi-select with auto-visible */}
+        {connectedCalendars.length > 0 && (() => {
+          const activeCalendars = connectedCalendars.filter(c => c.isActive && c.id);
+          if (activeCalendars.length === 0) return null;
+          return (
+            <div className="mb-4">
+              <Label className="mb-1.5 block">Calendars</Label>
+              <div className="flex flex-wrap gap-2">
+                {activeCalendars.map((cal) => {
+                  const isSelected = selectedCalendarIds.includes(cal.id);
+                  return (
+                    <button
+                      key={cal.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCalendarIds(prev =>
+                          prev.includes(cal.id)
+                            ? prev.filter(id => id !== cal.id)
+                            : [...prev, cal.id]
+                        );
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
+                        isSelected
+                          ? "border-primary/50 bg-primary/10 text-foreground"
+                          : "border-border/50 bg-transparent text-muted-foreground hover:border-border"
+                      )}
+                    >
+                      <div
+                        className="h-2 w-2 rounded-full shrink-0"
                         style={{ backgroundColor: cal.color }}
                       />
                       {cal.name}
                       {cal.source === 'google' && (
-                        <span className="ml-1.5 text-[10px] text-muted-foreground">(Google)</span>
+                        <span className="text-[9px] text-muted-foreground">G</span>
                       )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Visibility */}
-        <div className="flex items-center justify-between space-x-2 p-3 rounded-md border mb-4">
-          <div className="flex items-center space-x-2">
-            <Globe className="h-4 w-4 text-muted-foreground" />
-            <Label htmlFor="visibility">Public event</Label>
-          </div>
-          <Switch
-            id="visibility"
-            checked={visibility === 'public'}
-            onCheckedChange={(checked) => setVisibility(checked ? 'public' : 'private')}
-          />
-        </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Recurring Event */}
         <div className="mb-4">
@@ -620,28 +582,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           />
         </div>
 
-        {/* Category Suggestions - Auto-categorization */}
-        <CategorySuggestions
-          title={title}
-          description={description}
-          location={participants}
-          currentCategory={category}
-          onSelectCategory={(selectedCategory) => {
-            setCategory(selectedCategory);
-            const color = getCategoryColor(selectedCategory);
-            setSelectedColor(color);
-            
-            // Learn from user's selection if they manually change it later
-            if (eventData && eventData.color !== color) {
-              eventClassifier.learn(
-                title,
-                selectedCategory,
-                description
-              );
-            }
-          }}
-        />
-        
         {/* Conflict Warning - Show if there are any conflicts */}
         {conflictDetection.hasConflicts && previewEvent && (
           <div className="mb-4">
@@ -676,95 +616,16 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           </div>
         )}
 
-        <div className="mb-4">
-          <Label htmlFor="participants" className="mb-1 block">Participants (comma separated)</Label>
-          <Input
-            type="text"
-            id="participants"
-            value={participants}
-            onChange={(e) => setParticipants(e.target.value)}
-            placeholder="John Doe, Jane Smith"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="flex items-center justify-between space-x-2 p-3 rounded-md border">
-            <div className="flex items-center space-x-2">
-              <AlarmClock className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="hasAlarm">Has Alarm</Label>
-            </div>
-            <Switch
-              id="hasAlarm"
-              checked={hasAlarm}
-              onCheckedChange={setHasAlarm}
-            />
-          </div>
-          <div className="flex items-center justify-between space-x-2 p-3 rounded-md border">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="hasReminder">Reminder</Label>
-            </div>
-            <Switch
-              id="hasReminder"
-              checked={hasReminder}
-              onCheckedChange={setHasReminder}
-            />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="flex items-center justify-between space-x-2 p-3 rounded-md border">
-            <div className="flex items-center space-x-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="isTodo">Todo</Label>
-            </div>
-            <Switch
-              id="isTodo"
-              checked={isTodo}
-              onCheckedChange={setIsTodo}
-            />
-          </div>
-          <div className="flex items-center justify-between space-x-2 p-3 rounded-md border">
-            <div className="flex items-center space-x-2">
-              <Palette className="h-4 w-4 text-muted-foreground" />
-              <Label htmlFor="isLocked">Locked</Label>
-            </div>
-            <Switch
-              id="isLocked"
-              checked={isLocked}
-              onCheckedChange={setIsLocked}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-between pt-4 border-t border-border">
-          {onCancel || onClose ? (
-            <Button 
-              type="button"
-              variant="ghost" 
-              onClick={onCancel || onClose}
-              className="hover:bg-secondary/80 transition-colors"
-            >
-              Cancel
-            </Button>
-          ) : null}
-          <div className="flex space-x-2">
-            <Button
-              type="button"
-              variant="outline" 
-              onClick={handleCreateTodo}
-              className="transition-all hover:bg-secondary/80"
-            >
-              Create Todo
-            </Button>
-            <Button 
-              type="button"
-              onClick={handleSubmit}
-              className="transition-all hover:bg-primary/90"
-            >
-              {onUpdateEvent ? "Update" : "Save"}
-            </Button>
-          </div>
+        <div className="flex justify-end pt-4 border-t border-border">
+          <Button
+            type="button"
+            variant="outline" 
+            size="sm"
+            onClick={handleCreateTodo}
+            className="transition-all hover:bg-secondary/80"
+          >
+            Create Todo
+          </Button>
         </div>
       </div>
     </div>

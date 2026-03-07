@@ -351,5 +351,20 @@ service cloud.firestore {
       allow update: if isOwner(userId);
       allow delete: if false; // Don't allow users to delete customer records
     }
+
+    // WhatsApp link codes — server-managed (Cloud Functions write, no client access)
+    match /whatsapp_link_codes/{code} {
+      allow read, write: if false;
+    }
+
+    // WhatsApp users mapping — server-managed (Cloud Functions write, no client access)
+    match /whatsapp_users/{phone} {
+      allow read, write: if false;
+    }
+
+    // WhatsApp sessions — server-managed (pending actions, undo tracking)
+    match /whatsapp_sessions/{phone} {
+      allow read, write: if false;
+    }
   }
 }

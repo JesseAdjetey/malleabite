@@ -170,9 +170,25 @@ const MonthView = () => {
   };
 
   const handleEventDrop = async (event: CalendarEventType, newDate: string) => {
-    const updatedEvent = {
+    // Update the date and shift startsAt/endsAt to the new date, preserving the time-of-day
+    const newDay = dayjs(newDate);
+    let updatedStartsAt = event.startsAt;
+    let updatedEndsAt = event.endsAt;
+
+    if (event.startsAt) {
+      const oldStart = dayjs(event.startsAt);
+      updatedStartsAt = newDay.hour(oldStart.hour()).minute(oldStart.minute()).second(0).toISOString();
+    }
+    if (event.endsAt) {
+      const oldEnd = dayjs(event.endsAt);
+      updatedEndsAt = newDay.hour(oldEnd.hour()).minute(oldEnd.minute()).second(0).toISOString();
+    }
+
+    const updatedEvent: CalendarEventType = {
       ...event,
       date: newDate,
+      startsAt: updatedStartsAt,
+      endsAt: updatedEndsAt,
     };
 
     await updateEvent(updatedEvent);

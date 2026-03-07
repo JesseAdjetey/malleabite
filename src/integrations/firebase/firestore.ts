@@ -83,6 +83,7 @@ export interface CalendarEvent extends BaseDocument {
     byDay?: string[];
     byMonth?: number[];
     byMonthDay?: number[];
+    daysOfWeek?: number[];
   };
   recurrenceParentId?: string;
   recurrenceExceptions?: string[];

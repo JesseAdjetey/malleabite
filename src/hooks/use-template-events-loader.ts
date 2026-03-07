@@ -52,6 +52,17 @@ function templateToWeekEvents(template: CalendarTemplate): CalendarEventType[] {
       calendarId: calId,
       source: 'malleabite' as const,
       isLocked: true, // Template events are read-only in the calendar
+      // Show recurrence indicator on preview events
+      isRecurring: tmplEvt.isRecurring !== false,
+      // Include recurrenceRule so generateRecurringInstances can expand
+      // these preview events to future/past weeks, not just the current one.
+      recurrenceRule: tmplEvt.isRecurring !== false
+        ? (tmplEvt.recurrenceRule || {
+            frequency: 'weekly' as const,
+            interval: 1,
+            daysOfWeek: [tmplEvt.dayOfWeek],
+          })
+        : undefined,
     };
   });
 }

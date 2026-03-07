@@ -1,117 +1,157 @@
 /**
- * AI Processor — wraps the Gemini AI logic for WhatsApp messages.
- * Reuses the same AI context loading (events, todos, memory) as the main processAIRequest function.
+ * AI Processor for WhatsApp
+ *
+ * Key difference from previous version:
+ *   Actions are PROPOSED, not executed. The message handler stores them
+ *   as pending actions and asks for user confirmation first.
+ *
+ * Handles:
+ *   - Event/todo creation intent → returns proposed action
+ *   - Missing info → asks follow-up question
+ *   - General chat → brief friendly reply + nudge
+ *   - Schedule questions → answers from user data
  */
 import * as admin from 'firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const db = () => admin.firestore();
 
-interface AIResponse {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface AIResponse {
   text?: string;
-  actions?: any[];
+  actions?: ProposedAction[];
   error?: string;
 }
 
-/** Lightweight AI processor for WhatsApp messages */
+export interface ProposedAction {
+  type: 'create_event' | 'create_todo';
+  title?: string;
+  start?: string;
+  end?: string;
+  description?: string;
+  isAllDay?: boolean;
+  text?: string;
+  listName?: string;
+}
+
+// ─── Main Entry ───────────────────────────────────────────────────────────────
+
 export async function processAIRequestInternal(
   userId: string,
   message: string
 ): Promise<AIResponse> {
   try {
-    // Get the Gemini API key from environment / secret
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) {
+      console.error('GEMINI_API_KEY not found in process.env');
       return { error: 'AI is not configured. Please try again later.' };
     }
 
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Load user context from Firestore
-    const [events, todos, memory, userName] = await Promise.all([
+    // Load user context
+    const [events, todos, userName] = await Promise.all([
       loadUpcomingEvents(userId),
       loadTodos(userId),
-      loadUserMemory(userId),
       loadUserName(userId),
     ]);
 
     const now = new Date();
-    const systemPrompt = `You are Mally, an AI calendar and productivity assistant for the Malleabite app, responding via WhatsApp.
-
-Current date & time: ${now.toISOString()}
-User: ${userName || 'User'}
-
-IMPORTANT RULES FOR WHATSAPP:
-- Keep responses concise — WhatsApp messages should be short and scannable
-- Use WhatsApp formatting: *bold*, _italic_, ~strikethrough~, \`code\`
-- Use bullet points (•) for lists
-- Maximum 2-3 paragraphs unless the user asks for detail
-- Be friendly but efficient
-
-USER'S UPCOMING EVENTS:
-${formatEvents(events)}
-
-USER'S TODOS:
-${formatTodos(todos)}
-
-USER'S MEMORY/PREFERENCES:
-${JSON.stringify(memory, null, 2)}
-
-CAPABILITIES — you can help with:
-1. Creating calendar events (respond with JSON action block)
-2. Creating todos (respond with JSON action block)
-3. Viewing schedule information
-4. Answering questions about their calendar/tasks
-5. General productivity advice
-
-When the user wants to CREATE an event or todo, include a JSON action block at the END of your message like:
-\`\`\`action
-{"type": "create_event", "title": "Meeting", "start": "2026-03-07T14:00:00", "end": "2026-03-07T15:00:00"}
-\`\`\`
-or
-\`\`\`action
-{"type": "create_todo", "text": "Buy groceries", "listName": "Shopping"}
-\`\`\`
-
-Always confirm what you're doing in plain text BEFORE the action block.`;
+    const systemPrompt = buildSystemPrompt(now, userName, events, todos);
 
     const result = await model.generateContent({
-      contents: [
-        { role: 'user', parts: [{ text: message }] },
-      ],
+      contents: [{ role: 'user', parts: [{ text: message }] }],
       systemInstruction: { role: 'model', parts: [{ text: systemPrompt }] },
     });
 
     const responseText = result.response.text();
 
-    // Parse action blocks
+    // Parse proposed actions (NOT executed — just returned)
     const actions = parseActions(responseText);
 
-    // Execute actions if present
-    for (const action of actions) {
-      await executeAction(userId, action);
-    }
-
-    // Remove action blocks from the displayed text
-    const cleanText = responseText
-      .replace(/```action\n[\s\S]*?```/g, '')
-      .trim();
+    // Clean response text (remove action blocks)
+    const cleanText = responseText.replace(/```action\n[\s\S]*?```/g, '').trim();
 
     return { text: cleanText, actions };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('AI processing error:', error);
-    return { error: 'Something went wrong with the AI. Try again!' };
+    return { error: 'Something went wrong. Try again!' };
   }
 }
 
-// ─── Parse action blocks from AI response ─────────────────────────────────────
+// ─── System Prompt ────────────────────────────────────────────────────────────
 
-function parseActions(text: string): any[] {
-  const actions: any[] = [];
-  const actionRegex = /```action\n([\s\S]*?)```/g;
+function buildSystemPrompt(
+  now: Date,
+  userName: string | null,
+  events: any[],
+  todos: any[]
+): string {
+  return `You are Mally, an AI assistant for the Malleabite calendar app, responding via WhatsApp.
+
+Current date & time: ${now.toISOString()}
+User: ${userName || 'User'}
+
+YOUR ROLE:
+You help users quickly capture events and todos from WhatsApp. Be friendly but concise.
+
+TONE:
+- Friendly, concise, helpful
+- Use WhatsApp formatting: *bold*, _italic_
+- Keep messages short (1-3 lines for confirmations, brief for chat)
+- Never be overly enthusiastic or use too many emojis
+
+WHEN THE USER WANTS TO CREATE AN EVENT:
+- Extract: title, date, time, duration
+- If date/time is MISSING, ask for it. Don't assume. Say something like "What date and time?"
+- If you have enough info, output the action block below
+- ALWAYS include the action block when you have enough info to create
+
+WHEN THE USER WANTS TO CREATE A TODO:
+- Extract: task text, optional list name
+- Output the action block below
+- Don't ask for a list name unless the user mentions one
+
+WHEN THE USER SENDS GENERAL CHAT (greetings, jokes, questions, random):
+- Respond briefly and naturally
+- End with a gentle nudge like "Need to add anything to your schedule?"
+- Do NOT create action blocks for non-actionable messages
+
+WHEN THE USER ASKS ABOUT THEIR SCHEDULE:
+- Answer from the context below
+- Be specific with dates/times
+
+USER'S UPCOMING EVENTS (next 7 days):
+${formatEvents(events)}
+
+USER'S PENDING TODOS:
+${formatTodos(todos)}
+
+ACTION BLOCKS:
+When you have enough info to create something, include ONE action block at the END of your message:
+
+For events:
+\`\`\`action
+{"type": "create_event", "title": "Meeting with Sarah", "start": "2026-03-08T14:00:00", "end": "2026-03-08T15:00:00"}
+\`\`\`
+
+For todos:
+\`\`\`action
+{"type": "create_todo", "text": "Buy groceries", "listName": "Shopping"}
+\`\`\`
+
+IMPORTANT: The action will NOT be executed immediately — the user will be asked to confirm first. So your text response should NOT say "I've created..." or "Done!". Instead, the text before the action block is informational context only. Keep it very short or empty if the action block says it all.`;
+}
+
+// ─── Parse Action Blocks ──────────────────────────────────────────────────────
+
+function parseActions(text: string): ProposedAction[] {
+  const actions: ProposedAction[] = [];
+  const regex = /```action\n([\s\S]*?)```/g;
   let match;
-  while ((match = actionRegex.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     try {
       actions.push(JSON.parse(match[1].trim()));
     } catch {
@@ -121,114 +161,33 @@ function parseActions(text: string): any[] {
   return actions;
 }
 
-// ─── Execute parsed actions ───────────────────────────────────────────────────
-
-async function executeAction(userId: string, action: any): Promise<void> {
-  try {
-    if (action.type === 'create_event') {
-      await db().collection('calendar_events').add({
-        user_id: userId,
-        title: action.title || 'Untitled Event',
-        start_date: admin.firestore.Timestamp.fromDate(new Date(action.start)),
-        end_date: action.end
-          ? admin.firestore.Timestamp.fromDate(new Date(action.end))
-          : admin.firestore.Timestamp.fromDate(
-              new Date(new Date(action.start).getTime() + 60 * 60 * 1000)
-            ),
-        description: action.description || '',
-        color: action.color || '#6C63FF',
-        source: 'whatsapp',
-        is_all_day: action.isAllDay || false,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    } else if (action.type === 'create_todo') {
-      // Try to find or create the target list
-      let listId: string | null = null;
-      if (action.listName) {
-        const listsSnap = await db()
-          .collection('todo_lists')
-          .where('userId', '==', userId)
-          .where('name', '==', action.listName)
-          .limit(1)
-          .get();
-
-        if (!listsSnap.empty) {
-          listId = listsSnap.docs[0].id;
-        } else {
-          // Create the list
-          const newList = await db().collection('todo_lists').add({
-            userId,
-            name: action.listName,
-            itemCount: 0,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          listId = newList.id;
-        }
-      }
-
-      if (listId) {
-        await db().collection('todo_items').add({
-          userId,
-          listId,
-          text: action.text || 'New task',
-          completed: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        // Increment item count
-        await db()
-          .collection('todo_lists')
-          .doc(listId)
-          .update({
-            itemCount: admin.firestore.FieldValue.increment(1),
-          });
-      } else {
-        // Fallback to top-level todos collection
-        await db().collection('todos').add({
-          user_id: userId,
-          text: action.text || 'New task',
-          completed: false,
-          created_at: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      }
-    }
-  } catch (error) {
-    console.error('Failed to execute action:', action.type, error);
-  }
-}
-
 // ─── Data Loaders ─────────────────────────────────────────────────────────────
 
 async function loadUpcomingEvents(userId: string): Promise<any[]> {
   const now = new Date();
   const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const snapshot = await db()
+  const snap = await db()
     .collection('calendar_events')
-    .where('user_id', '==', userId)
-    .where('start_date', '>=', admin.firestore.Timestamp.fromDate(now))
-    .where('start_date', '<=', admin.firestore.Timestamp.fromDate(weekLater))
-    .orderBy('start_date', 'asc')
+    .where('userId', '==', userId)
+    .where('startAt', '>=', admin.firestore.Timestamp.fromDate(now))
+    .where('startAt', '<=', admin.firestore.Timestamp.fromDate(weekLater))
+    .orderBy('startAt', 'asc')
     .limit(20)
     .get();
 
-  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 async function loadTodos(userId: string): Promise<any[]> {
-  const snapshot = await db()
+  const snap = await db()
     .collection('todos')
-    .where('user_id', '==', userId)
+    .where('userId', '==', userId)
     .where('completed', '==', false)
     .limit(20)
     .get();
 
-  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-}
-
-async function loadUserMemory(userId: string): Promise<any> {
-  const doc = await db().collection('ai_memory').doc(userId).get();
-  return doc.exists ? doc.data() : {};
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 async function loadUserName(userId: string): Promise<string | null> {
@@ -240,10 +199,10 @@ async function loadUserName(userId: string): Promise<string | null> {
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
 function formatEvents(events: any[]): string {
-  if (!events.length) return 'No upcoming events this week.';
+  if (!events.length) return 'No upcoming events.';
   return events
     .map((e) => {
-      const start = e.start_date?.toDate?.();
+      const start = e.startAt?.toDate?.();
       return `- "${e.title}" at ${start?.toLocaleString() || 'unknown time'}`;
     })
     .join('\n');
@@ -251,7 +210,5 @@ function formatEvents(events: any[]): string {
 
 function formatTodos(todos: any[]): string {
   if (!todos.length) return 'No pending todos.';
-  return todos
-    .map((t) => `- ${t.completed ? '[done]' : '[todo]'} "${t.text}"`)
-    .join('\n');
+  return todos.map((t) => `- "${t.text}"`).join('\n');
 }

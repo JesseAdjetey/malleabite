@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor } from 'lucide-react';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '@/hooks/use-subscription';
 import { Crown } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
+import { useThemeStore, type Theme } from '@/lib/stores/theme-store';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -44,6 +45,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const { subscription } = useSubscription();
   const isPro = subscription?.isPro ?? false;
+
+  const { theme, setTheme } = useThemeStore();
+
+  const cycleTheme = () => {
+    haptics.light();
+    const next: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' };
+    setTheme(next[theme]);
+  };
+
+  const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
+  const themeLabel = theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System';
 
   const handleToggleBulkMode = () => {
     if (isBulkMode) {
@@ -133,7 +145,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       </div>
 
       {/* Right Side Container */}
-      <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-3 py-2 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
+      <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
 
         {/* Today Button */}
         <button
@@ -176,7 +188,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         <CalendarDropdown />
 
         {/* Tools & Actions */}
-        <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+          <div className="flex items-center gap-1 ml-0.5 flex-shrink-0">
           <TooltipProvider>
             <BulkModeToggle
               isBulkMode={isBulkMode}
@@ -191,6 +203,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             />
 
             {!isMobile && <UndoRedoToolbar />}
+            {!isMobile && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={cycleTheme}
+                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10"
+                title={`Theme: ${themeLabel}`}
+              >
+                <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+              </Button>
+            )}
             {!isMobile && <SettingsNav />}
           </TooltipProvider>
         </div>

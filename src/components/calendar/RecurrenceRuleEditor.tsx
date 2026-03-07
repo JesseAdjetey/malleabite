@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { RecurrenceRule } from '@/lib/stores/types';
 import { formatRecurrenceRule } from '@/lib/utils/recurring-events';
 import { Calendar, Plus, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface RecurrenceRuleEditorProps {
   value?: RecurrenceRule;
@@ -30,6 +32,29 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
   );
   const [endDate, setEndDate] = useState(value?.endDate || '');
   const [count, setCount] = useState(value?.count || 10);
+
+  // Sync internal state when the parent passes a new value
+  // (e.g. template mode auto-sets weekly recurrence after mount)
+  const prevValueRef = React.useRef(value);
+  React.useEffect(() => {
+    // Only sync if value actually changed from the outside
+    if (value === prevValueRef.current) return;
+    prevValueRef.current = value;
+
+    if (value) {
+      setEnabled(true);
+      setFrequency(value.frequency || 'weekly');
+      setInterval(value.interval || 1);
+      setDaysOfWeek(value.daysOfWeek || []);
+      if (value.dayOfMonth) setDayOfMonth(value.dayOfMonth);
+      if (value.monthOfYear !== undefined) setMonthOfYear(value.monthOfYear);
+      setEndType(value.endDate ? 'date' : value.count ? 'count' : 'never');
+      if (value.endDate) setEndDate(value.endDate);
+      if (value.count) setCount(value.count);
+    } else {
+      setEnabled(false);
+    }
+  }, [value]);
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const monthNames = [
@@ -72,16 +97,6 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
     onChange(rule);
   };
 
-  const toggleEnabled = () => {
-    const newEnabled = !enabled;
-    setEnabled(newEnabled);
-    if (!newEnabled) {
-      onChange(undefined);
-    } else {
-      updateRule();
-    }
-  };
-
   const toggleDayOfWeek = (day: number) => {
     const newDays = daysOfWeek.includes(day)
       ? daysOfWeek.filter(d => d !== day)
@@ -105,23 +120,20 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-purple-400" />
-          <label className="text-sm font-medium text-foreground">
+          <Label htmlFor="recurrence-toggle" className="text-sm font-medium text-foreground cursor-pointer">
             Repeat Event
-          </label>
+          </Label>
         </div>
-        <button
-          type="button"
-          onClick={toggleEnabled}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            enabled ? 'bg-gradient-to-r from-purple-500 to-violet-600' : 'bg-white/10 border border-white/20'
-          }`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-              enabled ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
+        <Switch
+          id="recurrence-toggle"
+          checked={enabled}
+          onCheckedChange={(checked) => {
+            setEnabled(checked);
+            if (!checked) {
+              onChange(undefined);
+            }
+          }}
+        />
       </div>
 
       {enabled && (

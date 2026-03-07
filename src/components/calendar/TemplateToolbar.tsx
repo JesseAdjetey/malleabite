@@ -51,6 +51,26 @@ const TemplateToolbar: React.FC = () => {
       const templateEvents: CalendarTemplateEvent[] = draftEvents.map((evt) => {
         const start = dayjs(evt.startsAt);
         const end = dayjs(evt.endsAt);
+
+        // Default to weekly recurrence on the event's day if no explicit rule
+        const defaultRule = {
+          frequency: 'weekly' as const,
+          interval: 1,
+          daysOfWeek: [start.day()],
+        };
+        const hasRecurrence = evt.isRecurring && evt.recurrenceRule;
+        const recurrenceRule = hasRecurrence
+          ? {
+              frequency: evt.recurrenceRule!.frequency,
+              interval: evt.recurrenceRule!.interval || 1,
+              ...(evt.recurrenceRule!.daysOfWeek ? { daysOfWeek: evt.recurrenceRule!.daysOfWeek } : {}),
+              ...(evt.recurrenceRule!.dayOfMonth ? { dayOfMonth: evt.recurrenceRule!.dayOfMonth } : {}),
+              ...(evt.recurrenceRule!.monthOfYear !== undefined ? { monthOfYear: evt.recurrenceRule!.monthOfYear } : {}),
+              ...(evt.recurrenceRule!.endDate ? { endDate: evt.recurrenceRule!.endDate } : {}),
+              ...(evt.recurrenceRule!.count ? { count: evt.recurrenceRule!.count } : {}),
+            }
+          : defaultRule;
+
         const te: CalendarTemplateEvent = {
           title: evt.title || 'Untitled',
           dayOfWeek: start.day(), // 0 = Sunday
@@ -58,6 +78,8 @@ const TemplateToolbar: React.FC = () => {
           endTime: end.format('HH:mm'),
           color: evt.color || '#8B5CF6',
           isAllDay: evt.isAllDay || false,
+          isRecurring: true, // Templates are always recurring by design
+          recurrenceRule,
         };
         if (evt.description) te.description = evt.description;
         if ((evt as any).location) te.location = (evt as any).location;

@@ -239,15 +239,92 @@ export async function deduplicateGroups(userId: string): Promise<number> {
 
     if (toDelete.length === 0) return 0;
 
+    // Before deleting duplicate groups, reassign their calendars to the
+    // surviving group of the same name so calendars don't become orphaned.
+    const calendars = await getConnectedCalendars(userId);
+    const deleteSet = new Set(toDelete);
     const batch = writeBatch(db);
+
+    for (const cal of calendars) {
+      if (deleteSet.has(cal.groupId)) {
+        // Find the surviving group with the same name
+        const deadGroup = groups.find(g => g.id === cal.groupId);
+        const key = deadGroup?.name.toLowerCase() || '';
+        const survivorId = seen.get(key);
+        if (survivorId && survivorId !== cal.groupId) {
+          batch.update(doc(db, calendarsPath(userId), cal.id), {
+            groupId: survivorId,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
     for (const id of toDelete) {
       batch.delete(doc(db, groupsPath(userId), id));
     }
     await batch.commit();
-    logger.info('CalendarService', `Deduplicated ${toDelete.length} duplicate groups`);
+    logger.info('CalendarService', `Deduplicated ${toDelete.length} duplicate groups (calendars reassigned)`);
     return toDelete.length;
   } catch (error) {
     logger.error('CalendarService', 'Failed to deduplicate groups', { error });
+    return 0;
+  }
+}
+
+/**
+ * Find calendars whose groupId doesn't match any existing group and reassign
+ * them to the best matching group (by name heuristic) or the first group.
+ * Call once on startup to recover from prior orphaning bugs.
+ */
+export async function adoptOrphanedCalendars(userId: string): Promise<number> {
+  try {
+    const groups = await getCalendarGroups(userId);
+    if (groups.length === 0) return 0;
+
+    const calendars = await getConnectedCalendars(userId);
+    const groupIds = new Set(groups.map(g => g.id));
+    const orphaned = calendars.filter(c => !groupIds.has(c.groupId));
+
+    if (orphaned.length === 0) return 0;
+
+    // Build a lookup: lowercase group name → group id
+    const nameToGroup = new Map<string, string>();
+    for (const g of groups) {
+      nameToGroup.set(g.name.toLowerCase(), g.id);
+    }
+
+    const batch = writeBatch(db);
+    for (const cal of orphaned) {
+      // Try to match by calendar name (e.g. "Personal" calendar → "Personal" group)
+      let targetGroupId = nameToGroup.get(cal.name.toLowerCase());
+
+      // Fallback: try to match by source type (google → "Work", personal → "Personal")
+      if (!targetGroupId) {
+        if (cal.id === 'personal' || cal.sourceCalendarId === 'personal') {
+          targetGroupId = nameToGroup.get('personal');
+        } else if (cal.source === 'google') {
+          targetGroupId = nameToGroup.get('work');
+        }
+      }
+
+      // Final fallback: first group
+      if (!targetGroupId) {
+        targetGroupId = groups[0].id;
+      }
+
+      batch.update(doc(db, calendarsPath(userId), cal.id), {
+        groupId: targetGroupId,
+        updatedAt: new Date().toISOString(),
+      });
+      logger.info('CalendarService', `Adopted orphaned calendar "${cal.name}" → group ${targetGroupId}`);
+    }
+
+    await batch.commit();
+    logger.info('CalendarService', `Adopted ${orphaned.length} orphaned calendar(s)`);
+    return orphaned.length;
+  } catch (error) {
+    logger.error('CalendarService', 'Failed to adopt orphaned calendars', { error });
     return 0;
   }
 }

@@ -1,17 +1,46 @@
 
-import React, { useRef, useCallback, useState, useEffect } from "react";
-import { getWeekDays, isCurrentDay } from "@/lib/getTime";
+import React, { useRef, useCallback, useState } from "react";
+import { getWeekDays } from "@/lib/getTime";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { useViewStore } from "@/lib/store";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+
+/* ─── Grip-dot handle sub-component ──────────────────────────────── */
+const DragHandle: React.FC<{
+  side: "left" | "right";
+  active: boolean;
+  onPointerDown: (e: React.PointerEvent) => void;
+  onDoubleClick: () => void;
+}> = ({ side, active, onPointerDown, onDoubleClick }) => (
+  <div
+    className={cn(
+      "absolute top-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center",
+      "w-[14px] h-9 rounded-full cursor-col-resize",
+      "bg-purple-400/90 dark:bg-purple-400/70",
+      "hover:bg-purple-500 dark:hover:bg-purple-300/90 hover:scale-[1.15]",
+      "shadow-md hover:shadow-lg transition-all duration-150",
+      active && "bg-purple-600 dark:bg-purple-300 scale-[1.15] shadow-lg",
+      side === "left" ? "-left-[7px]" : "-right-[7px]"
+    )}
+    onPointerDown={onPointerDown}
+    onDoubleClick={onDoubleClick}
+    title={`Drag to adjust ${side === "left" ? "start" : "end"} · Double-click to reset`}
+  >
+    {/* Three grip dots */}
+    <div className="w-[3px] h-[3px] rounded-full bg-white/90 mb-[2px]" />
+    <div className="w-[3px] h-[3px] rounded-full bg-white/90 mb-[2px]" />
+    <div className="w-[3px] h-[3px] rounded-full bg-white/90" />
+  </div>
+);
 
 interface WeekHeaderProps {
   userSelectedDate: dayjs.Dayjs;
@@ -19,14 +48,15 @@ interface WeekHeaderProps {
 
 const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
   const { selectedView, setView } = useViewStore();
-  const { rangeStart, rangeEnd, setRangeStart, setRangeEnd, resetRange } =
+  const { rangeStart, rangeEnd, setRangeStart, setRangeEnd, setRange, resetRange } =
     useWeekRangeStore();
+  const isMobile = useIsMobile();
 
   const allWeekDays = getWeekDays(userSelectedDate);
-  const visibleDays = allWeekDays.slice(rangeStart, rangeEnd + 1);
   const dayCount = rangeEnd - rangeStart + 1;
 
-  // Refs for drag hit-testing
+  // Refs for measuring day cell positions
+  const dayCellRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<"left" | "right" | null>(null);
 
@@ -42,23 +72,22 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
     setView(view);
   };
 
-  // ── Drag logic ─────────────────────────────────────────────────
-  // During drag we calculate which day index (0–6) the pointer is over
-  // by dividing the header into 7 equal zones (even hidden days).
-
+  // ── Desktop drag logic ──────────────────────────────────────────
   const getDayIndexFromPointer = useCallback(
     (clientX: number): number => {
-      const header = headerRef.current;
-      if (!header) return 0;
-      const rect = header.getBoundingClientRect();
-      // 64px (w-16) is the left label cell
-      const gridLeft = rect.left + 64;
-      const gridWidth = rect.width - 64;
-      const relX = clientX - gridLeft;
-      const frac = relX / gridWidth;
-      // Map to 0–6 across the full 7-day space
-      const idx = Math.round(frac * 6);
-      return Math.max(0, Math.min(6, idx));
+      let closestIdx = 0;
+      let closestDist = Infinity;
+      dayCellRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const center = rect.left + rect.width / 2;
+        const dist = Math.abs(clientX - center);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIdx = i;
+        }
+      });
+      return closestIdx;
     },
     []
   );
@@ -66,6 +95,7 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
   const handlePointerDown = useCallback(
     (side: "left" | "right") => (e: React.PointerEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       setDragging(side);
     },
@@ -89,20 +119,131 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
     setDragging(null);
   }, []);
 
-  // Dynamic grid columns: auto (label) + N × 1fr
-  const gridCols = `auto repeat(${dayCount}, 1fr)`;
+  // ── Mobile: shift range by 1 day ─────────────────────────────
+  const shiftLeft = () => {
+    if (rangeStart > 0) {
+      setRange(rangeStart - 1, rangeEnd - 1);
+    }
+  };
+  const shiftRight = () => {
+    if (rangeEnd < 6) {
+      setRange(rangeStart + 1, rangeEnd + 1);
+    }
+  };
+
+  // ── Mobile 3-day view ──────────────────────────────────────────
+  if (isMobile) {
+    const mobileDays = allWeekDays.slice(rangeStart, rangeEnd + 1);
+    return (
+      <div className="flex items-center px-2 py-1.5 border-b border-purple-200 dark:border-white/10 bg-transparent">
+        {/* View selector */}
+        <div className="flex-shrink-0 mr-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/40 dark:bg-white/10 hover:bg-white/60 dark:hover:bg-white/20 transition-colors text-xs font-medium text-purple-900 dark:text-foreground outline-none border border-purple-200 dark:border-white/10 backdrop-blur-md">
+              {rangeLabel}
+              <ChevronDown size={12} className="text-purple-700 dark:text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[120px] rounded-xl">
+              {["Day", "Week", "Month"].map((viewStr) => (
+                <DropdownMenuItem
+                  key={viewStr}
+                  onClick={() => {
+                    if (viewStr === "Week") resetRange();
+                    handleViewChange(viewStr);
+                  }}
+                  className={`rounded-lg cursor-pointer ${
+                    selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
+                  }`}
+                >
+                  {viewStr}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Left arrow */}
+        <button
+          onClick={shiftLeft}
+          disabled={rangeStart === 0}
+          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
+        >
+          <ChevronLeft size={16} className="text-purple-600 dark:text-purple-300" />
+        </button>
+
+        {/* Visible day cells */}
+        <div className="flex-1 flex justify-around">
+          {mobileDays.map(({ currentDate, today }, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "h-7 w-7 rounded-full flex items-center justify-center font-semibold text-base",
+                  today ? "bg-primary text-white" : "text-purple-900/80 dark:text-muted-foreground"
+                )}
+              >
+                {currentDate.format("DD")}
+              </div>
+              <div
+                className={cn(
+                  "text-[9px]",
+                  today ? "text-primary font-medium" : "text-purple-900/60 dark:text-muted-foreground"
+                )}
+              >
+                {currentDate.format("ddd")}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Right arrow */}
+        <button
+          onClick={shiftRight}
+          disabled={rangeEnd === 6}
+          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
+        >
+          <ChevronRight size={16} className="text-purple-600 dark:text-purple-300" />
+        </button>
+      </div>
+    );
+  }
+
+  // ── Desktop: full 7-day header with ribbon ──────────────────────
 
   return (
     <div
       ref={headerRef}
-      className="relative place-items-center px-4 py-1.5 border-b border-purple-200 dark:border-white/10 bg-transparent select-none"
-      style={{ display: "grid", gridTemplateColumns: gridCols }}
+      className="relative px-4 py-1.5 border-b border-purple-200 dark:border-white/10 bg-transparent select-none"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto repeat(7, 1fr)",
+        gridTemplateRows: "1fr",
+        placeItems: "center",
+      }}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      {/* View selector cell */}
-      <div className="w-16 flex justify-center">
+      {/* ── Smooth ribbon overlay ─────────────────────────────────
+           A single continuous band behind the in-range day cells.
+           Uses CSS Grid column placement so it stretches seamlessly. */}
+      <div
+        className="rounded-xl bg-purple-100/50 dark:bg-white/[0.07] transition-all duration-200 pointer-events-none"
+        style={{
+          gridColumn: `${rangeStart + 2} / ${rangeEnd + 3}`,
+          gridRow: 1,
+          alignSelf: "stretch",
+          justifySelf: "stretch",
+          marginLeft: 20,
+          marginRight: 20,
+          zIndex: 0,
+        }}
+      />
+
+      {/* View selector cell — col 1 */}
+      <div
+        className="w-16 flex justify-center"
+        style={{ gridColumn: 1, gridRow: 1, zIndex: 2 }}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/40 dark:bg-white/10 hover:bg-white/60 dark:hover:bg-white/20 transition-colors text-xs font-medium text-purple-900 dark:text-foreground outline-none border border-purple-200 dark:border-white/10 backdrop-blur-md">
             {rangeLabel}
@@ -113,15 +254,11 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
               <DropdownMenuItem
                 key={viewStr}
                 onClick={() => {
-                  if (viewStr === "Week") {
-                    resetRange();
-                  }
+                  if (viewStr === "Week") resetRange();
                   handleViewChange(viewStr);
                 }}
                 className={`rounded-lg cursor-pointer ${
-                  selectedView === viewStr
-                    ? "bg-accent text-accent-foreground"
-                    : ""
+                  selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
                 }`}
               >
                 {viewStr}
@@ -131,61 +268,69 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
         </DropdownMenu>
       </div>
 
-      {/* Left drag handle */}
-      <div
-        className={cn(
-          "absolute top-0 bottom-0 z-20 flex items-center cursor-col-resize",
-          "hover:bg-purple-200/30 dark:hover:bg-white/10 transition-colors rounded-l-md",
-          dragging === "left" && "bg-purple-300/40 dark:bg-white/20"
-        )}
-        style={{ left: "64px", width: "14px" }}
-        onPointerDown={handlePointerDown("left")}
-        onDoubleClick={resetRange}
-        title="Drag to adjust start day • Double-click to reset"
-      >
-        <GripVertical size={12} className="text-purple-400 dark:text-purple-300 mx-auto" />
-      </div>
+      {/* All 7 day cells — always rendered, explicitly placed */}
+      {allWeekDays.map(({ currentDate, today }, index) => {
+        const inRange = index >= rangeStart && index <= rangeEnd;
+        const isRangeStart = index === rangeStart;
+        const isRangeEnd = index === rangeEnd;
 
-      {/* Day cells — only the visible range */}
-      {visibleDays.map(({ currentDate, today }, index) => (
-        <div key={index} className="flex flex-col items-center transition-all duration-200">
+        return (
           <div
+            key={index}
+            ref={(el) => { dayCellRefs.current[index] = el; }}
             className={cn(
-              "h-8 w-8 rounded-full flex items-center justify-center font-semibold text-lg md:text-xl",
-              today
-                ? "bg-primary text-white"
-                : "text-purple-900/80 dark:text-muted-foreground"
+              "relative flex flex-col items-center py-1 px-2 transition-all duration-200",
+              !inRange && "opacity-35"
             )}
+            style={{ gridColumn: index + 2, gridRow: 1, zIndex: 1 }}
           >
-            {currentDate.format("DD")}
-          </div>
-          <div
-            className={cn(
-              "text-[10px] md:text-xs",
-              today
-                ? "text-primary font-medium"
-                : "text-purple-900/60 dark:text-muted-foreground"
+            {/* Left drag handle */}
+            {isRangeStart && (
+              <DragHandle
+                side="left"
+                active={dragging === "left"}
+                onPointerDown={handlePointerDown("left")}
+                onDoubleClick={resetRange}
+              />
             )}
-          >
-            {currentDate.format("ddd")}
-          </div>
-        </div>
-      ))}
 
-      {/* Right drag handle */}
-      <div
-        className={cn(
-          "absolute top-0 bottom-0 right-0 z-20 flex items-center cursor-col-resize",
-          "hover:bg-purple-200/30 dark:hover:bg-white/10 transition-colors rounded-r-md",
-          dragging === "right" && "bg-purple-300/40 dark:bg-white/20"
-        )}
-        style={{ width: "14px" }}
-        onPointerDown={handlePointerDown("right")}
-        onDoubleClick={resetRange}
-        title="Drag to adjust end day • Double-click to reset"
-      >
-        <GripVertical size={12} className="text-purple-400 dark:text-purple-300 mx-auto" />
-      </div>
+            <div
+              className={cn(
+                "h-8 w-8 rounded-full flex items-center justify-center font-semibold text-lg md:text-xl transition-all",
+                today
+                  ? "bg-primary text-white"
+                  : inRange
+                    ? "text-purple-900/80 dark:text-muted-foreground"
+                    : "text-purple-900/40 dark:text-muted-foreground/40"
+              )}
+            >
+              {currentDate.format("DD")}
+            </div>
+            <div
+              className={cn(
+                "text-[10px] md:text-xs transition-all",
+                today
+                  ? "text-primary font-medium"
+                  : inRange
+                    ? "text-purple-900/60 dark:text-muted-foreground"
+                    : "text-purple-900/30 dark:text-muted-foreground/30"
+              )}
+            >
+              {currentDate.format("ddd")}
+            </div>
+
+            {/* Right drag handle */}
+            {isRangeEnd && (
+              <DragHandle
+                side="right"
+                active={dragging === "right"}
+                onPointerDown={handlePointerDown("right")}
+                onDoubleClick={resetRange}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

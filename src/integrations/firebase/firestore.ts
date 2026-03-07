@@ -39,7 +39,8 @@ export const COLLECTIONS = {
   INVITES: 'invites',
   AI_SUGGESTIONS: 'ai_suggestions',
   POMODORO_SESSIONS: 'pomodoro_sessions',
-  MODULE_INSTANCES: 'module_instances'
+  MODULE_INSTANCES: 'module_instances',
+  ENTITY_LINKS: 'entity_links',
 } as const;
 
 // Base interfaces for Firestore documents

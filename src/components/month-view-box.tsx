@@ -94,9 +94,14 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   const isFirstDayOfMonth = day.date() === 1;
   const isToday = day.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
   
+  // Separate all-day and timed events, all-day shown first
+  const allDayEvents = events.filter(e => e.isAllDay);
+  const timedEvents = events.filter(e => !e.isAllDay);
+  const sortedEvents = [...allDayEvents, ...timedEvents];
+
   // Show max 3 events on month view
-  const visibleEvents = events.slice(0, 3);
-  const hasMoreEvents = events.length > 3;
+  const visibleEvents = sortedEvents.slice(0, 3);
+  const hasMoreEvents = sortedEvents.length > 3;
   
   // Handle dropping an event onto this day
   const handleDrop = (e: React.DragEvent) => {
@@ -228,7 +233,10 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         {visibleEvents.map(event => (
           <div 
             key={event.id} 
-            className="gradient-border calendar-event-wrapper rounded-sm overflow-hidden" 
+            className={cn(
+              "gradient-border calendar-event-wrapper overflow-hidden",
+              event.isAllDay ? "rounded-[3px]" : "rounded-sm"
+            )}
             onClick={(e) => {
               e.stopPropagation();
               if (!isBulkMode) {
@@ -244,6 +252,21 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
                 onToggleSelection={onToggleSelection}
                 compact={true}
               />
+            ) : event.isAllDay ? (
+              /* All-day events render as a full-width colored bar */
+              <div
+                className={cn(
+                  "w-full px-1.5 py-[2px] text-[10px] md:text-[11px] font-medium text-white truncate",
+                  event.color || "bg-primary/80"
+                )}
+                style={
+                  (event.color?.startsWith('#') || event.color?.startsWith('rgb'))
+                    ? { backgroundColor: event.color }
+                    : undefined
+                }
+              >
+                {event.title}
+              </div>
             ) : (
               <CalendarEvent
                 event={event}
@@ -261,7 +284,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         
         {hasMoreEvents && (
           <div className="text-[10px] md:text-xs text-center bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded py-0.5 px-1 touch-manipulation">
-            +{events.length - 3} more
+            +{sortedEvents.length - 3} more
           </div>
         )}
       </div>

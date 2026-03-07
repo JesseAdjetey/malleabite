@@ -3,20 +3,35 @@ import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import { formatMinutesAsTime, getTimeInMinutes } from "@/components/calendar/event-utils/touch-handlers";
 import { nanoid } from "@/lib/utils";
+import type { CreateEntityLinkInput, EntityType } from "@/lib/entity-links/types";
 
 export interface TodoDragData {
   id: string;
   text: string;
-  source: string;
+  source: string; // 'todo-module' | 'eisenhower' | 'alarm' | 'reminder'
   completed?: boolean;
+  /** Which Firestore collection this item lives in ('todos' | 'todo_items') */
+  collectionName?: 'todos' | 'todo_items';
+}
+
+/** Drag data for any linkable entity — superset of TodoDragData */
+export interface EntityDragData {
+  id: string;
+  text: string;
+  source: string;
+  entityType: EntityType; // 'todo' | 'event' | 'alarm' | 'reminder' | 'eisenhower'
+  completed?: boolean;
+  time?: string; // For alarms/reminders: the time value
 }
 
 export interface DragHandlerOptions {
   updateEventFn: (event: CalendarEventType) => Promise<any>;
   addEventFn: (event: CalendarEventType) => Promise<any>;
-  linkTodoToEventFn: (todoId: string, eventId: string) => Promise<any>;
+  linkTodoToEventFn: (todoId: string, eventId: string, collectionName?: string) => Promise<any>;
   deleteTodoFn?: (todoId: string) => Promise<any>;
   onShowTodoCalendarDialog: (todoData: TodoDragData, date: Date, startTime: string) => void;
+  /** New: entity link function from useEntityLinks */
+  createEntityLinkFn?: (input: CreateEntityLinkInput) => Promise<string | null>;
 }
 
 export const handleDragOver = (e: React.DragEvent) => {
@@ -53,37 +68,30 @@ export const createCalendarEventFromTodo = async (
     let startDateTime = day.hour(startHour).minute(startMinute).second(0);
     let endDateTime = day.hour(endHour).minute(startMinute).second(0);
 
-    // Validate if the time is in the past
+    // Soft warning for past dates — still allow the event creation
     const now = dayjs();
     if (startDateTime.isBefore(now)) {
       const isToday = startDateTime.isSame(now, 'day');
 
       if (isToday) {
-        // If trying to schedule for today but in the past, suggest current time or next hour
+        // If scheduling for earlier today, nudge to next available slot
         const currentHour = now.hour();
         const currentMinute = now.minute();
         const nextSlot = currentMinute < 30 ? 30 : 0;
         const nextHour = currentMinute < 30 ? currentHour : currentHour + 1;
 
-        // Round up to next 30-minute slot
         const suggestedStart = now.minute(nextSlot).hour(nextHour).second(0);
         const suggestedEnd = suggestedStart.add(1, 'hour');
 
-        toast.error(`Cannot schedule in the past!`, {
-          description: `The time ${startTime} has already passed today. Scheduling for ${suggestedStart.format('h:mm A')} instead.`,
-          duration: 5000,
+        toast.info(`Time adjusted`, {
+          description: `${startTime} already passed — scheduled for ${suggestedStart.format('h:mm A')} instead.`,
+          duration: 4000,
         });
 
         startDateTime = suggestedStart;
         endDateTime = suggestedEnd;
-      } else {
-        // If trying to schedule for a past date
-        toast.error(`Cannot schedule in the past!`, {
-          description: `${day.format('MMM D, YYYY')} has already passed. Please drag to a future date.`,
-          duration: 5000,
-        });
-        return null;
       }
+      // Past dates are allowed — no block, just proceed
     }
 
     // Update eventDate and times to match the validated startDateTime
@@ -110,13 +118,34 @@ export const createCalendarEventFromTodo = async (
     const response = await options.addEventFn(newEvent);
 
     if (response.success) {
+      // FIX: addEvent returns { data: { id } }, not { data: [{ id }] }
+      const newEventId = response.data?.id ?? response.data?.[0]?.id;
+
       // Link todo to the new event if we're keeping both
-      if (keepTodo && response.data?.[0]?.id) {
-        await options.linkTodoToEventFn(todoData.id, response.data[0].id);
+      if (keepTodo && newEventId) {
+        // Legacy FK link (backward compat)
+        await options.linkTodoToEventFn(todoData.id, newEventId, todoData.collectionName);
+
+        // Unified entity link (new system)
+        if (options.createEntityLinkFn) {
+          const sourceEntityType: EntityType =
+            todoData.source === 'eisenhower' ? 'eisenhower' : 'todo';
+          await options.createEntityLinkFn({
+            sourceType: sourceEntityType,
+            sourceId: todoData.id,
+            sourceTitle: todoData.text,
+            targetType: 'event',
+            targetId: newEventId,
+            targetTitle: todoData.text,
+            relation: 'mirror',
+            metadata: { createdVia: 'drag-and-drop' },
+          });
+        }
+
         toast.success(`"${todoData.text}" added to calendar`, {
           description: `${startDateTime.format('MMM D, YYYY')} at ${startDateTime.format('h:mm A')}`
         });
-        return response.data[0].id;
+        return newEventId;
       }
       // If not keeping the todo, delete it
       else if (!keepTodo && options.deleteTodoFn) {
@@ -124,13 +153,13 @@ export const createCalendarEventFromTodo = async (
         toast.success(`"${todoData.text}" moved to calendar`, {
           description: `${startDateTime.format('MMM D, YYYY')} at ${startDateTime.format('h:mm A')}`
         });
-        return response.data?.[0]?.id || null;
+        return newEventId || null;
       }
 
       toast.success(`Event added to calendar at ${startTime}`);
-      return response.data?.[0]?.id || null;
+      return newEventId || null;
     } else {
-      toast.error(`Failed to add: ${response.message || 'Unknown error'}`);
+      toast.error(`Failed to add: ${response.diagnosticMessage || 'Unknown error'}`);
       return null;
     }
   } catch (error) {
@@ -144,7 +173,8 @@ export const createCalendarEventFromTodo = async (
 export const createTodoFromCalendarEvent = async (
   event: CalendarEventType,
   linkTodoToEventFn: (todoId: string, eventId: string) => Promise<any>,
-  addTodoFn: (title: string) => Promise<any>
+  addTodoFn: (title: string) => Promise<any>,
+  createEntityLinkFn?: (input: CreateEntityLinkInput) => Promise<string | null>
 ): Promise<string | null> => {
   try {
     if (!event.title || !event.id) {
@@ -156,8 +186,22 @@ export const createTodoFromCalendarEvent = async (
     const response = await addTodoFn(event.title);
 
     if (response.success && response.todoId) {
-      // Link the new todo to the event
+      // Legacy FK link
       await linkTodoToEventFn(response.todoId, event.id);
+
+      // Unified entity link
+      if (createEntityLinkFn) {
+        await createEntityLinkFn({
+          sourceType: 'event',
+          sourceId: event.id,
+          sourceTitle: event.title,
+          targetType: 'todo',
+          targetId: response.todoId,
+          targetTitle: event.title,
+          relation: 'mirror',
+          metadata: { createdVia: 'context-menu' },
+        });
+      }
 
       toast.success(`"${event.title}" added to todo list`);
       return response.todoId;

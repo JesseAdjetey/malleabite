@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -49,6 +49,10 @@ Object.defineProperty(exports, "synthesizeSpeech", { enumerable: true, get: func
 // Export scheduling streaming handler
 var scheduling_1 = require("./scheduling");
 Object.defineProperty(exports, "processSchedulingStream", { enumerable: true, get: function () { return scheduling_1.processSchedulingStream; } });
+// Export WhatsApp Bot handlers
+var whatsapp_webhook_1 = require("./whatsapp-webhook");
+Object.defineProperty(exports, "whatsappWebhook", { enumerable: true, get: function () { return whatsapp_webhook_1.whatsappWebhook; } });
+Object.defineProperty(exports, "generateWhatsAppLinkCode", { enumerable: true, get: function () { return whatsapp_webhook_1.generateWhatsAppLinkCode; } });
 // Initialize Firebase Admin
 admin.initializeApp();
 // Define the Gemini API key secret

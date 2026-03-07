@@ -231,33 +231,69 @@ export function useTodos(options: UseTodosOptions = {}) {
   };
 
   // Link todo to calendar event
-  const linkTodoToEvent = async (todoId: string, eventId: string) => {
+  // Supports both 'todos' and 'todo_items' collections (polymorphic lists)
+  const linkTodoToEvent = async (todoId: string, eventId: string, collectionHint?: string) => {
     if (!user?.uid) return { success: false, message: 'User not authenticated' };
 
-    try {
-      await updateDoc(doc(db, 'todos', todoId), {
-        event_id: eventId
-      });
-      return { success: true, message: 'Todo linked to event' };
-    } catch (error) {
-      console.error('Error linking todo to event:', error);
-      return { success: false, message: 'Failed to link todo to event' };
+    // Determine which collection(s) to try
+    const collectionsToTry = collectionHint
+      ? [collectionHint]
+      : ['todos', 'todo_items']; // try both if no hint
+
+    for (const colName of collectionsToTry) {
+      try {
+        console.log(`%c[linkTodoToEvent] Trying ${colName}/${todoId} → event ${eventId}`, 'color: orange; font-weight: bold');
+        const { getDoc: getDocFn } = await import('firebase/firestore');
+        const todoRef = doc(db, colName, todoId);
+        const snap = await getDocFn(todoRef);
+
+        if (!snap.exists()) {
+          console.log(`[linkTodoToEvent] Doc not found in ${colName}, trying next...`);
+          continue; // try next collection
+        }
+
+        // Use eventId/event_id depending on collection schema
+        const updateData = colName === 'todo_items'
+          ? { eventId, isCalendarEvent: true }
+          : { event_id: eventId, isCalendarEvent: true };
+
+        await updateDoc(todoRef, updateData);
+        console.log(`%c[linkTodoToEvent] SUCCESS (${colName})`, 'color: green; font-weight: bold');
+        return { success: true, message: 'Todo linked to event' };
+      } catch (error: any) {
+        console.warn(`[linkTodoToEvent] Failed on ${colName}:`, error?.code, error?.message);
+        if (error?.code === 'permission-denied') {
+          return { success: true, message: 'Event created (linking skipped due to permissions)' };
+        }
+        // Continue to next collection
+      }
     }
+
+    console.warn('[linkTodoToEvent] Document not found in any collection — skipping link');
+    return { success: true, message: 'Event created (todo link skipped — doc not found)' };
   };
 
-  // Unlink todo from calendar event
+  // Unlink todo from calendar event (supports both collections)
   const unlinkTodoFromEvent = async (todoId: string) => {
     if (!user?.uid) return { success: false, message: 'User not authenticated' };
 
-    try {
-      await updateDoc(doc(db, 'todos', todoId), {
-        event_id: null
-      });
-      return { success: true, message: 'Todo unlinked from event' };
-    } catch (error) {
-      console.error('Error unlinking todo from event:', error);
-      return { success: false, message: 'Failed to unlink todo from event' };
+    for (const colName of ['todos', 'todo_items']) {
+      try {
+        const { getDoc: getDocFn } = await import('firebase/firestore');
+        const todoRef = doc(db, colName, todoId);
+        const snap = await getDocFn(todoRef);
+        if (!snap.exists()) continue;
+
+        const clearData = colName === 'todo_items'
+          ? { eventId: null, isCalendarEvent: false }
+          : { event_id: null, isCalendarEvent: false };
+        await updateDoc(todoRef, clearData);
+        return { success: true, message: 'Todo unlinked from event' };
+      } catch (error) {
+        console.warn(`[unlinkTodoFromEvent] Failed on ${colName}:`, error);
+      }
     }
+    return { success: false, message: 'Failed to unlink todo from event' };
   };
 
   return {
@@ -269,6 +305,7 @@ export function useTodos(options: UseTodosOptions = {}) {
     toggleTodo,
     deleteTodo,
     updateTodoText,
+    updateTodoTitle: updateTodoText, // Alias for backward compat
     linkTodoToEvent,
     unlinkTodoFromEvent,
     refetchTodos

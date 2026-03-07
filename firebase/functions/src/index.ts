@@ -16,6 +16,9 @@ export { synthesizeSpeech } from './tts';
 // Export scheduling streaming handler
 export { processSchedulingStream } from './scheduling';
 
+// Export WhatsApp Bot handlers
+export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 

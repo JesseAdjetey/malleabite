@@ -30,6 +30,8 @@ import { EditScope } from "@/hooks/use-recurring-events";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
+import { WeekAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
+import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -71,6 +73,9 @@ const WeekView = () => {
 
   // Undo/redo functionality - keyboard shortcuts are handled automatically
   const { trackCreateEvent, trackDeleteEvent, trackUpdateEvent, trackBulkDeleteEvents } = useUndoRedo();
+
+  // Week range ribbon
+  const { rangeStart, rangeEnd } = useWeekRangeStore();
 
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
@@ -197,8 +202,10 @@ const WeekView = () => {
     }
   }, [pendingTimeSelection]);
 
-  // Get week days for the current view
+  // Get week days for the current view — full week for event expansion, ranged for display
   const weekDays = getWeekDays(userSelectedDate);
+  const visibleWeekDays = weekDays.slice(rangeStart, rangeEnd + 1);
+  const visibleDayCount = rangeEnd - rangeStart + 1;
 
   // Expand recurring events into instances for the current week view
   const expandedEvents = useMemo(() => {
@@ -240,9 +247,15 @@ const WeekView = () => {
     return [...expandedEvents, ...tagged];
   }, [expandedEvents, isTemplateMode, draftEvents]);
 
+  // Split display events into all-day and timed events
+  const { allDayEvents: allDisplayAllDay, timedEvents: timedDisplayEvents } = useMemo(
+    () => splitAllDayEvents(displayEvents),
+    [displayEvents]
+  );
+
   const getEventsForDay = (day: dayjs.Dayjs) => {
     const dayStr = day.format("YYYY-MM-DD");
-    return displayEvents.filter((event) => {
+    return timedDisplayEvents.filter((event) => {
       // Check both date field and startsAt
       if (event.date === dayStr) return true;
       if (event.startsAt) {
@@ -538,11 +551,32 @@ const WeekView = () => {
         <WeekHeader userSelectedDate={userSelectedDate} />
       </div>
 
+      {/* All-Day Events Row */}
+      <WeekAllDayRow
+        weekDays={visibleWeekDays}
+        allDayEvents={allDisplayAllDay}
+        onEventClick={openEventSummary}
+        onAllDayCellClick={(day) => {
+          setTodoData(null);
+          const hour = day.hour(0);
+          setPendingTimeSelection({ day, hour });
+        }}
+        isBulkMode={isBulkMode}
+        isSelected={isSelected}
+        onToggleSelection={toggleSelection}
+        onDeleteEvent={handleDeleteEvent}
+        onDuplicateEvent={handleDuplicateEvent}
+        onColorChange={handleColorChange}
+        onAddAlarm={handleAddAlarmToEvent}
+        onAddTodo={handleAddTodoFromEvent}
+        onLockToggle={toggleEventLock}
+      />
+
       <div className="mx-2 mb-2 rounded-2xl overflow-hidden">
         <ScrollArea className="h-[calc(100vh-170px)]">
-          <div className="grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr] px-4 py-2">
+          <div className="px-4 py-2" style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}>
             <TimeColumn />
-            {getWeekDays(userSelectedDate).map(({ currentDate }, index) => {
+            {visibleWeekDays.map(({ currentDate }, index) => {
               const dayEvents = getEventsForDay(currentDate);
 
               return (

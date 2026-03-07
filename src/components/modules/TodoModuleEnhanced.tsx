@@ -16,6 +16,9 @@ import { useEventStore } from "@/lib/store";
 import { useTodoLists } from "@/hooks/use-todo-lists";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { useEisenhower } from "@/hooks/use-eisenhower";
+import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
+import { useMirrorSync } from "@/hooks/use-mirror-sync";
+import { CalendarEventType } from "@/lib/stores/types";
 
 
 interface TodoModuleEnhancedProps {
@@ -56,6 +59,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     updateList,
   } = useTodoLists();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
+  const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
+  const { syncTodoCompletion } = useMirrorSync();
   
   // Use module-specific list
   const activeList = lists.find(l => l.id === moduleListId);
@@ -104,6 +109,12 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     }
   };
 
+  const handleToggleWithSync = async (item: any) => {
+    await toggleTodo(item.id);
+    // S2: Propagate completion to linked events
+    await syncTodoCompletion(item.id, !item.completed);
+  };
+
   const handleDragStart = (e: React.DragEvent, item: any) => {
     // Stop propagation to prevent the module container from being dragged
     e.stopPropagation();
@@ -113,6 +124,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       text: item.text,
       source: "todo-module",
       completed: item.completed,
+      collectionName: "todo_items" as const,
     };
 
     e.dataTransfer.setData("application/json", JSON.stringify(todoData));
@@ -132,7 +144,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     }
   };
 
-  // Handle drops from Eisenhower Matrix
+  // Handle drops from Eisenhower Matrix and Calendar Events
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
@@ -144,7 +156,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       const data = JSON.parse(dataString);
       console.log("📥 Todo module received drop:", data);
 
-      // Only handle drops from Eisenhower module
+      // Handle drops from Eisenhower module
       if (data.source === "eisenhower" && moduleListId) {
         // Add to todo list
         const response = await addTodo(data.text, moduleListId);
@@ -156,6 +168,23 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         } else {
           toast.error("Failed to add item to todo list");
         }
+        return;
+      }
+
+      // Handle calendar event drops (Option F)
+      if (data.source !== "todo-module" && data.id && data.title) {
+        const eventData: CalendarEventType = {
+          id: data.id,
+          title: data.title,
+          description: data.description || "",
+          startsAt: data.startsAt || new Date().toISOString(),
+          endsAt: data.endsAt || new Date().toISOString(),
+          isTodo: data.isTodo,
+          color: data.color,
+          calendarId: data.calendarId,
+        };
+
+        await handleCreateTodoFromEvent(eventData);
       }
     } catch (error) {
       console.error("Error handling drop in todo module:", error);
@@ -259,7 +288,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             >
               <div
                 className="cursor-pointer flex-shrink-0"
-                onClick={() => toggleTodo(item.id)}
+                onClick={() => handleToggleWithSync(item)}
               >
                 {item.completed ? (
                   <CheckCircle size={18} className="text-primary" />

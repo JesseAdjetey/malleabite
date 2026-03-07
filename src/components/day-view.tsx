@@ -19,11 +19,12 @@ import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDi
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DayAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 
 const DayView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
-  const { events, isEventSummaryOpen, closeEventSummary } = useEventStore();
+  const { events, isEventSummaryOpen, closeEventSummary, openEventSummary } = useEventStore();
   const { addEvent } = useEventCRUD();
   const {
     isBulkMode,
@@ -140,6 +141,9 @@ const DayView = () => {
     return false;
   });
 
+  // Split into all-day and timed events
+  const { allDayEvents: dayAllDayEvents, timedEvents: dayTimedEvents } = splitAllDayEvents(dayEvents);
+
   // Update to use the pending time selection approach
   const handleTimeSlotClick = (hour: dayjs.Dayjs) => {
     setTodoData(null); // Reset todo data
@@ -211,12 +215,21 @@ const DayView = () => {
         <DayHeader userSelectedDate={userSelectedDate} isToday={isToday} />
       </div>
 
+      {/* All-Day Events Row */}
+      <DayAllDayRow
+        allDayEvents={dayAllDayEvents}
+        onEventClick={openEventSummary}
+        isBulkMode={isBulkMode}
+        isSelected={isSelected}
+        onToggleSelection={toggleSelection}
+      />
+
       <div className="mx-2 mb-2 rounded-2xl overflow-hidden cursor-glow">
         <ScrollArea className="h-[calc(100vh-170px)]">
           <TimeSlotsGrid
             userSelectedDate={userSelectedDate}
             currentTime={currentTime}
-            events={dayEvents}
+            events={dayTimedEvents}
             onTimeSlotClick={handleTimeSlotClick}
             addEvent={handleAddEvent}
             openEventForm={openEventForm}

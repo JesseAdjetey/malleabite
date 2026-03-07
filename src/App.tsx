@@ -8,13 +8,16 @@ import { AuthProvider } from '@/contexts/AuthContext.unified';
 import { HeyMallyProvider } from '@/contexts/HeyMallyContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import EventDataProvider from '@/contexts/EventDataProvider';
+import { db } from '@/integrations/firebase/config';
+import { enableNetwork, disableNetwork } from 'firebase/firestore';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { ConsentBanner } from '@/components/legal/ConsentBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { Loader2 } from 'lucide-react';
 import { useNotificationManager } from '@/hooks/use-notification-manager';
-import { isNative, isAndroid } from '@/lib/platform';
+import { isNative, isAndroid, isIOS } from '@/lib/platform';
+import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
 import MobileNavigation from '@/components/MobileNavigation';
 import '@/styles/ai-animations.css';
@@ -81,19 +84,25 @@ const AppRoutes = () => {
 };
 
 function App() {
-  // Configure native platform features (status bar, keyboard, back button)
+  const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
+
+  // ── Native platform init (one-time) ─────────────────────────────────────────
   useEffect(() => {
     if (!isNative) return;
 
-    import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
-      StatusBar.setStyle({ style: Style.Dark });
-      StatusBar.setBackgroundColor({ color: '#0a0a0a' });
+    // Hide splash screen once React has mounted (replaces 2s timer)
+    import('@capacitor/splash-screen').then(({ SplashScreen }) => {
+      SplashScreen.hide({ fadeOutDuration: 300 });
     }).catch(() => {});
 
+    // Keyboard resize mode
     import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
-      Keyboard.setResizeMode({ mode: KeyboardResize.Body });
+      return Keyboard.setResizeMode({ mode: KeyboardResize.Body }).catch(() => {
+        console.log('[App] Keyboard.setResizeMode not supported');
+      });
     }).catch(() => {});
 
+    // Android back button handler
     if (isAndroid) {
       import('@capacitor/app').then(({ App: CapacitorApp }) => {
         CapacitorApp.addListener('backButton', ({ canGoBack }) => {
@@ -105,7 +114,66 @@ function App() {
         });
       }).catch(() => {});
     }
+
+    // Deep link handler — navigate to path when app is opened via URL
+    import('@capacitor/app').then(({ App: CapacitorApp }) => {
+      CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+        try {
+          const u = new URL(url);
+          const path = u.pathname + u.search;
+          if (path && path !== '/') {
+            // Push to browser history — React Router picks this up
+            window.history.replaceState(null, '', path);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
+        } catch { /* ignore malformed URLs */ }
+      });
+
+      // App state change — refresh stale data on resume
+      CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          // Trigger a refetch by dispatching a custom event
+          window.dispatchEvent(new Event('app-resumed'));
+          console.log('[App] Resumed from background');
+        }
+      });
+    }).catch(() => {});
   }, []);
+
+  // ── Firestore network management on visibility change ─────────────────────
+  // Prevents massive reconnection storms when tab is backgrounded
+  useEffect(() => {
+    let firestoreDisabled = false;
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        // Tab hidden — disconnect Firestore to prevent ERR_NETWORK_IO_SUSPENDED flood
+        disableNetwork(db).then(() => {
+          firestoreDisabled = true;
+          console.log('[App] Firestore network disabled (tab hidden)');
+        }).catch(() => {});
+      } else if (firestoreDisabled) {
+        // Tab visible again — reconnect Firestore
+        enableNetwork(db).then(() => {
+          firestoreDisabled = false;
+          console.log('[App] Firestore network re-enabled (tab visible)');
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // ── StatusBar — follows theme ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!isNative) return;
+    import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+      const isDark = resolvedTheme === 'dark';
+      StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
+      StatusBar.setBackgroundColor({ color: isDark ? '#0a0a0a' : '#f8f7ff' });
+    }).catch(() => {});
+  }, [resolvedTheme]);
 
   return (
     <ErrorBoundary>

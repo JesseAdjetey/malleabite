@@ -34,8 +34,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('[DEBUG-AUTH] Setting up onAuthStateChange listener');
     // Set up Firebase auth state listener
     const unsubscribe = onAuthStateChange((firebaseUser) => {
+      console.log('[DEBUG-AUTH] Auth state changed: ' + (firebaseUser ? 'USER=' + firebaseUser.email : 'null'));
       logger.auth('Auth state changed', { 
         email: firebaseUser?.email,
         userId: firebaseUser?.uid 
@@ -54,15 +56,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       setError(null);
       
+      console.log('[DEBUG-AUTH] Sign in attempt: ' + email);
       logger.info('Auth', 'Sign in attempt', { email });
       await firebaseSignIn({ email, password });
       
+      console.log('[DEBUG-AUTH] Sign in succeeded for: ' + email);
       logger.info('Auth', 'Sign in successful', { email });
       toast({
         title: "Success!",
         description: "You have been signed in successfully.",
       });
     } catch (firebaseError: any) {
+      console.error('[DEBUG-AUTH] Sign in FAILED: ' + (firebaseError?.code || 'no-code') + ' - ' + (firebaseError?.message || JSON.stringify(firebaseError)));
       logger.error('Auth', 'Sign in failed', firebaseError, { email });
       
       errorHandler.handleAuthError(firebaseError);
@@ -77,12 +82,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       setError(null);
       
+      console.log('[DEBUG-AUTH] Sign up attempt: ' + email);
       logger.info('Auth', 'Sign up attempt', { email, hasName: !!name });
       const userCredential = await firebaseSignUp({ 
         email, 
         password,
         displayName: name
       });
+      console.log('[DEBUG-AUTH] Sign up succeeded for: ' + email);
       
       // Firebase automatically sends email verification
       const isConfirmationEmailSent = !userCredential.user.emailVerified;
@@ -101,6 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       return { success: true, isConfirmationEmailSent };
     } catch (firebaseError: any) {
+      console.error('[DEBUG-AUTH] Sign up FAILED: ' + (firebaseError?.code || 'no-code') + ' - ' + (firebaseError?.message || JSON.stringify(firebaseError)));
       logger.error('Auth', 'Sign up failed', firebaseError, { email });
       
       errorHandler.handleAuthError(firebaseError);

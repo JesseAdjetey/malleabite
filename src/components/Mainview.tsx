@@ -211,7 +211,7 @@ const Mainview = () => {
         {/* Main Content */}
         <div className="flex flex-col flex-1 h-screen w-full md:w-auto overflow-hidden">
           <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-          <div className="overflow-y-auto flex-1 touch-pan-y">
+          <div className="overflow-y-auto flex-1 touch-pan-y pb-[var(--mobile-nav-height)] md:pb-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={selectedView}

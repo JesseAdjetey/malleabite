@@ -123,9 +123,9 @@ export default defineConfig(({ mode }) => ({
     // Terser options for production
     terserOptions: {
       compress: {
-        drop_console: mode === 'production',
+        drop_console: false, // Temporarily disabled for debugging
         drop_debugger: true,
-        pure_funcs: mode === 'production' ? ['console.log', 'console.debug'] : [],
+        pure_funcs: [], // Temporarily disabled for debugging
       },
       format: {
         comments: false,

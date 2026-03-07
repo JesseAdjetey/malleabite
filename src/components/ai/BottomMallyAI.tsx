@@ -652,6 +652,13 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
           setTimeout(() => startOverlayListening(true), 300);
           return;
         }
+        // 'network' — Web Speech API server unreachable (transient); retry
+        if (err === 'network' && overlayAbortRetryRef.current < 5) {
+          overlayAbortRetryRef.current++;
+          console.warn('[Mally] Speech network error — retrying...', overlayAbortRetryRef.current);
+          setTimeout(() => startOverlayListening(true), 500);
+          return;
+        }
         // 'aborted' can happen transiently after TTS or mic transitions — retry a few times
         if (err === 'aborted' && overlayAbortRetryRef.current < 5) {
           overlayAbortRetryRef.current++;
@@ -1135,9 +1142,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
               "backdrop-blur-2xl border",
               "bg-purple-500/30 border-purple-400/40 dark:bg-white/10 dark:border-white/20",
               "hover:bg-purple-500/40 dark:hover:bg-white/20 transition-colors flex items-center gap-2",
-              isMobile ? "bottom-20" : "bottom-6"
             )}
             style={{
+              bottom: isMobile ? 'var(--mobile-nav-height)' : '1.5rem',
               boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.15)',
               touchAction: 'none',
             }}
@@ -1160,9 +1167,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             exit={{ opacity: 0, y: 60 }}
             className={cn(
               "fixed z-50 flex flex-col",
-              isMobile ? "left-0 right-0 bottom-[60px]" : "left-0 right-0 bottom-0",
+              "left-0 right-0",
             )}
             style={{
+              bottom: isMobile ? 'var(--mobile-nav-height)' : 0,
               maxHeight: isMobile ? "80vh" : "70vh",
               /* Layered gradient: fully transparent at top fading into base */
               background: isDark

@@ -7,6 +7,7 @@
 //                          dispatched to playback the moment a sentence boundary is detected
 //   4. warmCommonPhrases() — pre-caches ACK phrases so they play in <300ms
 import { auth } from '@/integrations/firebase/config';
+import { isNative } from '@/lib/platform';
 
 const TTS_FUNCTION_URL = 'https://us-central1-malleabite-97d35.cloudfunctions.net/synthesizeSpeech';
 
@@ -419,7 +420,9 @@ class MallyTTSService {
    *  Uses audio already fetched by warmCommonPhrases() — no network hop.
    *  Falls back to speechSynthesis if cache miss or AudioContext blocked.
    *  Cycles through phrases so it doesn't feel repetitive.
-   *  Fire-and-forget — does NOT block on completion. */
+   *  Fire-and-forget — does NOT block on completion.
+   *  Silently skips if neither AudioContext nor speechSynthesis is available
+   *  (e.g. no prior user gesture). */
   playInstantACK(): void {
     const phrase = ACK_PHRASES[this._ackIndex % ACK_PHRASES.length];
     this._ackIndex++;
@@ -428,19 +431,26 @@ class MallyTTSService {
     const cached = this.cache.get(key);
 
     if (cached) {
-      // Play from pre-cached Cloud TTS buffer via AudioContext (works without user gesture
-      // if AudioContext was previously unlocked by any click/tap/keypress)
       const ctx = getAudioContext();
-      if (ctx.state !== 'running') { try { ctx.resume(); } catch {} }
-      ctx.decodeAudioData(cached.slice(0)).then(decoded => {
-        const source = ctx.createBufferSource();
-        source.buffer = decoded;
-        source.connect(ctx.destination);
-        source.start(0);
-      }).catch(() => {
-        // Decode failed — try speechSynthesis as last resort
+      // Try to resume — no-op on native, may fail on web without prior gesture
+      if (ctx.state !== 'running') {
+        ctx.resume().catch(() => {});
+      }
+      // On native (Capacitor), AudioContext has no autoplay restriction — always play.
+      // On web, only play if AudioContext was unlocked by a prior click/tap/key.
+      if (ctx.state === 'running' || isNative) {
+        ctx.decodeAudioData(cached.slice(0)).then(decoded => {
+          const source = ctx.createBufferSource();
+          source.buffer = decoded;
+          source.connect(ctx.destination);
+          source.start(0);
+        }).catch(() => {
+          this._ackFallback(phrase);
+        });
+      } else {
+        // Web: AudioContext still suspended — try speechSynthesis (may also be blocked)
         this._ackFallback(phrase);
-      });
+      }
     } else {
       // Cache miss (warmCommonPhrases hasn't finished yet) — try speechSynthesis
       this._ackFallback(phrase);

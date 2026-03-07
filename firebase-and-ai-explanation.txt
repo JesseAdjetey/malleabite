@@ -485,7 +485,7 @@ Multiple suggestions display as a navigable carousel.
 ================================================================================
 
 File: firebase/functions/index.js
-Model: gemini-2.0-flash (scheduling), gemini-1.5-flash (transcription)
+Model: gemini-2.5-flash (scheduling), gemini-1.5-flash (transcription)
 
 The processAIRequest Cloud Function is the brain of the system:
 

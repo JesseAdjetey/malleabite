@@ -82,7 +82,7 @@ exports.processAIRequest = functions.https.onCall(async (data, context) => {
     const eventsContext = formatEventsForAI(events);
     console.log(`MallyAI: Processing request. History: ${history.length} messages. Message: "${message}"`);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const systemPrompt = `
       You are Mally, a highly intelligent and PROACTIVE scheduling assistant.
@@ -353,7 +353,7 @@ exports.processSchedulingStream = functions.https.onRequest(async (req, res) => 
     snap.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
     const eventsContext = formatEventsForAI(events);
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const systemPrompt = `You are Mally, a warm and intelligent scheduling assistant.
 Current Time: ${clientContext?.currentTime || new Date().toISOString()}

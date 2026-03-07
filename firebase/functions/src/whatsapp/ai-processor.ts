@@ -49,7 +49,7 @@ export async function processAIRequestInternal(
     }
 
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Load user context
     const [events, todos, userName] = await Promise.all([
@@ -76,7 +76,9 @@ export async function processAIRequestInternal(
 
     return { text: cleanText, actions };
   } catch (error: unknown) {
-    console.error('AI processing error:', error);
+    const err = error as Error;
+    console.error('AI processing error:', err.message, err.stack);
+    console.error('Full error:', JSON.stringify(error, null, 2));
     return { error: 'Something went wrong. Try again!' };
   }
 }

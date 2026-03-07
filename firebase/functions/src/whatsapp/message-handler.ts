@@ -174,11 +174,13 @@ export async function handleIncomingMessage(
     return sendHelp(send);
   }
 
-  if (['today', 'schedule'].includes(lo)) {
+  // Match schedule-related phrases: "today", "schedule", "check my schedule", "what's on my calendar", etc.
+  if (['today', 'schedule'].includes(lo) || /\b(schedule|calendar|today|what.?s on|agenda)\b/.test(lo)) {
     return sendTodaySchedule(send, userId);
   }
 
-  if (['todos', 'tasks'].includes(lo)) {
+  // Match todo-related phrases: "todos", "tasks", "my tasks", "show todos", etc.
+  if (['todos', 'tasks'].includes(lo) || /\b(todos?|tasks?|to-?do|checklist)\b/.test(lo)) {
     return sendTodos(send, userId);
   }
 

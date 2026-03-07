@@ -59,7 +59,7 @@ async function processAIRequestInternal(userId, message) {
             return { error: 'AI is not configured. Please try again later.' };
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         // Load user context
         const [events, todos, userName] = await Promise.all([
             loadUpcomingEvents(userId),
@@ -80,7 +80,9 @@ async function processAIRequestInternal(userId, message) {
         return { text: cleanText, actions };
     }
     catch (error) {
-        console.error('AI processing error:', error);
+        const err = error;
+        console.error('AI processing error:', err.message, err.stack);
+        console.error('Full error:', JSON.stringify(error, null, 2));
         return { error: 'Something went wrong. Try again!' };
     }
 }

@@ -69,8 +69,8 @@ exports.whatsappWebhook = (0, https_1.onRequest)({
                         console.log(`📩 Message from ${from}: type=${message.type}${isForwarded ? ' (forwarded)' : ''}`);
                         // Process asynchronously — we already sent 200
                         await (0, message_handler_1.handleIncomingMessage)({
-                            phoneNumberId: whatsappPhoneNumberId.value(),
-                            accessToken: whatsappAccessToken.value(),
+                            phoneNumberId: whatsappPhoneNumberId.value().trim(),
+                            accessToken: whatsappAccessToken.value().trim(),
                             from,
                             messageId,
                             isGroup,

@@ -38,6 +38,10 @@ import { exportToICalendar, downloadICalendar } from "@/lib/utils/calendar-impor
 import { usePrintCalendar } from "@/hooks/use-print-calendar";
 import { useVideoConferencing } from "@/hooks/use-video-conferencing";
 import { useEmailNotifications } from "@/hooks/use-email-notifications";
+import { useAuth } from "@/contexts/AuthContext.unified";
+import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
+import * as calendarService from "@/lib/services/calendarService";
+import { CalendarTemplate, CalendarTemplateEvent } from "@/types/calendar";
 
 export function useMallyActions() {
   // Calendar
@@ -167,6 +171,12 @@ export function useMallyActions() {
 
   // Email notifications
   const { updatePreferences: updateNotificationPrefs, scheduleEventReminders } = useEmailNotifications();
+
+  // Auth (needed for CalendarTemplate Firestore paths)
+  const { user } = useAuth();
+
+  // Calendar Templates (weekly patterns) — from Firestore subscription
+  const { templates: calendarTemplates, loading: calendarTemplatesLoading } = useTemplateEventsLoader();
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
@@ -594,7 +604,7 @@ export function useMallyActions() {
           return true;
         }
 
-        // ── Templates ────────────────────────────────────────────────────────
+        // ── Templates (legacy simple EventTemplate) ─────────────────────────
 
         case 'create_from_template': {
           if (!data.templateName) return false;
@@ -640,6 +650,239 @@ export function useMallyActions() {
           const result = await deleteTemplate(templateId);
           if (result?.success) { toast.success('Template deleted'); return true; }
           return false;
+        }
+
+        // ── Calendar Templates (weekly patterns) ─────────────────────────────
+
+        case 'create_calendar_template': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.name) { toast.error('Template name is required'); return false; }
+
+          // Resolve target group by name
+          let targetGroupId: string | undefined;
+          if (data.groupName) {
+            const group = calendarGroups.find(g =>
+              (g as any).name?.toLowerCase() === (data.groupName as string).toLowerCase()
+            );
+            targetGroupId = group?.id;
+          }
+
+          // Build events array
+          const templateEvents: CalendarTemplateEvent[] = (data.events || []).map((e: any) => ({
+            title: e.title || 'Untitled',
+            description: e.description || undefined,
+            dayOfWeek: e.dayOfWeek ?? 1,
+            startTime: e.startTime || '09:00',
+            endTime: e.endTime || '10:00',
+            color: e.color || '#8B5CF6',
+            isAllDay: e.isAllDay || false,
+            location: e.location || undefined,
+            isRecurring: true,
+            recurrenceRule: {
+              frequency: 'weekly' as const,
+              interval: 1,
+              daysOfWeek: [e.dayOfWeek ?? 1],
+            },
+          }));
+
+          try {
+            await calendarService.createCalendarTemplate(user.uid, {
+              name: data.name,
+              description: data.description || undefined,
+              events: templateEvents,
+              targetGroupId,
+              isActive: false,
+            });
+            toast.success(`Template "${data.name}" created with ${templateEvents.length} event${templateEvents.length !== 1 ? 's' : ''}`);
+            return true;
+          } catch (err) {
+            console.error('Failed to create calendar template:', err);
+            toast.error('Failed to create template');
+            return false;
+          }
+        }
+
+        case 'add_template_event': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.templateName) { toast.error('Template name is required'); return false; }
+
+          const tmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          );
+          if (!tmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+
+          const newEvent: CalendarTemplateEvent = {
+            title: data.title || 'Untitled',
+            description: data.description || undefined,
+            dayOfWeek: data.dayOfWeek ?? 1,
+            startTime: data.startTime || '09:00',
+            endTime: data.endTime || '10:00',
+            color: data.color || '#8B5CF6',
+            isAllDay: data.isAllDay || false,
+            location: data.location || undefined,
+            isRecurring: true,
+            recurrenceRule: {
+              frequency: 'weekly' as const,
+              interval: 1,
+              daysOfWeek: [data.dayOfWeek ?? 1],
+            },
+          };
+
+          try {
+            const updatedEvents = [...tmpl.events, newEvent];
+            await calendarService.updateCalendarTemplate(user.uid, tmpl.id, { events: updatedEvents });
+            toast.success(`Added "${newEvent.title}" to template "${tmpl.name}"`);
+            return true;
+          } catch (err) {
+            console.error('Failed to add template event:', err);
+            toast.error('Failed to add event to template');
+            return false;
+          }
+        }
+
+        case 'remove_template_event': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.templateName || !data.eventTitle) { toast.error('Template name and event title required'); return false; }
+
+          const rmTmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          );
+          if (!rmTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+
+          const filteredEvents = rmTmpl.events.filter(e =>
+            !e.title.toLowerCase().includes((data.eventTitle as string).toLowerCase())
+          );
+          if (filteredEvents.length === rmTmpl.events.length) {
+            toast.error(`Event "${data.eventTitle}" not found in template`);
+            return false;
+          }
+
+          try {
+            await calendarService.updateCalendarTemplate(user.uid, rmTmpl.id, { events: filteredEvents });
+            toast.success(`Removed event from template "${rmTmpl.name}"`);
+            return true;
+          } catch (err) {
+            console.error('Failed to remove template event:', err);
+            toast.error('Failed to remove event from template');
+            return false;
+          }
+        }
+
+        case 'apply_calendar_template': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.templateName) { toast.error('Template name is required'); return false; }
+
+          const applyTmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          );
+          if (!applyTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+          if (applyTmpl.events.length === 0) { toast.error('Template has no events to apply'); return false; }
+
+          // Resolve group — use override, then template's saved group, then first available
+          let groupId = applyTmpl.targetGroupId;
+          if (data.groupName) {
+            const g = calendarGroups.find(grp =>
+              (grp as any).name?.toLowerCase() === (data.groupName as string).toLowerCase()
+            );
+            if (g) groupId = g.id;
+          }
+
+          // Find a calendar in the group
+          const cals = getActiveCalendars();
+          const targetCal = cals.find(c => (c as any).groupId === groupId) || cals[0];
+          const calendarId = targetCal?.id;
+
+          const today = dayjs();
+          const startOfWeek = today.startOf('week');
+          let created = 0;
+
+          for (const tmplEvent of applyTmpl.events) {
+            const eventDay = startOfWeek.add(tmplEvent.dayOfWeek, 'day');
+            if (eventDay.isBefore(today, 'day')) continue;
+
+            const [sh, sm] = (tmplEvent.startTime || '09:00').split(':').map(Number);
+            const [eh, em] = (tmplEvent.endTime || '10:00').split(':').map(Number);
+
+            const startsAt = eventDay.hour(sh).minute(sm).second(0).toISOString();
+            const endsAt = eventDay.hour(eh).minute(em).second(0).toISOString();
+
+            const recurrenceRule = tmplEvent.recurrenceRule || {
+              frequency: 'weekly' as const,
+              interval: 1,
+              daysOfWeek: [tmplEvent.dayOfWeek],
+            };
+
+            await addEvent({
+              title: tmplEvent.title,
+              description: tmplEvent.description || `From template: ${applyTmpl.name}`,
+              startsAt,
+              endsAt,
+              color: tmplEvent.color || '#8B5CF6',
+              date: eventDay.format('YYYY-MM-DD'),
+              calendarId,
+              isRecurring: true,
+              recurrenceRule,
+            } as any);
+            created++;
+          }
+
+          if (created > 0) {
+            toast.success(`Applied ${created} recurring event${created !== 1 ? 's' : ''} from "${applyTmpl.name}"`);
+          } else {
+            toast.info('No upcoming events to apply from this template');
+          }
+          return true;
+        }
+
+        case 'update_calendar_template': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.templateName) { toast.error('Template name is required'); return false; }
+
+          const updTmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          );
+          if (!updTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+
+          const updates: Partial<CalendarTemplate> = {};
+          if (data.name) updates.name = data.name;
+          if (data.description !== undefined) updates.description = data.description;
+          if (data.isActive !== undefined) updates.isActive = data.isActive;
+          if (data.groupName) {
+            const g = calendarGroups.find(grp =>
+              (grp as any).name?.toLowerCase() === (data.groupName as string).toLowerCase()
+            );
+            if (g) updates.targetGroupId = g.id;
+          }
+
+          try {
+            await calendarService.updateCalendarTemplate(user.uid, updTmpl.id, updates);
+            toast.success(`Updated template "${updTmpl.name}"`);
+            return true;
+          } catch (err) {
+            console.error('Failed to update calendar template:', err);
+            toast.error('Failed to update template');
+            return false;
+          }
+        }
+
+        case 'delete_calendar_template': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          if (!data.templateName) { toast.error('Template name is required'); return false; }
+
+          const delTmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          );
+          if (!delTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+
+          try {
+            await calendarService.deleteCalendarTemplate(user.uid, delTmpl.id);
+            toast.success(`Deleted template "${delTmpl.name}"`);
+            return true;
+          } catch (err) {
+            console.error('Failed to delete calendar template:', err);
+            toast.error('Failed to delete template');
+            return false;
+          }
         }
 
         // ── Invites ──────────────────────────────────────────────────────────
@@ -1408,6 +1651,8 @@ export function useMallyActions() {
     printCalendar, downloadPDF,
     createMeeting, addMeetingToEvent,
     updateNotificationPrefs, scheduleEventReminders,
+    // Calendar templates (weekly patterns)
+    user, calendarTemplates, getActiveCalendars,
   ]);
 
   // ─── Context builder ───────────────────────────────────────────────────────
@@ -1494,6 +1739,22 @@ export function useMallyActions() {
 
     // Theme
     theme: useThemeStore.getState().theme,
+
+    // Calendar templates (weekly patterns)
+    calendarTemplates: calendarTemplates.slice(0, 10).map(t => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      isActive: t.isActive,
+      targetGroupId: t.targetGroupId,
+      eventCount: t.events.length,
+      events: t.events.slice(0, 20).map(e => ({
+        title: e.title,
+        dayOfWeek: e.dayOfWeek,
+        startTime: e.startTime,
+        endTime: e.endTime,
+      })),
+    })),
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
@@ -1502,6 +1763,7 @@ export function useMallyActions() {
     calendarGroups, goalsWithProgress, bookingPages, snapshots,
     workingHours, analyticsMetrics,
     isBulkMode, selectedCount, canUndo, canRedo,
+    calendarTemplates,
   ]);
 
   return {

@@ -1,5 +1,6 @@
 export { stripeWebhook, createCheckoutSession, createPortalSession, } from './stripe-webhooks';
 export { synthesizeSpeech } from './tts';
+export { processSchedulingStream } from './scheduling';
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 /**
  * Process AI requests for intelligent scheduling with Gemini AI

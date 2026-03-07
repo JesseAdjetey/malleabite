@@ -723,6 +723,17 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
     - Create/update/delete calendar groups and individual calendars.
     - Move calendars between groups.
 
+22. CALENDAR TEMPLATES (WEEKLY PATTERNS):
+    - Templates are reusable weekly schedules containing multiple events (e.g. "Work Week", "Gym Routine").
+    - Each template event has a dayOfWeek (0=Sun..6=Sat), startTime, endTime, title, color.
+    - TWO creation flows:
+      a) FULL — user provides all events → use create_calendar_template with the events array.
+      b) INCREMENTAL — user builds gradually → first create_calendar_template with an empty or partial events array, then add_template_event one at a time.
+    - When creating, suggest a target group ("Work", "Personal", etc.) from CALENDAR_GROUPS. The user can override.
+    - After creating a template, ASK the user if they want to apply it now. Do NOT auto-apply.
+    - Applying a template (apply_calendar_template) creates recurring weekly events starting from the current week.
+    - Check CALENDAR_TEMPLATES in context so you know what templates already exist.
+
 12. RECURRING EVENTS (SCOPED):
     - Use update_recurring_event or delete_recurring_event with scope: "single", "all", or "thisAndFuture".
     - Include occurrenceDate for the specific instance being modified.
@@ -867,10 +878,22 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     { "type": "reset_pomodoro", "data": {} },
     { "type": "set_pomodoro_timer", "data": { "focusTime": 25, "breakTime": 5 } },
     { "type": "set_pomodoro_settings", "data": { "focusTime": 25, "breakTime": 5, "focusTarget": 120 } },
-    // ── Templates ──
-    { "type": "create_template", "data": { "title": "...", "duration": 60, "category": "...", "color": "#hex" } },
-    { "type": "create_from_template", "data": { "templateName": "...", "start": "ISO" } },
-    { "type": "delete_template", "data": { "templateName": "..." } },
+    // ── Calendar Templates (weekly patterns) ──
+    // Create a full template with all events at once:
+    { "type": "create_calendar_template", "data": { "name": "Work Week", "description": "optional", "groupName": "Work", "events": [
+      { "title": "Standup", "dayOfWeek": 1, "startTime": "09:00", "endTime": "09:15", "color": "#3b82f6" },
+      { "title": "Team Sync", "dayOfWeek": 3, "startTime": "14:00", "endTime": "15:00", "color": "#8B5CF6" }
+    ] } },
+    // Add a single event to an existing template (for incremental building):
+    { "type": "add_template_event", "data": { "templateName": "...", "title": "...", "dayOfWeek": 0, "startTime": "HH:mm", "endTime": "HH:mm", "color": "#hex" } },
+    // Remove an event from a template by title:
+    { "type": "remove_template_event", "data": { "templateName": "...", "eventTitle": "..." } },
+    // Apply a template — creates recurring weekly events on the calendar:
+    { "type": "apply_calendar_template", "data": { "templateName": "...", "groupName": "optional override" } },
+    // Update template metadata:
+    { "type": "update_calendar_template", "data": { "templateName": "...", "name": "new name", "groupName": "new group", "isActive": true } },
+    // Delete a template:
+    { "type": "delete_calendar_template", "data": { "templateName": "..." } },
     // ── Invites ──
     { "type": "send_invite", "data": { "email": "...", "eventId": "...", "message": "optional" } },
     { "type": "respond_invite", "data": { "inviteId": "...", "status": "accepted|declined" } },

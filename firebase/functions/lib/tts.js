@@ -47,7 +47,6 @@ exports.synthesizeSpeech = (0, https_1.onRequest)({
     cors: true,
     region: 'us-central1',
     memory: '256MiB',
-    minInstances: 1,
 }, async (req, res) => {
     try {
         // Verify Firebase auth token

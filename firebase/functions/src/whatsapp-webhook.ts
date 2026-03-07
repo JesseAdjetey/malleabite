@@ -80,8 +80,8 @@ export const whatsappWebhook = onRequest(
               // Process asynchronously — we already sent 200
               await handleIncomingMessage(
                 {
-                  phoneNumberId: whatsappPhoneNumberId.value(),
-                  accessToken: whatsappAccessToken.value(),
+                  phoneNumberId: whatsappPhoneNumberId.value().trim(),
+                  accessToken: whatsappAccessToken.value().trim(),
                   from,
                   messageId,
                   isGroup,

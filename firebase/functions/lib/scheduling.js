@@ -101,7 +101,6 @@ exports.processSchedulingStream = (0, https_1.onRequest)({
     region: 'us-central1',
     memory: '512MiB',
     timeoutSeconds: 120,
-    minInstances: 1,
     secrets: [geminiApiKey],
 }, async (req, res) => {
     // CORS preflight

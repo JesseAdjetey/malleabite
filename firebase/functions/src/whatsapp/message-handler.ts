@@ -25,6 +25,9 @@ import {
   clearPendingAction,
   setLastCreated,
   undoLastCreated,
+  getChatHistory,
+  appendChatHistory,
+  clearChatHistory,
   PendingAction,
 } from './session';
 
@@ -249,6 +252,7 @@ async function executePendingAction(
   action: PendingAction
 ): Promise<void> {
   await clearPendingAction(phone);
+  await clearChatHistory(phone); // Reset conversation after action executes
 
   if (action.type === 'create_event') {
     const start = action.start ? new Date(action.start) : null;
@@ -454,12 +458,19 @@ async function handleAIMessage(
 ): Promise<void> {
   try {
     const { processAIRequestInternal } = await import('./ai-processor');
-    const response = await processAIRequestInternal(userId, text);
+
+    // Load conversation history for multi-turn context
+    const history = await getChatHistory(ctx.from);
+    const response = await processAIRequestInternal(userId, text, history);
 
     if (response.error) {
       await sendTextMessage(send, `⚠️ ${response.error}`);
       return;
     }
+
+    // Save this turn to history
+    const replyText = response.text || '';
+    await appendChatHistory(ctx.from, text, replyText);
 
     // ── AI proposed an action → confirm-before-create ──
     if (response.actions && response.actions.length > 0) {

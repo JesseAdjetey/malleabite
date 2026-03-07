@@ -36,6 +36,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPendingAction = getPendingAction;
 exports.setPendingAction = setPendingAction;
 exports.clearPendingAction = clearPendingAction;
+exports.getChatHistory = getChatHistory;
+exports.appendChatHistory = appendChatHistory;
+exports.clearChatHistory = clearChatHistory;
 exports.setLastCreated = setLastCreated;
 exports.undoLastCreated = undoLastCreated;
 /**
@@ -69,6 +72,37 @@ async function setPendingAction(phone, action) {
 }
 async function clearPendingAction(phone) {
     await db().collection(SESSIONS).doc(phone).set({ pendingAction: null, updatedAt: Date.now() }, { merge: true });
+}
+// ─── Chat History ─────────────────────────────────────────────────────────────
+const MAX_HISTORY = 10; // keep last N messages (5 turns)
+const HISTORY_TTL_MS = 10 * 60 * 1000; // 10 min — history expires after inactivity
+async function getChatHistory(phone) {
+    const doc = await db().collection(SESSIONS).doc(phone).get();
+    if (!doc.exists)
+        return [];
+    const data = doc.data();
+    // Expire old history
+    if (!data.chatHistory || !data.chatHistory.length)
+        return [];
+    const lastMsg = data.chatHistory[data.chatHistory.length - 1];
+    if (Date.now() - lastMsg.ts > HISTORY_TTL_MS) {
+        await db().collection(SESSIONS).doc(phone).set({ chatHistory: null }, { merge: true });
+        return [];
+    }
+    return data.chatHistory;
+}
+async function appendChatHistory(phone, userMsg, modelMsg) {
+    const existing = await getChatHistory(phone);
+    const now = Date.now();
+    const updated = [
+        ...existing,
+        { role: 'user', text: userMsg, ts: now },
+        { role: 'model', text: modelMsg, ts: now },
+    ].slice(-MAX_HISTORY);
+    await db().collection(SESSIONS).doc(phone).set({ chatHistory: updated, updatedAt: now }, { merge: true });
+}
+async function clearChatHistory(phone) {
+    await db().collection(SESSIONS).doc(phone).set({ chatHistory: null }, { merge: true });
 }
 // ─── Track Last Created (for Undo) ───────────────────────────────────────────
 async function setLastCreated(phone, docId, type, collection) {

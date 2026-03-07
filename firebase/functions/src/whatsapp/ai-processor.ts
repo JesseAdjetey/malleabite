@@ -39,7 +39,8 @@ export interface ProposedAction {
 
 export async function processAIRequestInternal(
   userId: string,
-  message: string
+  message: string,
+  chatHistory?: { role: 'user' | 'model'; text: string }[]
 ): Promise<AIResponse> {
   try {
     const geminiKey = process.env.GEMINI_API_KEY;
@@ -61,8 +62,21 @@ export async function processAIRequestInternal(
     const now = new Date();
     const systemPrompt = buildSystemPrompt(now, userName, events, todos);
 
+    // Build conversation contents with history
+    const contents: { role: string; parts: { text: string }[] }[] = [];
+
+    // Add previous conversation turns
+    if (chatHistory && chatHistory.length > 0) {
+      for (const msg of chatHistory) {
+        contents.push({ role: msg.role, parts: [{ text: msg.text }] });
+      }
+    }
+
+    // Add current user message
+    contents.push({ role: 'user', parts: [{ text: message }] });
+
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: message }] }],
+      contents,
       systemInstruction: { role: 'model', parts: [{ text: systemPrompt }] },
     });
 

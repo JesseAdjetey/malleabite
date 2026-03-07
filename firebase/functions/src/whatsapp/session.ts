@@ -29,8 +29,15 @@ export interface PendingAction {
   listName?: string;  // human-readable list name
 }
 
+export interface ChatMessage {
+  role: 'user' | 'model';
+  text: string;
+  ts: number;
+}
+
 interface SessionData {
   pendingAction?: PendingAction | null;
+  chatHistory?: ChatMessage[] | null;
   lastCreatedId?: string | null;       // Firestore doc ID of last created item
   lastCreatedType?: 'event' | 'todo' | null;
   lastCreatedCollection?: string | null; // 'calendar_events' or 'todo_items' or 'todos'
@@ -64,6 +71,55 @@ export async function setPendingAction(phone: string, action: PendingAction): Pr
 export async function clearPendingAction(phone: string): Promise<void> {
   await db().collection(SESSIONS).doc(phone).set(
     { pendingAction: null, updatedAt: Date.now() },
+    { merge: true }
+  );
+}
+
+// ─── Chat History ─────────────────────────────────────────────────────────────
+
+const MAX_HISTORY = 10; // keep last N messages (5 turns)
+const HISTORY_TTL_MS = 10 * 60 * 1000; // 10 min — history expires after inactivity
+
+export async function getChatHistory(phone: string): Promise<ChatMessage[]> {
+  const doc = await db().collection(SESSIONS).doc(phone).get();
+  if (!doc.exists) return [];
+  const data = doc.data() as SessionData;
+
+  // Expire old history
+  if (!data.chatHistory || !data.chatHistory.length) return [];
+  const lastMsg = data.chatHistory[data.chatHistory.length - 1];
+  if (Date.now() - lastMsg.ts > HISTORY_TTL_MS) {
+    await db().collection(SESSIONS).doc(phone).set(
+      { chatHistory: null },
+      { merge: true }
+    );
+    return [];
+  }
+  return data.chatHistory;
+}
+
+export async function appendChatHistory(
+  phone: string,
+  userMsg: string,
+  modelMsg: string
+): Promise<void> {
+  const existing = await getChatHistory(phone);
+  const now = Date.now();
+  const updated = [
+    ...existing,
+    { role: 'user' as const, text: userMsg, ts: now },
+    { role: 'model' as const, text: modelMsg, ts: now },
+  ].slice(-MAX_HISTORY);
+
+  await db().collection(SESSIONS).doc(phone).set(
+    { chatHistory: updated, updatedAt: now },
+    { merge: true }
+  );
+}
+
+export async function clearChatHistory(phone: string): Promise<void> {
+  await db().collection(SESSIONS).doc(phone).set(
+    { chatHistory: null },
     { merge: true }
   );
 }

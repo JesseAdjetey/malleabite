@@ -9,9 +9,17 @@ export interface PendingAction {
     listId?: string;
     listName?: string;
 }
+export interface ChatMessage {
+    role: 'user' | 'model';
+    text: string;
+    ts: number;
+}
 export declare function getPendingAction(phone: string): Promise<PendingAction | null>;
 export declare function setPendingAction(phone: string, action: PendingAction): Promise<void>;
 export declare function clearPendingAction(phone: string): Promise<void>;
+export declare function getChatHistory(phone: string): Promise<ChatMessage[]>;
+export declare function appendChatHistory(phone: string, userMsg: string, modelMsg: string): Promise<void>;
+export declare function clearChatHistory(phone: string): Promise<void>;
 export declare function setLastCreated(phone: string, docId: string, type: 'event' | 'todo', collection: string): Promise<void>;
 export declare function undoLastCreated(phone: string): Promise<{
     success: boolean;

@@ -187,6 +187,7 @@ function isDenial(text) {
 // ─── Execute Pending Action ───────────────────────────────────────────────────
 async function executePendingAction(send, phone, userId, action) {
     await (0, session_1.clearPendingAction)(phone);
+    await (0, session_1.clearChatHistory)(phone); // Reset conversation after action executes
     if (action.type === 'create_event') {
         const start = action.start ? new Date(action.start) : null;
         const end = action.end ? new Date(action.end) : (start ? new Date(start.getTime() + 60 * 60 * 1000) : null);
@@ -352,11 +353,16 @@ async function handleInteractive(send, ctx, userId, replyId) {
 async function handleAIMessage(send, ctx, userId, text) {
     try {
         const { processAIRequestInternal } = await Promise.resolve().then(() => __importStar(require('./ai-processor')));
-        const response = await processAIRequestInternal(userId, text);
+        // Load conversation history for multi-turn context
+        const history = await (0, session_1.getChatHistory)(ctx.from);
+        const response = await processAIRequestInternal(userId, text, history);
         if (response.error) {
             await (0, meta_api_1.sendTextMessage)(send, `⚠️ ${response.error}`);
             return;
         }
+        // Save this turn to history
+        const replyText = response.text || '';
+        await (0, session_1.appendChatHistory)(ctx.from, text, replyText);
         // ── AI proposed an action → confirm-before-create ──
         if (response.actions && response.actions.length > 0) {
             const action = response.actions[0]; // handle first action

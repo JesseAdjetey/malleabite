@@ -13,4 +13,7 @@ export interface ProposedAction {
     text?: string;
     listName?: string;
 }
-export declare function processAIRequestInternal(userId: string, message: string): Promise<AIResponse>;
+export declare function processAIRequestInternal(userId: string, message: string, chatHistory?: {
+    role: 'user' | 'model';
+    text: string;
+}[]): Promise<AIResponse>;

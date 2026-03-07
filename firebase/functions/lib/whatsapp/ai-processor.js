@@ -51,7 +51,7 @@ const admin = __importStar(require("firebase-admin"));
 const generative_ai_1 = require("@google/generative-ai");
 const db = () => admin.firestore();
 // ─── Main Entry ───────────────────────────────────────────────────────────────
-async function processAIRequestInternal(userId, message) {
+async function processAIRequestInternal(userId, message, chatHistory) {
     try {
         const geminiKey = process.env.GEMINI_API_KEY;
         if (!geminiKey) {
@@ -68,8 +68,18 @@ async function processAIRequestInternal(userId, message) {
         ]);
         const now = new Date();
         const systemPrompt = buildSystemPrompt(now, userName, events, todos);
+        // Build conversation contents with history
+        const contents = [];
+        // Add previous conversation turns
+        if (chatHistory && chatHistory.length > 0) {
+            for (const msg of chatHistory) {
+                contents.push({ role: msg.role, parts: [{ text: msg.text }] });
+            }
+        }
+        // Add current user message
+        contents.push({ role: 'user', parts: [{ text: message }] });
         const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: message }] }],
+            contents,
             systemInstruction: { role: 'model', parts: [{ text: systemPrompt }] },
         });
         const responseText = result.response.text();

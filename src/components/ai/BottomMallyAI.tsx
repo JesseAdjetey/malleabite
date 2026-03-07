@@ -168,6 +168,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [overlayProcessing, setOverlayProcessing] = useState(false);
   // True while Vapi WebRTC session is being established (before call-start fires)
   const [vapiConnecting, setVapiConnecting] = useState(false);
+  // Track which message is being read aloud (null = none)
+  const [readingMessageId, setReadingMessageId] = useState<string | null>(null);
 
   // Refs that mirror state — used inside callbacks/timers to avoid stale closures
   const isRecordingRef = useRef(false);
@@ -1456,6 +1458,38 @@ RULES:
                                   ))}
                                 </div>
                               </div>
+                            )}
+                            {/* Read aloud button for AI messages */}
+                            {message.sender === "ai" && !message.isLoading && message.text && (
+                              <button
+                                onClick={() => {
+                                  if (readingMessageId === message.id) {
+                                    // Stop reading
+                                    mallyTTS.stop();
+                                    setReadingMessageId(null);
+                                  } else {
+                                    // Start reading this message
+                                    setReadingMessageId(message.id);
+                                    mallyTTS.speak({ text: message.text }).finally(() => {
+                                      setReadingMessageId(null);
+                                    });
+                                  }
+                                }}
+                                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-purple-500 transition-colors"
+                                title={readingMessageId === message.id ? "Stop reading" : "Read aloud"}
+                              >
+                                {readingMessageId === message.id ? (
+                                  <>
+                                    <VolumeX size={12} />
+                                    <span>Stop</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Volume2 size={12} />
+                                    <span>Read aloud</span>
+                                  </>
+                                )}
+                              </button>
                             )}
                           </div>
                           {message.sender === "user" && (

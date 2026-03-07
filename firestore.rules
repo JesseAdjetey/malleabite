@@ -254,12 +254,25 @@ service cloud.firestore {
         && isNotRateLimited();
     }
 
-    // Analytics data — docs are keyed as {userId}_{date}, so match by field
+    // Analytics data — docs are keyed as {userId}_{date}
+    // Accept both user_id and userId field names for backward compatibility
     match /analytics/{docId} {
-      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        (resource != null && resource.data.user_id == request.auth.uid) ||
+        (resource != null && resource.data.userId == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.user_id == request.auth.uid ||
+        request.resource.data.userId == request.auth.uid
+      );
+      allow update: if isAuthenticated() && (
+        (resource.data.user_id == request.auth.uid) ||
+        (resource.data.userId == request.auth.uid)
+      );
+      allow delete: if isAuthenticated() && (
+        (resource.data.user_id == request.auth.uid) ||
+        (resource.data.userId == request.auth.uid)
+      );
     }
 
     // Goals
@@ -272,11 +285,20 @@ service cloud.firestore {
         && request.resource.data.userId == resource.data.userId;
     }
 
+    // Goal Sessions — progress entries for each goal
+    match /goal_sessions/{sessionId} {
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && request.resource.data.keys().hasAll(['userId', 'goalId']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
     // Notification Preferences
     match /notification_preferences/{prefId} {
       allow get: if request.auth != null
         && (resource == null || resource.data.userId == request.auth.uid);
-      allow list: if isOwner(resource.data.userId);
+      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner();
       allow update: if isOwner(resource.data.userId)

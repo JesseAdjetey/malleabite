@@ -1,0 +1,442 @@
+// Mally Vapi Voice AI Service
+// Replaces custom STT + TTS + VAD pipeline with Vapi's managed WebRTC voice sessions.
+//
+// Architecture:
+//   - Wake word (Porcupine) triggers vapiService.startSession() → full-duplex conversation
+//   - Vapi handles: STT (Deepgram) → LLM (GPT-4o-mini) → TTS (Vapi/ElevenLabs) → VAD/barge-in
+//   - Client-side tool calls for calendar/todo/pomodoro actions
+//   - vapiService.stop() ends session, mic returns to wake word listener
+//
+// Opt-in via VITE_VAPI_PUBLIC_KEY env variable.
+// When the key is absent, the existing custom pipeline is used as fallback.
+
+import Vapi from '@vapi-ai/web';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface VapiCallbacks {
+  /** User speech transcript (partial or final) */
+  onUserTranscript?: (text: string, isFinal: boolean) => void;
+  /** Assistant speech transcript (what she's saying) */
+  onAssistantTranscript?: (text: string, isFinal: boolean) => void;
+  /** User started speaking */
+  onUserSpeechStart?: () => void;
+  /** User stopped speaking */
+  onUserSpeechEnd?: () => void;
+  /** Call has connected and is active */
+  onCallStart?: () => void;
+  /** Call has ended (either side) */
+  onCallEnd?: () => void;
+  /** A tool/function call from the LLM — return result string */
+  onToolCall?: (name: string, args: Record<string, any>) => Promise<string>;
+  /** Error occurred */
+  onError?: (error: any) => void;
+}
+
+export interface VapiSessionOptions {
+  /** Dynamic system prompt with calendar context */
+  systemPrompt: string;
+  /** First message Mally says when the call starts */
+  firstMessage?: string;
+}
+
+// ─── Mally Tool Definitions ──────────────────────────────────────────────────
+
+function buildMallyTools(): any[] {
+  return [
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Let me create that event for you.' },
+        { type: 'request-complete', content: 'Done!' },
+        { type: 'request-failed', content: 'Sorry, I had trouble creating that event.' },
+      ],
+      function: {
+        name: 'create_event',
+        description: 'Create a new calendar event for the user. Use ISO8601 datetime format for start and end.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Event title/name' },
+            start: { type: 'string', description: 'Start datetime in ISO8601 format' },
+            end: { type: 'string', description: 'End datetime in ISO8601 format' },
+            isRecurring: { type: 'boolean', description: 'Whether the event repeats regularly' },
+          },
+          required: ['title', 'start', 'end'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Updating that event now.' },
+        { type: 'request-complete', content: 'Updated!' },
+        { type: 'request-failed', content: "I couldn't update that event." },
+      ],
+      function: {
+        name: 'update_event',
+        description: 'Update an existing calendar event (title, start, or end time)',
+        parameters: {
+          type: 'object',
+          properties: {
+            eventId: { type: 'string', description: 'ID of the event to update' },
+            title: { type: 'string', description: 'New title (optional)' },
+            start: { type: 'string', description: 'New start datetime in ISO8601 (optional)' },
+            end: { type: 'string', description: 'New end datetime in ISO8601 (optional)' },
+          },
+          required: ['eventId'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Adding that to your list.' },
+        { type: 'request-complete', content: 'Added!' },
+      ],
+      function: {
+        name: 'create_todo',
+        description: 'Create a new todo/task item',
+        parameters: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'The todo item text' },
+            listName: { type: 'string', description: 'Which list to add it to (optional)' },
+          },
+          required: ['text'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'create_alarm',
+        description: 'Set an alarm at a specific time',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Alarm label' },
+            time: { type: 'string', description: 'Time in HH:mm format (24 hour)' },
+          },
+          required: ['title', 'time'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'start_pomodoro',
+        description: 'Start a pomodoro focus timer',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'stop_pomodoro',
+        description: 'Stop the current pomodoro timer',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  ];
+}
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
+class MallyVapiService {
+  private vapi: Vapi | null = null;
+  private callbacks: VapiCallbacks = {};
+  private _isActive = false;
+  private _isPreWarming = false;  // WebRTC handshake in progress (background)
+  private _preWarmed = false;     // Connection ready, mic muted, waiting to activate
+  private _isSpeaking = false;
+  private _speakingTimer: ReturnType<typeof setTimeout> | null = null;
+  private _onSpeakingChange: ((speaking: boolean) => void) | null = null;
+  private _eventsAttached = false;
+
+  // ── Getters ──
+
+  get isAvailable(): boolean { return !!(import.meta.env.VITE_VAPI_PUBLIC_KEY); }
+  get isActive(): boolean { return this._isActive; }
+  get isSpeaking(): boolean { return this._isSpeaking; }
+  /** True when pre-warm connected and ready — next startSession() will be instant */
+  get isPreWarmed(): boolean { return this._preWarmed; }
+
+  // ── Callbacks ──
+
+  onSpeakingChange(cb: ((speaking: boolean) => void) | null) {
+    this._onSpeakingChange = cb;
+  }
+
+  setCallbacks(cb: VapiCallbacks) {
+    this.callbacks = cb;
+  }
+
+  // ── Internal ──
+
+  private setSpeaking(v: boolean) {
+    if (this._isSpeaking !== v) {
+      this._isSpeaking = v;
+      this._onSpeakingChange?.(v);
+    }
+  }
+
+  private ensureVapi(): Vapi {
+    if (!this.vapi) {
+      const key = import.meta.env.VITE_VAPI_PUBLIC_KEY;
+      if (!key) throw new Error('VITE_VAPI_PUBLIC_KEY not configured');
+      this.vapi = new Vapi(key);
+    }
+    if (!this._eventsAttached) {
+      this.attachEventHandlers();
+      this._eventsAttached = true;
+    }
+    return this.vapi;
+  }
+
+  private attachEventHandlers() {
+    const v = this.vapi!;
+
+    v.on('call-start', () => {
+      this._isActive = true;
+      if (this._isPreWarming) {
+        // Background pre-warm connected — mute immediately, mark ready
+        console.log('[MallyVapi] ✓ Pre-warm ready — instant activation available');
+        this._preWarmed = true;
+        this._isPreWarming = false;
+        v.setMuted(true); // Silent standby — no audio until user activates
+      } else {
+        console.log('[MallyVapi] Call started');
+        this.callbacks.onCallStart?.();
+      }
+    });
+
+    v.on('call-end', () => {
+      const wasPreWarm = this._preWarmed || this._isPreWarming;
+      this._isActive = false;
+      this._preWarmed = false;
+      this._isPreWarming = false;
+      this.setSpeaking(false);
+      if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
+      if (wasPreWarm) {
+        // Pre-warm timed out — quietly restart so next activation stays instant
+        console.log('[MallyVapi] Pre-warm timed out, re-warming...');
+        setTimeout(() => this.preWarm(), 3000);
+      } else {
+        console.log('[MallyVapi] Call ended');
+        this.callbacks.onCallEnd?.();
+      }
+    });
+
+    v.on('speech-start', () => {
+      if (this._preWarmed) return; // Ignore during standby
+      this.setSpeaking(false);
+      if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
+      this.callbacks.onUserSpeechStart?.();
+    });
+
+    v.on('speech-end', () => {
+      if (this._preWarmed) return;
+      this.callbacks.onUserSpeechEnd?.();
+    });
+
+    v.on('message', (msg: any) => {
+      if (this._preWarmed) return; // Ignore all messages during standby
+      this.handleMessage(msg);
+    });
+
+    v.on('error', (err: any) => {
+      if (this._isPreWarming) {
+        console.warn('[MallyVapi] Pre-warm error (non-critical):', err);
+        this._isPreWarming = false;
+        this._preWarmed = false;
+        return;
+      }
+      console.error('[MallyVapi] Error:', err);
+      this.callbacks.onError?.(err);
+    });
+  }
+
+  private handleMessage(msg: any) {
+    switch (msg.type) {
+      case 'transcript': {
+        if (msg.role === 'user') {
+          this.callbacks.onUserTranscript?.(msg.transcript, msg.transcriptType === 'final');
+        } else if (msg.role === 'assistant') {
+          this.setSpeaking(true);
+          if (this._speakingTimer) clearTimeout(this._speakingTimer);
+          this._speakingTimer = setTimeout(() => this.setSpeaking(false), 1500);
+          this.callbacks.onAssistantTranscript?.(msg.transcript, msg.transcriptType === 'final');
+        }
+        break;
+      }
+      case 'function-call': {
+        this.handleToolCall(msg.functionCall);
+        break;
+      }
+      case 'tool-calls': {
+        for (const call of (msg.toolCallList || msg.toolCalls || [])) {
+          this.handleToolCall(call);
+        }
+        break;
+      }
+      case 'hang': {
+        console.log('[MallyVapi] Assistant initiated hang-up');
+        break;
+      }
+    }
+  }
+
+  private async handleToolCall(call: any) {
+    if (!call) return;
+    const name = call?.function?.name || call?.name;
+    if (!name) return;
+
+    let args: Record<string, any> = {};
+    try {
+      const raw = call?.function?.arguments ?? call?.arguments ?? '{}';
+      args = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch { args = {}; }
+
+    console.log('[MallyVapi] Tool call:', name, args);
+
+    let result = 'Done';
+    if (this.callbacks.onToolCall) {
+      try { result = await this.callbacks.onToolCall(name, args); }
+      catch (e: any) { result = `Error: ${e?.message || 'Unknown error'}`; }
+    }
+
+    try {
+      this.vapi?.send({
+        type: 'add-message',
+        message: { role: 'tool', content: result, tool_call_id: call?.id || `tool_${Date.now()}` } as any,
+        triggerResponseEnabled: true,
+      });
+    } catch (e) { console.warn('[MallyVapi] Failed to send tool result:', e); }
+  }
+
+  // ── Public API ──
+
+  /**
+   * Pre-warm: establish WebRTC in background BEFORE "Hey Mally" is spoken.
+   * When startSession() is called next, connection is already live → instant activation.
+   * Call this: on user login, after each session ends.
+   */
+  async preWarm(): Promise<void> {
+    if (!this.isAvailable) return;
+    if (this._isActive || this._isPreWarming || this._preWarmed) return;
+
+    console.log('[MallyVapi] Pre-warming WebRTC connection...');
+    this._isPreWarming = true;
+    const vapi = this.ensureVapi();
+
+    try {
+      await vapi.start({
+        name: 'Mally-Standby',
+        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+        model: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          // Full tools pre-loaded — so they're instantly available on activation
+          tools: buildMallyTools(),
+          messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
+          temperature: 0.7,
+          maxTokens: 300,
+        },
+        voice: { provider: 'vapi', voiceId: 'Elliot' },
+        silenceTimeoutSeconds: 120, // Stay alive for up to 2 min
+        maxDurationSeconds: 180,
+        backgroundSound: 'off',
+        // Must include full clientMessages now — these can't be changed after session starts.
+        // Standby ignores them (guarded by _preWarmed flag), real session uses them all.
+        clientMessages: [
+          'conversation-update', 'function-call', 'hang', 'speech-update',
+          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
+        ] as any,
+      } as any);
+      // call-start handler will mute mic and set _preWarmed = true
+    } catch (err) {
+      console.warn('[MallyVapi] Pre-warm failed (will cold-start on activation):', err);
+      this._isPreWarming = false;
+      this._preWarmed = false;
+    }
+  }
+
+  /** Activate the pre-warmed session with full context — no WebRTC delay */
+  private activatePreWarmed(options: VapiSessionOptions): void {
+    const vapi = this.vapi!;
+    this._preWarmed = false; // No longer in standby
+
+    // Inject the full context system prompt
+    try {
+      vapi.send({
+        type: 'add-message',
+        message: { role: 'system', content: options.systemPrompt } as any,
+      });
+    } catch (e) {
+      console.warn('[MallyVapi] Could not inject system prompt:', e);
+    }
+
+    // Un-mute → user can now speak, Vapi is live
+    vapi.setMuted(false);
+
+    // Fire onCallStart so the component shows the overlay as ready
+    this.callbacks.onCallStart?.();
+  }
+
+  /** Start a voice session — instant if pre-warmed, otherwise cold-starts WebRTC */
+  async startSession(options: VapiSessionOptions): Promise<void> {
+    // ── Fast path: pre-warm connection already live ──
+    if (this._preWarmed && this._isActive && this.vapi) {
+      console.log('[MallyVapi] ✓ Instant activation via pre-warm');
+      this.activatePreWarmed(options);
+      return;
+    }
+
+    // ── Cold start: establish WebRTC from scratch ──
+    const vapi = this.ensureVapi();
+    try {
+      await vapi.start({
+        name: 'Mally',
+        ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+        model: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: options.systemPrompt }],
+          tools: buildMallyTools(),
+          temperature: 0.7,
+          maxTokens: 300,
+        },
+        voice: { provider: 'vapi', voiceId: 'Elliot' },
+        silenceTimeoutSeconds: 30,
+        maxDurationSeconds: 300,
+        backgroundSound: 'off',
+        clientMessages: [
+          'conversation-update', 'function-call', 'hang', 'speech-update',
+          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
+        ],
+      } as any);
+    } catch (err: any) {
+      console.error('[MallyVapi] Failed to start session:', err);
+      this.callbacks.onError?.(err);
+      throw err;
+    }
+  }
+
+  /** Stop the current voice session */
+  stop() {
+    if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
+    this.setSpeaking(false);
+    this._preWarmed = false;
+    this._isPreWarming = false;
+    try { this.vapi?.stop(); } catch {}
+    this._isActive = false;
+  }
+
+  setMuted(muted: boolean) { this.vapi?.setMuted(muted); }
+  isMuted(): boolean { return this.vapi?.isMuted() ?? false; }
+  say(message: string) { this.vapi?.say(message, false, true); }
+}
+
+export const mallyVapi = new MallyVapiService();

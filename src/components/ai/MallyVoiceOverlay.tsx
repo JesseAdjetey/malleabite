@@ -9,6 +9,7 @@ interface MallyVoiceOverlayProps {
   isListening: boolean;
   isSpeaking: boolean;
   isProcessing: boolean;
+  isConnecting?: boolean; // True while Vapi WebRTC session is being established
   transcript: string;
   responseText: string;
   onClose: () => void;
@@ -119,6 +120,7 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
   isListening,
   isSpeaking,
   isProcessing,
+  isConnecting = false,
   transcript,
   responseText,
   onClose,
@@ -182,13 +184,13 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
           transition={{ duration: 0.3 }}
           className="fixed inset-0 z-[100] flex flex-col items-center justify-center"
         >
-          {/* Background blur overlay */}
+          {/* Background blur overlay — tap to interrupt while speaking, close when idle */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-white/80 dark:bg-black/70 backdrop-blur-2xl"
-            onClick={onClose}
+            onClick={isSpeaking && onInterrupt ? onInterrupt : onClose}
           />
 
           {/* Close button */}
@@ -221,7 +223,7 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
               <MallyOrb
                 isListening={isListening}
                 isSpeaking={isSpeaking}
-                isProcessing={isProcessing}
+                isProcessing={isProcessing || isConnecting}
               />
             </motion.div>
 
@@ -242,7 +244,12 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
                   </span>
                 </div>
               )}
-              {isProcessing && (
+              {isConnecting && (
+                <span className="text-sm font-medium text-purple-600 dark:text-purple-400 animate-pulse">
+                  Connecting...
+                </span>
+              )}
+              {!isConnecting && isProcessing && (
                 <span className="text-sm font-medium text-purple-600 dark:text-purple-400 animate-pulse">
                   Thinking...
                 </span>
@@ -257,7 +264,7 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
                   </span>
                 </div>
               )}
-              {!isListening && !isProcessing && !isSpeaking && (
+              {!isListening && !isProcessing && !isSpeaking && !isConnecting && (
                 <span className="text-sm text-muted-foreground">
                   Say something...
                 </span>
@@ -305,7 +312,7 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
               transition={{ delay: 1 }}
               className="text-xs text-muted-foreground/60 mt-4"
             >
-              Tap anywhere or say "Goodbye" to close
+              {isSpeaking ? 'Tap anywhere to interrupt' : 'Say "Goodbye" to close · tap \u00D7 to dismiss'}
             </motion.p>
           </div>
         </motion.div>

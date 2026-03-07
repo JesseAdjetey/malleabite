@@ -119,7 +119,25 @@ class MallyTTSService {
 
   get isSpeaking() { return this._isSpeaking; }
   onSpeakingChange(cb: (speaking: boolean) => void) { this._onSpeakingChange = cb; }
-  private setSpeaking(v: boolean) { this._isSpeaking = v; this._onSpeakingChange?.(v); }
+
+  /** Register a one-shot callback invoked when TTS transitions from speaking → not speaking.
+   *  This is more reliable than using useEffect edge detection on isSpeaking.
+   *  The callback is automatically cleared after firing. Call again to register a new one. */
+  private _onCompleteCallback: (() => void) | null = null;
+  onComplete(cb: (() => void) | null) { this._onCompleteCallback = cb; }
+
+  private setSpeaking(v: boolean) {
+    const wasSpeaking = this._isSpeaking;
+    this._isSpeaking = v;
+    this._onSpeakingChange?.(v);
+    // Fire one-shot completion callback when speaking → not speaking
+    if (wasSpeaking && !v && this._onCompleteCallback) {
+      const cb = this._onCompleteCallback;
+      this._onCompleteCallback = null;
+      // Slight delay ensures audio pipeline is fully released before mic acquisition
+      setTimeout(cb, 50);
+    }
+  }
 
   // ── Private helpers ────────────────────────────────────────────────────────
 

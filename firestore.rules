@@ -296,8 +296,7 @@ service cloud.firestore {
 
     // Notification Preferences
     match /notification_preferences/{prefId} {
-      allow get: if request.auth != null
-        && (resource == null || resource.data.userId == request.auth.uid);
+      allow get: if request.auth != null && prefId == request.auth.uid;
       allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner();
@@ -308,7 +307,7 @@ service cloud.firestore {
     // Scheduled Notifications
     match /scheduled_notifications/{notifId} {
       allow get: if request.auth != null
-        && (resource == null || resource.data.userId == request.auth.uid);
+        && resource.data.userId == request.auth.uid;
       allow list: if isOwner(resource.data.userId);
       allow delete: if isOwner(resource.data.userId);
       allow create: if isValidOwner();

@@ -3,8 +3,8 @@
 //
 // Architecture:
 //   - Wake word (Porcupine) triggers vapiService.startSession() → full-duplex conversation
-//   - Vapi handles: STT (Deepgram) → LLM (GPT-4o-mini) → TTS (Vapi/ElevenLabs) → VAD/barge-in
-//   - Client-side tool calls for calendar/todo/pomodoro actions
+//   - Vapi handles: STT (Deepgram) → LLM (GPT-4o) → TTS (Vapi/ElevenLabs) → VAD/barge-in
+//   - Client-side tool calls for calendar/todo/pomodoro + real-time data (weather/stocks/flights/search)
 //   - vapiService.stop() ends session, mic returns to wake word listener
 //
 // Opt-in via VITE_VAPI_PUBLIC_KEY env variable.
@@ -136,6 +136,226 @@ function buildMallyTools(): any[] {
         name: 'stop_pomodoro',
         description: 'Stop the current pomodoro timer',
         parameters: { type: 'object', properties: {} },
+      },
+    },
+    // ── Real-time data tools ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Let me look that up for you.' },
+        { type: 'request-complete', content: 'Got it!' },
+        { type: 'request-failed', content: 'Sorry, I had trouble searching for that.' },
+      ],
+      function: {
+        name: 'search_web',
+        description: 'Search the internet for current information, news, facts, or any topic the user asks about.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'The search query' },
+          },
+          required: ['query'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: "Checking the weather now." },
+        { type: 'request-complete', content: "Here's the weather." },
+        { type: 'request-failed', content: "I couldn't get the weather at the moment." },
+      ],
+      function: {
+        name: 'get_weather',
+        description: 'Get current weather conditions for a city or location.',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string', description: 'City name, e.g. "London" or "New York, US"' },
+          },
+          required: ['location'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: "Pulling up that stock price." },
+        { type: 'request-complete', content: "Here are the numbers." },
+        { type: 'request-failed', content: "I couldn't get that stock price right now." },
+      ],
+      function: {
+        name: 'get_stock_price',
+        description: 'Get the current stock price and key metrics for a ticker symbol.',
+        parameters: {
+          type: 'object',
+          properties: {
+            symbol: { type: 'string', description: 'Stock ticker symbol, e.g. "AAPL", "TSLA", "GOOGL"' },
+          },
+          required: ['symbol'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: "Let me check that flight." },
+        { type: 'request-complete', content: "Here's the flight status." },
+        { type: 'request-failed', content: "I couldn't get that flight info right now." },
+      ],
+      function: {
+        name: 'get_flight_status',
+        description: 'Get the real-time status, departure, and arrival info for a flight.',
+        parameters: {
+          type: 'object',
+          properties: {
+            flight_number: { type: 'string', description: 'IATA flight number, e.g. "BA142", "AA100"' },
+          },
+          required: ['flight_number'],
+        },
+      },
+    },
+    // ── Event management ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Deleting that event.' },
+        { type: 'request-complete', content: 'Deleted.' },
+        { type: 'request-failed', content: "I couldn't delete that event." },
+      ],
+      function: {
+        name: 'delete_event',
+        description: 'Delete a calendar event by its ID.',
+        parameters: {
+          type: 'object',
+          properties: {
+            eventId: { type: 'string', description: 'The ID of the event to delete' },
+          },
+          required: ['eventId'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Moving that event.' },
+        { type: 'request-complete', content: 'Rescheduled!' },
+        { type: 'request-failed', content: "I couldn't reschedule that." },
+      ],
+      function: {
+        name: 'reschedule_event',
+        description: 'Move an existing event to a new date/time.',
+        parameters: {
+          type: 'object',
+          properties: {
+            eventId: { type: 'string', description: 'The ID of the event to reschedule' },
+            newStart: { type: 'string', description: 'New start datetime in ISO8601 format' },
+            newEnd: { type: 'string', description: 'New end datetime in ISO8601 format (optional)' },
+          },
+          required: ['eventId', 'newStart'],
+        },
+      },
+    },
+    // ── Todo management ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Marking that as done.' },
+        { type: 'request-complete', content: 'Completed!' },
+      ],
+      function: {
+        name: 'complete_todo',
+        description: 'Mark a todo item as completed.',
+        parameters: {
+          type: 'object',
+          properties: {
+            todoId: { type: 'string', description: 'The ID of the todo to complete' },
+          },
+          required: ['todoId'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Deleting that todo.' },
+        { type: 'request-complete', content: 'Deleted.' },
+      ],
+      function: {
+        name: 'delete_todo',
+        description: 'Delete a todo item.',
+        parameters: {
+          type: 'object',
+          properties: {
+            todoId: { type: 'string', description: 'The ID of the todo to delete' },
+          },
+          required: ['todoId'],
+        },
+      },
+    },
+    // ── Eisenhower / Priority Matrix ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Adding that to your priority matrix.' },
+        { type: 'request-complete', content: 'Added!' },
+      ],
+      function: {
+        name: 'create_eisenhower',
+        description: 'Add an item to the Eisenhower priority matrix.',
+        parameters: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: 'The task description' },
+            quadrant: {
+              type: 'string',
+              enum: ['urgent-important', 'not-urgent-important', 'urgent-not-important', 'not-urgent-not-important'],
+              description: 'Which quadrant to place this item in',
+            },
+          },
+          required: ['text', 'quadrant'],
+        },
+      },
+    },
+    // ── Goals ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Creating that goal.' },
+        { type: 'request-complete', content: 'Goal created!' },
+      ],
+      function: {
+        name: 'create_goal',
+        description: 'Create a new goal for the user to track.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Goal title' },
+            category: { type: 'string', description: 'Category e.g. health, work, learning, personal' },
+            frequency: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'How often to track progress' },
+            target: { type: 'number', description: 'Target count per frequency period' },
+          },
+          required: ['title'],
+        },
+      },
+    },
+    // ── Alarm management ──
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Deleting that alarm.' },
+        { type: 'request-complete', content: 'Alarm deleted.' },
+      ],
+      function: {
+        name: 'delete_alarm',
+        description: 'Delete an alarm by its ID.',
+        parameters: {
+          type: 'object',
+          properties: {
+            alarmId: { type: 'string', description: 'The ID of the alarm to delete' },
+          },
+          required: ['alarmId'],
+        },
       },
     },
   ];
@@ -363,7 +583,7 @@ class MallyVapiService {
         transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
         model: {
           provider: 'openai',
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',  // upgraded from gpt-4o-mini
           // Full tools pre-loaded — so they're instantly available on activation
           tools: buildMallyTools(),
           messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
@@ -477,7 +697,7 @@ class MallyVapiService {
         transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
         model: {
           provider: 'openai',
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',  // upgraded from gpt-4o-mini
           messages: [{ role: 'system', content: options.systemPrompt }],
           tools: buildMallyTools(),
           temperature: 0.7,

@@ -16,17 +16,38 @@ const SESSION_TTL_MS = 15 * 60 * 1000; // 15 min — pending actions expire
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface PendingAction {
-  type: 'create_event' | 'create_todo';
+  type:
+    | 'create_event'
+    | 'update_event'
+    | 'delete_event'
+    | 'create_todo'
+    | 'complete_todo'
+    | 'delete_todo'
+    | 'create_alarm'
+    | 'delete_alarm'
+    | 'create_eisenhower'
+    | 'create_goal';
   // Event fields
   title?: string;
   start?: string;   // ISO string
-  end?: string;      // ISO string
+  end?: string;     // ISO string
   description?: string;
   isAllDay?: boolean;
+  eventId?: string; // for update/delete_event
   // Todo fields
   text?: string;
   listId?: string;    // resolved list ID (or null for default)
   listName?: string;  // human-readable list name
+  todoId?: string;    // for complete/delete_todo
+  // Alarm fields
+  time?: string;      // e.g. "08:00"
+  alarmId?: string;   // for delete_alarm
+  // Eisenhower fields
+  quadrant?: 'urgent-important' | 'not-urgent-important' | 'urgent-not-important' | 'not-urgent-not-important';
+  // Goal fields
+  category?: string;
+  frequency?: 'daily' | 'weekly' | 'monthly';
+  target?: number;
 }
 
 export interface ChatMessage {
@@ -39,8 +60,8 @@ interface SessionData {
   pendingAction?: PendingAction | null;
   chatHistory?: ChatMessage[] | null;
   lastCreatedId?: string | null;       // Firestore doc ID of last created item
-  lastCreatedType?: 'event' | 'todo' | null;
-  lastCreatedCollection?: string | null; // 'calendar_events' or 'todo_items' or 'todos'
+  lastCreatedType?: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal' | null;
+  lastCreatedCollection?: string | null;
   updatedAt: number;
 }
 
@@ -129,7 +150,7 @@ export async function clearChatHistory(phone: string): Promise<void> {
 export async function setLastCreated(
   phone: string,
   docId: string,
-  type: 'event' | 'todo',
+  type: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal',
   collection: string
 ): Promise<void> {
   await db().collection(SESSIONS).doc(phone).set(

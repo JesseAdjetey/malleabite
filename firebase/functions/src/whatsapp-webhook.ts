@@ -14,6 +14,16 @@ const whatsappAccessToken = defineSecret('WHATSAPP_ACCESS_TOKEN');
 const whatsappVerifyToken = defineSecret('WHATSAPP_VERIFY_TOKEN');
 const whatsappPhoneNumberId = defineSecret('WHATSAPP_PHONE_NUMBER_ID');
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
+// Real-time data secrets — declare here, add to secrets[] after setting them in Secret Manager:
+//   firebase functions:secrets:set OPENWEATHER_API_KEY
+//   firebase functions:secrets:set ALPHAVANTAGE_API_KEY
+//   firebase functions:secrets:set AVIATIONSTACK_API_KEY
+//   firebase functions:secrets:set BRAVE_SEARCH_API_KEY
+// Then uncomment and add to the secrets array below.
+// const openweatherApiKey = defineSecret('OPENWEATHER_API_KEY');
+// const alphaVantageApiKey = defineSecret('ALPHAVANTAGE_API_KEY');
+// const aviationstackApiKey = defineSecret('AVIATIONSTACK_API_KEY');
+// const braveSearchApiKey = defineSecret('BRAVE_SEARCH_API_KEY');
 
 /**
  * Main WhatsApp webhook endpoint.

@@ -19,8 +19,17 @@ export { processSchedulingStream } from './scheduling';
 // Export WhatsApp Bot handlers
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 
+// Export Google Calendar OAuth handlers
+export {
+  getGoogleCalendarAuthUrl,
+  googleCalendarOAuthCallback,
+  refreshGoogleCalendarAccessToken,
+  listGoogleCalendarsForAccount,
+} from './google-calendar-oauth';
+
 // Initialize Firebase Admin
 admin.initializeApp();
+admin.firestore().settings({ ignoreUndefinedProperties: true });
 
 // Define the Gemini API key secret
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
@@ -723,13 +732,13 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
     - Create/update/delete calendar groups and individual calendars.
     - Move calendars between groups.
 
-22. CALENDAR TEMPLATES (WEEKLY PATTERNS):
+22. CALENDAR TEMPLATES (WEEKLY PATTERNS) — CRITICAL:
     - Templates are reusable weekly schedules containing multiple events (e.g. "Work Week", "Gym Routine").
-    - Each template event has a dayOfWeek (0=Sun..6=Sat), startTime, endTime, title, color.
-    - TWO creation flows:
-      a) FULL — user provides all events → use create_calendar_template with the events array.
-      b) INCREMENTAL — user builds gradually → first create_calendar_template with an empty or partial events array, then add_template_event one at a time.
-    - When creating, suggest a target group ("Work", "Personal", etc.) from CALENDAR_GROUPS. The user can override.
+    - Each template event has a dayOfWeek (0=Sun..6=Sat as INTEGER), startTime ("HH:mm"), endTime ("HH:mm"), title, color.
+    - **ALWAYS USE THE FULL FLOW**: Include ALL events in the events array of create_calendar_template. Do NOT create empty templates.
+    - Example: create_calendar_template with events: [{ title: "Math", dayOfWeek: 1, startTime: "09:00", endTime: "10:00" }, ...]
+    - dayOfWeek MUST be a number: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+    - ALWAYS set groupName from CALENDAR_GROUPS to assign the template to a group.
     - After creating a template, ASK the user if they want to apply it now. Do NOT auto-apply.
     - Applying a template (apply_calendar_template) creates recurring weekly events starting from the current week.
     - Check CALENDAR_TEMPLATES in context so you know what templates already exist.
@@ -808,6 +817,19 @@ ${bookingContext}
 
 SNAPSHOTS:
 ${snapshotContext}
+
+CALENDAR_TEMPLATES:
+${(() => {
+  const tmplCtx = (clientContext as any)?.calendarTemplates || [];
+  return tmplCtx.length > 0
+    ? tmplCtx.map((t: any) => {
+        const evtList = t.events && t.events.length > 0
+          ? t.events.map((e: any) => `      - "${e.title}" (day ${e.dayOfWeek}, ${e.startTime}-${e.endTime})`).join('\n')
+          : '      (no events)';
+        return `  - [ID: ${t.id}] "${t.name}" (${t.eventCount} events, ${t.isActive ? 'active' : 'inactive'}, group: ${t.targetGroupId || 'none'})\n${evtList}`;
+      }).join('\n')
+    : '  (no templates)';
+})()}
 
 WORKING_HOURS:
 ${workingHoursCtx ? JSON.stringify(workingHoursCtx) : '  (not configured)'}

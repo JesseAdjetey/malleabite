@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signing in…</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #fafafa; color: #333; }
+    .card { text-align: center; padding: 2rem; }
+    .spinner { width: 24px; height: 24px; border: 3px solid #e5e5e5; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.6s linear infinite; margin: 0 auto 1rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .success { color: #16a34a; }
+    .error { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner" id="spinner"></div>
+    <p id="status">Completing sign-in…</p>
+  </div>
+  <script>
+    (function () {
+      var statusEl = document.getElementById('status');
+      var spinnerEl = document.getElementById('spinner');
+
+      // The access token arrives in the URL hash fragment after Google redirects
+      var hash = window.location.hash.substring(1);
+      var params = new URLSearchParams(hash);
+      var accessToken = params.get('access_token');
+      var expiresIn = params.get('expires_in');
+      var error = params.get('error');
+      var state = params.get('state');
+
+      var channel;
+      try { channel = new BroadcastChannel('malleabite-oauth'); } catch (e) { /* unsupported */ }
+
+      if (error) {
+        spinnerEl.style.display = 'none';
+        statusEl.className = 'error';
+        statusEl.textContent = error === 'access_denied'
+          ? 'Access was denied. You can close this window.'
+          : 'Sign-in failed: ' + (params.get('error_description') || error);
+        if (channel) {
+          channel.postMessage({ type: 'error', error: error, description: params.get('error_description') || error, state: state });
+          channel.close();
+        }
+      } else if (accessToken) {
+        spinnerEl.style.display = 'none';
+        statusEl.className = 'success';
+        statusEl.textContent = 'Sign-in successful! This window will close shortly.';
+        if (channel) {
+          channel.postMessage({ type: 'success', accessToken: accessToken, expiresIn: parseInt(expiresIn || '3600', 10), state: state });
+          channel.close();
+        }
+        setTimeout(function () { window.close(); }, 1200);
+      } else {
+        spinnerEl.style.display = 'none';
+        statusEl.className = 'error';
+        statusEl.textContent = 'No response received. You can close this window.';
+        if (channel) {
+          channel.postMessage({ type: 'error', error: 'no_token', description: 'No token in redirect URL', state: state });
+          channel.close();
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

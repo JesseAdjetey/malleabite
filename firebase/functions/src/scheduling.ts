@@ -25,7 +25,8 @@ const formatEventsForAI = (events: any[]): string => {
 
 const normalizeActions = (rawActions: any[]) => rawActions.map(op => {
   const type: string = op.type;
-  const data = op.data || {};
+  // Gemini sometimes omits the `data` wrapper — fall back to the op itself
+  const data = op.data || op;
   if (type === 'create_event') {
     return { type, data: { title: data.title, start: data.start, end: data.end, description: data.description || 'Created by Mally', isRecurring: data.isRecurring || false, recurrenceRule: data.recurrenceRule || null } };
   } else if (type === 'move_event' || type === 'update_event') {
@@ -40,6 +41,16 @@ const normalizeActions = (rawActions: any[]) => rawActions.map(op => {
     return { type, data: { folderName: data.folderName || 'Archived Calendar' } };
   } else if (type === 'start_pomodoro' || type === 'stop_pomodoro') {
     return { type, data: {} };
+  } else if (type === 'create_calendar_template') {
+    // Explicitly normalize template creation — guarantee events array exists
+    const events = data.events || data.templateEvents || [];
+    console.log(`[normalizeActions] create_calendar_template: name="${data.name}", events=${events.length}, groupName="${data.groupName}"`);
+    return { type, data: { name: data.name || data.title, description: data.description, groupName: data.groupName || data.group || data.targetGroup, events } };
+  } else if (type === 'add_template_event') {
+    return { type, data: { templateName: data.templateName || data.template || data.name, title: data.title || data.eventTitle, dayOfWeek: data.dayOfWeek ?? data.day, startTime: data.startTime || data.start, endTime: data.endTime || data.end, color: data.color, description: data.description } };
+  } else if (type === 'remove_template_event' || type === 'apply_calendar_template' || type === 'update_calendar_template' || type === 'delete_calendar_template') {
+    // Ensure data wrapper exists
+    return { type, data };
   }
   return op;
 });
@@ -76,8 +87,14 @@ export const processSchedulingStream = onRequest(
       return;
     }
 
-    const { userMessage, userId, context: clientContext, history = [] } = req.body;
+    const { userMessage, userId, context: rawContext, history = [] } = req.body;
     if (!userMessage || !userId) { res.status(400).json({ error: 'Missing fields' }); return; }
+
+    // Parse client context (sent as JSON string from client)
+    let clientContext: any = {};
+    try {
+      clientContext = typeof rawContext === 'string' ? JSON.parse(rawContext) : (rawContext || {});
+    } catch { clientContext = {}; }
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -105,15 +122,33 @@ export const processSchedulingStream = onRequest(
       snap.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
       const eventsContext = formatEventsForAI(events);
 
+      // Build calendar groups context
+      const groupsContext = (clientContext.calendarGroups || []).length > 0
+        ? (clientContext.calendarGroups as any[]).map((g: any) => `- "${g.name}" (id: ${g.id})`).join('\n')
+        : 'No calendar groups.';
+
+      // Build existing templates context
+      const templatesContext = (clientContext.calendarTemplates || []).length > 0
+        ? (clientContext.calendarTemplates as any[]).map((t: any) =>
+          `- "${t.name}" (${t.eventCount} events${t.isActive ? ', active' : ''}${t.targetGroupId ? `, group: ${t.targetGroupId}` : ''})`
+        ).join('\n')
+        : 'No templates yet.';
+
       const genAI = new GoogleGenerativeAI(geminiApiKey.value());
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
       const systemPrompt = `You are Mally, a warm and intelligent scheduling assistant.
-Current Time: ${clientContext?.currentTime || new Date().toISOString()}
-User Timezone: ${clientContext?.timeZone || 'UTC'}
+Current Time: ${clientContext.currentTime || new Date().toISOString()}
+User Timezone: ${clientContext.timeZone || 'UTC'}
 
 EXISTING EVENTS:
 ${eventsContext || 'No events scheduled.'}
+
+CALENDAR_GROUPS (use these names for groupName):
+${groupsContext}
+
+CALENDAR_TEMPLATES (existing templates):
+${templatesContext}
 
 OUTPUT FORMAT — follow this EXACTLY, no deviations:
 
@@ -124,9 +159,32 @@ SPEECH: [Your conversational spoken response — friendly, natural, 1-3 sentence
 CAPABILITIES:
 - Pomodoro: {"type":"start_pomodoro","data":{}} or {"type":"stop_pomodoro","data":{}}
 - Events: {"type":"create_event","data":{"title":"...","start":"ISO8601","end":"ISO8601","isRecurring":false}}
-- Update event: {"type":"update_event","data":{"eventId":"...","start":"ISO8601","end":"ISO8601"}}  
+- Recurring event: {"type":"create_event","data":{"title":"...","start":"ISO8601","end":"ISO8601","isRecurring":true,"recurrenceRule":{"frequency":"weekly","byDay":["MO","WE","FR"]}}}
+- Update event: {"type":"update_event","data":{"eventId":"...","start":"ISO8601","end":"ISO8601"}}
+- Delete event: {"type":"delete_event","data":{"eventId":"..."}}
 - Todos: {"type":"create_todo","data":{"text":"...","listName":"..."}}
+- Todo lists: {"type":"create_todo_list","data":{"name":"..."}}
 - Alarms: {"type":"create_alarm","data":{"title":"...","time":"HH:mm"}}
+- Calendar Templates (weekly patterns) — ALWAYS include ALL events in create_calendar_template:
+  Create full template: {"type":"create_calendar_template","data":{"name":"Work Week","description":"optional","groupName":"Work","events":[{"title":"Standup","dayOfWeek":1,"startTime":"09:00","endTime":"09:15","color":"#3b82f6"}]}}
+  Add event to template: {"type":"add_template_event","data":{"templateName":"...","title":"...","dayOfWeek":0,"startTime":"HH:mm","endTime":"HH:mm"}}
+  Remove event from template: {"type":"remove_template_event","data":{"templateName":"...","eventTitle":"..."}}
+  Apply template to calendar: {"type":"apply_calendar_template","data":{"templateName":"..."}}
+  Update template: {"type":"update_calendar_template","data":{"templateName":"...","name":"new name"}}
+  Delete template: {"type":"delete_calendar_template","data":{"templateName":"..."}}
+- Eisenhower: {"type":"create_eisenhower","data":{"text":"...","quadrant":"urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important"}}
+- Reminders: {"type":"create_reminder","data":{"title":"...","reminderTime":"ISO8601"}}
+- View: {"type":"change_view","data":{"view":"day|week|month"}}
+
+dayOfWeek values: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday. MUST be an integer, never a string.
+
+TEMPLATE RULES (CRITICAL — follow exactly):
+- When user asks to create a template, you MUST include ALL events in the "events" array of a single create_calendar_template action. The "events" array must NOT be empty.
+- Example: {"type":"create_calendar_template","data":{"name":"My Schedule","groupName":"School","events":[{"title":"Math","dayOfWeek":1,"startTime":"09:00","endTime":"10:00"},{"title":"English","dayOfWeek":2,"startTime":"11:00","endTime":"12:00"}]}}
+- ALWAYS set "groupName" to one of the names from CALENDAR_GROUPS above.
+- When user asks to add events to an EXISTING template (listed in CALENDAR_TEMPLATES above), use add_template_event with the template name.
+- When user asks to edit/update template events, use add_template_event or remove_template_event.
+- NEVER create an empty template with no events. If the user's request implies events, include them ALL.
 
 RULES:
 - "start pomodoro" = start timer NOW (no calendar event)
@@ -175,13 +233,18 @@ RULES:
       // Parse actions from accumulated JSON
       let actions: any[] = [], intent = 'general', actionRequired = false;
       try {
-        const jsonPart = (fullText.split('---')[1] || '{}').trim();
-        const parsed = JSON.parse(jsonPart.replace(/```json/g, '').replace(/```/g, ''));
+        // Use everything after the FIRST '---' separator (rejoin in case JSON contains ---)
+        const parts = fullText.split('---');
+        const jsonPart = parts.length > 1 ? parts.slice(1).join('---').trim() : '{}';
+        const cleaned = jsonPart.replace(/```json/g, '').replace(/```/g, '').trim();
+        console.log('[streaming] Raw JSON part (first 1000 chars):', cleaned.slice(0, 1000));
+        const parsed = JSON.parse(cleaned);
         intent = parsed.intent || 'general';
         actionRequired = parsed.actionRequired || false;
         actions = normalizeActions(parsed.actions || []);
+        console.log('[streaming] Normalized actions:', JSON.stringify(actions).slice(0, 2000));
       } catch (e: any) {
-        console.warn('Failed to parse streaming actions JSON:', e.message);
+        console.warn('Failed to parse streaming actions JSON:', e.message, 'fullText length:', fullText.length);
       }
 
       const finalSpeechText = speechText || fullText.split('---')[0].replace(/^SPEECH:\s*/i, '').trim();

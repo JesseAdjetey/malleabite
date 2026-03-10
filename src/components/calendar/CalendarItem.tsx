@@ -15,14 +15,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { springs } from '@/lib/animations';
+import { useDraggable } from '@dnd-kit/core';
 
 interface CalendarItemProps {
   calendar: ConnectedCalendar;
   onToggle: (calendarId: string, isActive: boolean) => void;
   onDelete: (calendarId: string) => void;
   onMoveToGroup?: (calendarId: string) => void;
-  isDragging?: boolean;
-  dragHandleProps?: Record<string, any>;
 }
 
 const CalendarItem: React.FC<CalendarItemProps> = ({
@@ -30,23 +29,24 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
   onToggle,
   onDelete,
   onMoveToGroup,
-  isDragging = false,
-  dragHandleProps,
 }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `calendar:${calendar.id}`,
+    data: { type: 'calendar', calendar },
+  });
+
   const sourceLabel = CALENDAR_SOURCES[calendar.source]?.label || calendar.source;
   const isPersonal = calendar.id === PERSONAL_CALENDAR_ID;
 
   return (
     <motion.div
+      ref={setNodeRef}
       layout
       initial={{ opacity: 0, y: 4 }}
       animate={{
-        opacity: isDragging ? 0.7 : 1,
+        opacity: isDragging ? 0.3 : 1,
         y: 0,
-        scale: isDragging ? 1.02 : 1,
-        boxShadow: isDragging
-          ? '0 8px 20px rgba(0,0,0,0.15)'
-          : '0 0px 0px rgba(0,0,0,0)',
+        scale: 1,
       }}
       exit={{ opacity: 0, y: -4 }}
       transition={springs.gentle}
@@ -54,12 +54,12 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
         'group flex items-center gap-2 py-1.5 px-2 rounded-lg',
         'hover:bg-black/[0.03] dark:hover:bg-white/[0.04]',
         'transition-colors duration-150',
-        isDragging && 'bg-card border border-border shadow-lg z-50'
       )}
     >
       {/* Drag Handle */}
       <div
-        {...dragHandleProps}
+        {...attributes}
+        {...listeners}
         className="opacity-0 group-hover:opacity-40 hover:!opacity-70 cursor-grab active:cursor-grabbing transition-opacity duration-150 flex-shrink-0"
       >
         <GripVertical size={14} className="text-muted-foreground" />

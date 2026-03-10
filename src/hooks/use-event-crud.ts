@@ -60,19 +60,25 @@ export function useEventCRUD() {
     async (event: CalendarEventType) => {
       const response = await updateEvent(event);
 
-      if (bridge) {
+      if (response.success && bridge) {
         try {
           if (event.googleEventId) {
-            await bridge.pushUpdateToGoogle(event);
+            const synced = await bridge.pushUpdateToGoogle(event);
+            if (!synced) {
+              toast.warning('Changes saved locally but could not sync to Google Calendar.');
+            }
           } else {
             // Event is being moved to a Google calendar but doesn't have a Google ID yet — create it
             const googleEventId = await bridge.pushCreateToGoogle(event);
             if (googleEventId) {
               await updateEvent({ ...event, googleEventId });
+            } else {
+              toast.warning('Changes saved locally but could not sync to Google Calendar.');
             }
           }
         } catch (err) {
           logger.error('useEventCRUD', 'Google write-back failed for update', { error: err });
+          toast.warning('Changes saved locally but could not sync to Google Calendar.');
         }
       }
 
@@ -86,9 +92,13 @@ export function useEventCRUD() {
       // If we got an event object, try to push delete to Google first
       if (typeof eventOrId !== 'string' && bridge) {
         try {
-          await bridge.pushDeleteToGoogle(eventOrId);
+          const deleted = await bridge.pushDeleteToGoogle(eventOrId);
+          if (!deleted && eventOrId.googleEventId) {
+            toast.warning('Event removed locally but could not be removed from Google Calendar.');
+          }
         } catch (err) {
           logger.error('useEventCRUD', 'Google delete failed', { error: err });
+          toast.warning('Event removed locally but could not be removed from Google Calendar.');
         }
       }
 

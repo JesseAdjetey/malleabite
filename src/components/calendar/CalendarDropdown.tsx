@@ -22,6 +22,7 @@ import {
   User,
   FileText,
   FolderInput,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { useCalendarGroups } from '@/hooks/use-calendar-groups';
@@ -43,16 +44,22 @@ import { useTemplateEventsLoader, templateCalendarId, TEMPLATE_CALENDAR_PREFIX }
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { springs } from '@/lib/animations';
 import { toast } from 'sonner';
+import { useSyncStatusStore } from '@/lib/stores/sync-status-store';
+import { useGoogleSyncBridgeContext } from '@/contexts/GoogleSyncBridgeContext';
 
 // dnd-kit for group reordering
 import {
   DndContext,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
+  DragOverlay,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -61,6 +68,14 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+// Custom collision: pointerWithin for calendar→group drags, closestCenter for group reordering
+const calendarAwareCollision = (args: any) => {
+  if (args.active?.data?.current?.type === 'calendar') {
+    return pointerWithin(args);
+  }
+  return closestCenter(args);
+};
 
 // ─── Sortable Group Wrapper ────────────────────────────────────────────────
 
@@ -161,6 +176,23 @@ const CalendarDropdown: React.FC = () => {
   const [addCalendarGroupId, setAddCalendarGroupId] = useState<string | undefined>();
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [activeCalendar, setActiveCalendar] = useState<ConnectedCalendar | null>(null);
+  const [overGroupId, setOverGroupId] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
+
+  // Sync status
+  const expiredAccounts = useSyncStatusStore((s) => s.expiredAccounts);
+  const bridge = useGoogleSyncBridgeContext();
+
+  // Unique expired Google account emails that have calendars in our groups
+  const expiredEmails = useMemo(() => {
+    const googleEmails = new Set(
+      calendars
+        .filter(c => c.source === 'google' && c.accountEmail)
+        .map(c => c.accountEmail)
+    );
+    return [...expiredAccounts].filter(e => googleEmails.has(e));
+  }, [expiredAccounts, calendars]);
 
   // Handlers
   const handleEditGroup = useCallback((group: CalendarGroup) => {
@@ -204,12 +236,14 @@ const CalendarDropdown: React.FC = () => {
       selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
       targetGroupId: string;
       accountEmail?: string;
+      googleAccountId?: string;
     }) => {
       const addedCalendars: ConnectedCalendar[] = [];
       for (const cal of result.selectedCalendars) {
         const data = createConnectedCalendar({
           source: result.source,
           groupId: result.targetGroupId,
+          googleAccountId: result.googleAccountId,
           accountEmail: result.accountEmail || user?.email || '',
           name: cal.name,
           color: cal.color,
@@ -314,11 +348,59 @@ const CalendarDropdown: React.FC = () => {
     useSensor(KeyboardSensor)
   );
 
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      if (event.active.data.current?.type === 'calendar') {
+        setActiveCalendar(event.active.data.current.calendar as ConnectedCalendar);
+      }
+    },
+    []
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (active.data.current?.type === 'calendar' && over) {
+        setOverGroupId(over.id.toString());
+      } else if (!over) {
+        setOverGroupId(null);
+      }
+    },
+    []
+  );
+
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
+      setActiveCalendar(null);
+      setOverGroupId(null);
+
       if (!over || active.id === over.id) return;
 
+      // Calendar item drag → move to target group
+      if (active.data.current?.type === 'calendar') {
+        const calendar = active.data.current.calendar as ConnectedCalendar;
+        const targetGroupId = over.id.toString();
+
+        if (!sortedGroups.some(g => g.id === targetGroupId)) return;
+        if (calendar.groupId === targetGroupId) return;
+
+        if (calendar.id.startsWith(TEMPLATE_CALENDAR_PREFIX)) {
+          const templateId = calendar.id.replace(TEMPLATE_CALENDAR_PREFIX, '');
+          if (user?.uid) {
+            import('@/lib/services/calendarService').then(svc =>
+              svc.updateCalendarTemplate(user.uid, templateId, { targetGroupId })
+            );
+          }
+        } else {
+          moveCalendar(calendar.id, targetGroupId);
+        }
+        const targetGroup = sortedGroups.find(g => g.id === targetGroupId);
+        toast.success(`Moved to ${targetGroup?.name || 'group'}`);
+        return;
+      }
+
+      // Group drag → reorder groups
       const oldIndex = sortedGroups.findIndex(g => g.id === active.id);
       const newIndex = sortedGroups.findIndex(g => g.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
@@ -326,7 +408,7 @@ const CalendarDropdown: React.FC = () => {
       const reordered = arrayMove(sortedGroups, oldIndex, newIndex);
       reorderGroups(reordered.map(g => g.id));
     },
-    [sortedGroups, reorderGroups]
+    [sortedGroups, reorderGroups, moveCalendar, user?.uid]
   );
 
   // User display
@@ -402,8 +484,44 @@ const CalendarDropdown: React.FC = () => {
 
                 <Separator className="opacity-50" />
 
+                {/* Reconnect Banner */}
+                {expiredEmails.length > 0 && (
+                  <div className="mx-3 mt-2 mb-1 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                          Google sync disconnected
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {expiredEmails.length === 1
+                            ? `Token expired for ${expiredEmails[0]}`
+                            : `Tokens expired for ${expiredEmails.length} accounts`}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-1.5 h-7 text-[11px] text-amber-700 border-amber-500/30 hover:bg-amber-500/10"
+                          disabled={reconnecting}
+                          onClick={async () => {
+                            if (!bridge) return;
+                            setReconnecting(true);
+                            for (const email of expiredEmails) {
+                              await bridge.reconnectAccount(email);
+                            }
+                            setReconnecting(false);
+                          }}
+                        >
+                          <RefreshCw size={12} className={cn('mr-1', reconnecting && 'animate-spin')} />
+                          {reconnecting ? 'Reconnecting...' : 'Reconnect'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Calendar Groups */}
-                <ScrollArea className="max-h-[360px]">
+                <ScrollArea className="max-h-[50vh]">
                   <div className="py-1.5">
                     {groupsLoading ? (
                       <div className="px-4 py-8 text-center">
@@ -433,7 +551,9 @@ const CalendarDropdown: React.FC = () => {
                     ) : (
                       <DndContext
                         sensors={sensors}
-                        collisionDetection={closestCenter}
+                        collisionDetection={calendarAwareCollision}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
                         onDragEnd={handleDragEnd}
                       >
                         <SortableContext
@@ -455,11 +575,25 @@ const CalendarDropdown: React.FC = () => {
                                   onDeleteCalendar={deleteCalendar}
                                   dragHandleProps={dragHandleProps}
                                   isDragging={isDragging}
+                                  isDropTarget={overGroupId === group.id && activeCalendar?.groupId !== group.id}
                                 />
                               )}
                             </SortableGroup>
                           ))}
                         </SortableContext>
+                        <DragOverlay dropAnimation={null}>
+                          {activeCalendar && (
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border shadow-xl max-w-[240px]">
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: activeCalendar.color }}
+                              />
+                              <span className="text-sm font-medium truncate">
+                                {activeCalendar.name}
+                              </span>
+                            </div>
+                          )}
+                        </DragOverlay>
                       </DndContext>
                     )}
                   </div>

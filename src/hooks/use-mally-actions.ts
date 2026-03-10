@@ -1,5 +1,5 @@
 // Shared AI action handler hook for Mally AI components
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { useTodoLists } from "@/hooks/use-todo-lists";
@@ -178,6 +178,10 @@ export function useMallyActions() {
   // Calendar Templates (weekly patterns) — from Firestore subscription
   const { templates: calendarTemplates, loading: calendarTemplatesLoading } = useTemplateEventsLoader();
 
+  // Cache of recently-created CalendarTemplates so add_template_event can find
+  // them immediately (before the Firestore onSnapshot round-trip updates React state).
+  const recentTemplatesRef = useRef<Map<string, CalendarTemplate>>(new Map());
+
   // ─── Private helpers ───────────────────────────────────────────────────────
 
   /**
@@ -265,8 +269,10 @@ export function useMallyActions() {
 
   const executeAction = useCallback(async (action: { type: string; data: any }): Promise<boolean> => {
     try {
-      console.log('[MallyActions] Executing:', action.type, action.data);
-      const { type, data } = action;
+      console.log('[MallyActions] Executing:', action.type, JSON.stringify(action.data || action).slice(0, 500));
+      const { type } = action;
+      // Gemini sometimes omits the `data` wrapper — fall back to the action itself
+      const data = action.data || action;
 
       switch (type) {
 
@@ -604,100 +610,83 @@ export function useMallyActions() {
           return true;
         }
 
-        // ── Templates (legacy simple EventTemplate) ─────────────────────────
-
-        case 'create_from_template': {
-          if (!data.templateName) return false;
-          const template = templates.find(t =>
-            t.title.toLowerCase().includes((data.templateName as string).toLowerCase())
-          );
-          if (!template) { toast.error(`Template "${data.templateName}" not found`); return false; }
-          const start = data.start ? new Date(data.start) : new Date();
-          const eventData = applyTemplate(template, start);
-          await addEvent(eventData as any);
-          if (eventData.start) setDate(dayjs(eventData.start));
-          await useTemplate(template.id);
-          toast.success(`Created event from "${template.title}" template`);
-          return true;
-        }
-
-        case 'create_template': {
-          if (!data.title) { toast.error('Template title is required'); return false; }
-          // If user has auth, redirect to CalendarTemplate system instead of legacy EventTemplate
-          if (user?.uid && data.events) {
-            return executeAction({ type: 'create_calendar_template', data: { name: data.title, ...data } });
-          }
-          await ensureModuleVisible('templates', 'Templates');
-          const result = await createTemplate({
-            title: data.title,
-            duration: data.duration || 60,
-            category: data.category,
-            color: data.color,
-            location: data.location,
-            notes: data.notes,
-            isAllDay: data.isAllDay || false,
-          });
-          if (result) { toast.success(`Template "${data.title}" created`); return true; }
-          return false;
-        }
-
-        case 'delete_template': {
-          if (!data.templateName && !data.templateId) { toast.error('Template name is required'); return false; }
-          let templateId = data.templateId;
-          if (!templateId && data.templateName) {
-            const found = templates.find(t =>
-              t.title.toLowerCase().includes((data.templateName as string).toLowerCase())
-            );
-            templateId = found?.id;
-          }
-          if (!templateId) { toast.error(`Template "${data.templateName}" not found`); return false; }
-          const result = await deleteTemplate(templateId);
-          if (result?.success) { toast.success('Template deleted'); return true; }
-          return false;
-        }
-
-        // ── Calendar Templates (weekly patterns) ─────────────────────────────
-
+        // Legacy template actions → fall through to CalendarTemplate handlers
+        case 'create_template':
         case 'create_calendar_template': {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
-          if (!data.name) { toast.error('Template name is required'); return false; }
+          const templateName = data.name || data.title;
+          if (!templateName) { toast.error('Template name is required'); return false; }
 
-          // Resolve target group by name
+          console.log('[MallyActions] create_calendar_template raw data:', JSON.stringify(data));
+
+          // Helper: parse dayOfWeek from number OR string like "Monday"
+          const parseDayOfWeek = (v: any): number => {
+            if (typeof v === 'number') return v;
+            if (typeof v === 'string') {
+              const map: Record<string, number> = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
+              const n = map[v.toLowerCase()];
+              if (n !== undefined) return n;
+              const parsed = parseInt(v);
+              if (!isNaN(parsed)) return parsed;
+            }
+            return 1; // default Monday
+          };
+
+          // Resolve target group by name (check multiple possible field names)
           let targetGroupId: string | undefined;
-          if (data.groupName) {
+          const groupNameRaw = data.groupName || data.group || data.targetGroup || data.targetGroupName;
+          if (groupNameRaw) {
             const group = calendarGroups.find(g =>
-              (g as any).name?.toLowerCase() === (data.groupName as string).toLowerCase()
+              g.name?.toLowerCase() === (groupNameRaw as string).toLowerCase()
             );
-            targetGroupId = group?.id;
+            if (group) {
+              targetGroupId = group.id;
+            } else {
+              // Try partial match
+              const partial = calendarGroups.find(g =>
+                g.name?.toLowerCase().includes((groupNameRaw as string).toLowerCase()) ||
+                (groupNameRaw as string).toLowerCase().includes(g.name?.toLowerCase())
+              );
+              if (partial) targetGroupId = partial.id;
+              console.warn('[MallyActions] Group not found by exact match:', groupNameRaw, 'Available:', calendarGroups.map(g => g.name));
+            }
           }
 
-          // Build events array
-          const templateEvents: CalendarTemplateEvent[] = (data.events || []).map((e: any) => ({
-            title: e.title || 'Untitled',
-            description: e.description || undefined,
-            dayOfWeek: e.dayOfWeek ?? 1,
-            startTime: e.startTime || '09:00',
-            endTime: e.endTime || '10:00',
-            color: e.color || '#8B5CF6',
-            isAllDay: e.isAllDay || false,
-            location: e.location || undefined,
-            isRecurring: true,
-            recurrenceRule: {
-              frequency: 'weekly' as const,
-              interval: 1,
-              daysOfWeek: [e.dayOfWeek ?? 1],
-            },
-          }));
+          // Build events array — handle various AI output formats
+          const rawEvents = data.events || [];
+          console.log('[MallyActions] Template events count:', rawEvents.length, 'raw:', JSON.stringify(rawEvents).slice(0, 500));
+          const templateEvents: CalendarTemplateEvent[] = rawEvents.map((e: any) => {
+            const dow = parseDayOfWeek(e.dayOfWeek ?? e.day ?? e.weekday ?? 1);
+            return {
+              title: e.title || e.name || 'Untitled',
+              description: e.description || undefined,
+              dayOfWeek: dow,
+              startTime: e.startTime || e.start || '09:00',
+              endTime: e.endTime || e.end || '10:00',
+              color: e.color || '#8B5CF6',
+              isAllDay: e.isAllDay || e.allDay || false,
+              location: e.location || undefined,
+              isRecurring: true,
+              recurrenceRule: {
+                frequency: 'weekly' as const,
+                interval: 1,
+                daysOfWeek: [dow],
+              },
+            };
+          });
 
           try {
-            await calendarService.createCalendarTemplate(user.uid, {
-              name: data.name,
+            const created = await calendarService.createCalendarTemplate(user.uid, {
+              name: templateName,
               description: data.description || undefined,
               events: templateEvents,
               targetGroupId,
               isActive: false,
             });
-            toast.success(`Template "${data.name}" created with ${templateEvents.length} event${templateEvents.length !== 1 ? 's' : ''}`);
+            // Cache so subsequent add_template_event in the same action batch can find it
+            recentTemplatesRef.current.set(created.id, created);
+            console.log('[MallyActions] Template created:', created.id, 'events:', templateEvents.length, 'group:', targetGroupId);
+            toast.success(`Template "${templateName}" created with ${templateEvents.length} event${templateEvents.length !== 1 ? 's' : ''}`);
             return true;
           } catch (err) {
             console.error('Failed to create calendar template:', err);
@@ -708,33 +697,71 @@ export function useMallyActions() {
 
         case 'add_template_event': {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
-          if (!data.templateName) { toast.error('Template name is required'); return false; }
+          const addTemplateName = data.templateName || data.template || data.name;
+          if (!addTemplateName) { toast.error('Template name is required'); return false; }
+          console.log('[MallyActions] add_template_event raw data:', JSON.stringify(data));
 
-          const tmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+          // Look in React state first, then in the recent-create cache
+          let tmpl = calendarTemplates.find(t =>
+            t.name.toLowerCase().includes((addTemplateName as string).toLowerCase())
           );
-          if (!tmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+          if (!tmpl) {
+            // Check recently-created templates (not yet in Firestore snapshot)
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (cached.name.toLowerCase().includes((addTemplateName as string).toLowerCase())) {
+                tmpl = cached;
+                break;
+              }
+            }
+          }
+          if (!tmpl) {
+            // Last resort: fetch all templates from Firestore directly
+            try {
+              const freshTemplates = await calendarService.getCalendarTemplates(user.uid);
+              tmpl = freshTemplates.find(t =>
+                t.name.toLowerCase().includes((addTemplateName as string).toLowerCase())
+              );
+            } catch { /* ignore */ }
+          }
+          if (!tmpl) { toast.error(`Template "${addTemplateName}" not found`); return false; }
+
+          // Reuse parseDayOfWeek helper
+          const addParseDow = (v: any): number => {
+            if (typeof v === 'number') return v;
+            if (typeof v === 'string') {
+              const map: Record<string, number> = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
+              const n = map[v.toLowerCase()];
+              if (n !== undefined) return n;
+              const parsed = parseInt(v);
+              if (!isNaN(parsed)) return parsed;
+            }
+            return 1;
+          };
+          const addDow = addParseDow(data.dayOfWeek ?? data.day ?? data.weekday ?? 1);
 
           const newEvent: CalendarTemplateEvent = {
-            title: data.title || 'Untitled',
+            title: data.title || data.eventTitle || 'Untitled',
             description: data.description || undefined,
-            dayOfWeek: data.dayOfWeek ?? 1,
-            startTime: data.startTime || '09:00',
-            endTime: data.endTime || '10:00',
+            dayOfWeek: addDow,
+            startTime: data.startTime || data.start || '09:00',
+            endTime: data.endTime || data.end || '10:00',
             color: data.color || '#8B5CF6',
-            isAllDay: data.isAllDay || false,
+            isAllDay: data.isAllDay || data.allDay || false,
             location: data.location || undefined,
             isRecurring: true,
             recurrenceRule: {
               frequency: 'weekly' as const,
               interval: 1,
-              daysOfWeek: [data.dayOfWeek ?? 1],
+              daysOfWeek: [addDow],
             },
           };
 
           try {
             const updatedEvents = [...tmpl.events, newEvent];
             await calendarService.updateCalendarTemplate(user.uid, tmpl.id, { events: updatedEvents });
+            // Update cache so subsequent adds in the same batch see the new event
+            const updatedTmpl = { ...tmpl, events: updatedEvents };
+            recentTemplatesRef.current.set(tmpl.id, updatedTmpl);
             toast.success(`Added "${newEvent.title}" to template "${tmpl.name}"`);
             return true;
           } catch (err) {
@@ -748,9 +775,17 @@ export function useMallyActions() {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
           if (!data.templateName || !data.eventTitle) { toast.error('Template name and event title required'); return false; }
 
-          const rmTmpl = calendarTemplates.find(t =>
+          let rmTmpl = calendarTemplates.find(t =>
             t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
           );
+          if (!rmTmpl) {
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (cached.name.toLowerCase().includes((data.templateName as string).toLowerCase())) {
+                rmTmpl = cached;
+                break;
+              }
+            }
+          }
           if (!rmTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
 
           const filteredEvents = rmTmpl.events.filter(e =>
@@ -772,14 +807,16 @@ export function useMallyActions() {
           }
         }
 
+        case 'create_from_template':
         case 'apply_calendar_template': {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
-          if (!data.templateName) { toast.error('Template name is required'); return false; }
+          const applyName = data.templateName || data.name || data.title;
+          if (!applyName) { toast.error('Template name is required'); return false; }
 
           const applyTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+            t.name.toLowerCase().includes((applyName as string).toLowerCase())
           );
-          if (!applyTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+          if (!applyTmpl) { toast.error(`Template "${applyName}" not found`); return false; }
           if (applyTmpl.events.length === 0) { toast.error('Template has no events to apply'); return false; }
 
           // Resolve group — use override, then template's saved group, then first available
@@ -869,14 +906,16 @@ export function useMallyActions() {
           }
         }
 
+        case 'delete_template':
         case 'delete_calendar_template': {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
-          if (!data.templateName) { toast.error('Template name is required'); return false; }
+          const delName = data.templateName || data.name || data.title;
+          if (!delName) { toast.error('Template name is required'); return false; }
 
           const delTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
+            t.name.toLowerCase().includes((delName as string).toLowerCase())
           );
-          if (!delTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
+          if (!delTmpl) { toast.error(`Template "${delName}" not found`); return false; }
 
           try {
             await calendarService.deleteCalendarTemplate(user.uid, delTmpl.id);
@@ -1785,5 +1824,7 @@ export function useMallyActions() {
     reminders: reminders || [],
     sentInvites: sentInvites || [],
     receivedInvites: receivedInvites || [],
+    templates: templates || [],
+    calendarAccounts,
   };
 }

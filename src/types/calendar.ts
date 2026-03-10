@@ -86,6 +86,7 @@ export interface ConnectedCalendar {
   source: CalendarSource;
   sourceCalendarId: string;    // Google's calendar ID, Microsoft graph ID, etc.
   groupId: string;             // Reference to CalendarGroup
+  googleAccountId?: string;    // Backend-managed Google account record ID
   accountEmail: string;        // Email of the connected account
   accountName: string;         // Display name
   name: string;                // Calendar display name (e.g. "Work Calendar")
@@ -235,6 +236,7 @@ export function createConnectedCalendar(
     source: partial.source,
     sourceCalendarId: partial.sourceCalendarId || '',
     groupId: partial.groupId,
+    googleAccountId: partial.googleAccountId,
     accountEmail: partial.accountEmail,
     accountName: partial.accountName || partial.accountEmail,
     name: partial.name,

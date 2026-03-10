@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
+import { useSettingsStore } from '@/lib/stores/settings-store';
 import { GroupedList, GroupedListHeader, GroupedListItem } from '@/components/ui/grouped-list';
 import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,6 +37,7 @@ const Settings = () => {
     toggleWakeWord,
     error: wakeWordError
   } = useHeyMally();
+  const { aiAutoExecute, setAiAutoExecute } = useSettingsStore();
   const { subscription } = useSubscription();
   const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
@@ -318,6 +320,23 @@ const Settings = () => {
               <p className="text-footnote text-destructive">{wakeWordError}</p>
             </div>
           )}
+
+          {/* AI Behavior */}
+          <GroupedListHeader>AI Behavior</GroupedListHeader>
+          <GroupedList className="mb-6">
+            <div className="flex items-center justify-between px-4 py-4">
+              <div>
+                <div className="text-subheadline font-medium">Auto-execute actions</div>
+                <div className="text-caption1 text-muted-foreground">
+                  {aiAutoExecute ? 'Mally acts immediately' : 'Confirm before Mally acts'}
+                </div>
+              </div>
+              <Switch
+                checked={aiAutoExecute}
+                onCheckedChange={(v) => { haptics.medium(); setAiAutoExecute(v); }}
+              />
+            </div>
+          </GroupedList>
 
           {/* How it works */}
           <GroupedListHeader>How it works</GroupedListHeader>

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.listGoogleCalendarsForAccount = exports.refreshGoogleCalendarAccessToken = exports.googleCalendarOAuthCallback = exports.getGoogleCalendarAuthUrl = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -53,8 +53,15 @@ Object.defineProperty(exports, "processSchedulingStream", { enumerable: true, ge
 var whatsapp_webhook_1 = require("./whatsapp-webhook");
 Object.defineProperty(exports, "whatsappWebhook", { enumerable: true, get: function () { return whatsapp_webhook_1.whatsappWebhook; } });
 Object.defineProperty(exports, "generateWhatsAppLinkCode", { enumerable: true, get: function () { return whatsapp_webhook_1.generateWhatsAppLinkCode; } });
+// Export Google Calendar OAuth handlers
+var google_calendar_oauth_1 = require("./google-calendar-oauth");
+Object.defineProperty(exports, "getGoogleCalendarAuthUrl", { enumerable: true, get: function () { return google_calendar_oauth_1.getGoogleCalendarAuthUrl; } });
+Object.defineProperty(exports, "googleCalendarOAuthCallback", { enumerable: true, get: function () { return google_calendar_oauth_1.googleCalendarOAuthCallback; } });
+Object.defineProperty(exports, "refreshGoogleCalendarAccessToken", { enumerable: true, get: function () { return google_calendar_oauth_1.refreshGoogleCalendarAccessToken; } });
+Object.defineProperty(exports, "listGoogleCalendarsForAccount", { enumerable: true, get: function () { return google_calendar_oauth_1.listGoogleCalendarsForAccount; } });
 // Initialize Firebase Admin
 admin.initializeApp();
+admin.firestore().settings({ ignoreUndefinedProperties: true });
 // Define the Gemini API key secret
 const geminiApiKey = (0, params_1.defineSecret)('GEMINI_API_KEY');
 // Helper to format events for the AI context
@@ -649,13 +656,13 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
     - Create/update/delete calendar groups and individual calendars.
     - Move calendars between groups.
 
-22. CALENDAR TEMPLATES (WEEKLY PATTERNS):
+22. CALENDAR TEMPLATES (WEEKLY PATTERNS) — CRITICAL:
     - Templates are reusable weekly schedules containing multiple events (e.g. "Work Week", "Gym Routine").
-    - Each template event has a dayOfWeek (0=Sun..6=Sat), startTime, endTime, title, color.
-    - TWO creation flows:
-      a) FULL — user provides all events → use create_calendar_template with the events array.
-      b) INCREMENTAL — user builds gradually → first create_calendar_template with an empty or partial events array, then add_template_event one at a time.
-    - When creating, suggest a target group ("Work", "Personal", etc.) from CALENDAR_GROUPS. The user can override.
+    - Each template event has a dayOfWeek (0=Sun..6=Sat as INTEGER), startTime ("HH:mm"), endTime ("HH:mm"), title, color.
+    - **ALWAYS USE THE FULL FLOW**: Include ALL events in the events array of create_calendar_template. Do NOT create empty templates.
+    - Example: create_calendar_template with events: [{ title: "Math", dayOfWeek: 1, startTime: "09:00", endTime: "10:00" }, ...]
+    - dayOfWeek MUST be a number: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+    - ALWAYS set groupName from CALENDAR_GROUPS to assign the template to a group.
     - After creating a template, ASK the user if they want to apply it now. Do NOT auto-apply.
     - Applying a template (apply_calendar_template) creates recurring weekly events starting from the current week.
     - Check CALENDAR_TEMPLATES in context so you know what templates already exist.
@@ -734,6 +741,19 @@ ${bookingContext}
 
 SNAPSHOTS:
 ${snapshotContext}
+
+CALENDAR_TEMPLATES:
+${(() => {
+            const tmplCtx = clientContext?.calendarTemplates || [];
+            return tmplCtx.length > 0
+                ? tmplCtx.map((t) => {
+                    const evtList = t.events && t.events.length > 0
+                        ? t.events.map((e) => `      - "${e.title}" (day ${e.dayOfWeek}, ${e.startTime}-${e.endTime})`).join('\n')
+                        : '      (no events)';
+                    return `  - [ID: ${t.id}] "${t.name}" (${t.eventCount} events, ${t.isActive ? 'active' : 'inactive'}, group: ${t.targetGroupId || 'none'})\n${evtList}`;
+                }).join('\n')
+                : '  (no templates)';
+        })()}
 
 WORKING_HOURS:
 ${workingHoursCtx ? JSON.stringify(workingHoursCtx) : '  (not configured)'}

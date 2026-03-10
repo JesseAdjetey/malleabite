@@ -1,9 +1,14 @@
 // Google Calendar Sync Service
 import { CalendarEventType } from '@/lib/stores/types';
 import { logger } from '@/lib/logger';
+import {
+  FirebaseFunctions,
+  ListGoogleCalendarsResponse,
+} from '@/integrations/firebase/functions';
 import dayjs from 'dayjs';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+const USE_BACKEND_GOOGLE_OAUTH = import.meta.env.VITE_USE_BACKEND_GOOGLE_OAUTH === 'true';
 const GOOGLE_CALENDAR_SCOPES = [
   'openid',
   'email',
@@ -30,11 +35,20 @@ interface GoogleCalendarList {
   }>;
 }
 
+interface GoogleCalendarEventsResponse {
+  items?: GoogleCalendarEvent[];
+  nextPageToken?: string;
+}
+
+export const GOOGLE_SYNC_DAYS_BACK = 365;
+export const GOOGLE_SYNC_DAYS_FORWARD = 365;
+
 // ─── Per-account token storage ─────────────────────────────────────────
 // Supports multiple Google accounts by keying tokens on email.
 // Legacy single-slot keys are migrated on boot.
 
 const TOKEN_MAP_KEY = 'malleabite_gcal_tokens';
+const ACCOUNT_ID_MAP_KEY = 'malleabite_gcal_account_ids';
 const LEGACY_TOKEN_KEY = 'malleabite_gcal_token';
 const LEGACY_EXPIRY_KEY = 'malleabite_gcal_expiry';
 
@@ -44,8 +58,46 @@ interface AccountToken {
   email: string;
 }
 
+interface AccountIdMap {
+  [email: string]: string;
+}
+
 /** In-memory cache — hydrated from localStorage on load */
 let tokenMap: Record<string, AccountToken> = {};
+
+function loadAccountIdMap(): AccountIdMap {
+  try {
+    return JSON.parse(localStorage.getItem(ACCOUNT_ID_MAP_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveAccountIdMap(map: AccountIdMap) {
+  localStorage.setItem(ACCOUNT_ID_MAP_KEY, JSON.stringify(map));
+}
+
+function persistGoogleAccountId(email: string, googleAccountId?: string) {
+  if (!googleAccountId) return;
+  const map = loadAccountIdMap();
+  map[email] = googleAccountId;
+  saveAccountIdMap(map);
+}
+
+function getGoogleAccountId(email?: string): string | null {
+  const map = loadAccountIdMap();
+  if (email) {
+    return map[email] || null;
+  }
+  const firstEntry = Object.values(map)[0];
+  return firstEntry || null;
+}
+
+function clearGoogleAccountId(email: string) {
+  const map = loadAccountIdMap();
+  delete map[email];
+  saveAccountIdMap(map);
+}
 
 function loadTokenMap(): Record<string, AccountToken> {
   try {
@@ -109,11 +161,13 @@ function getAccountToken(email?: string): string | null {
 function clearAccountToken(email: string) {
   delete tokenMap[email];
   saveTokenMap();
+  clearGoogleAccountId(email);
 }
 
 function clearAllTokens() {
   tokenMap = {};
   saveTokenMap();
+  saveAccountIdMap({});
 }
 
 // Back-compat helper used by API functions below
@@ -121,104 +175,229 @@ function getActiveToken(accountEmail?: string): string | null {
   return getAccountToken(accountEmail);
 }
 
-// Guard to prevent re-entrant popup calls
+// ─── Interactive auth state ────────────────────────────────────────────
 let authInProgress = false;
+let gisRequestInProgress = false; // shared mutex with silent refresh
+
+// Reusable GIS token client — singleton to avoid issues with multiple instances
+let cachedTokenClient: any = null;
+let pendingResolve: ((result: GoogleAuthResult) => void) | null = null;
+let pendingReject: ((err: Error) => void) | null = null;
+
+function cleanupAuth() {
+  authInProgress = false;
+  gisRequestInProgress = false;
+  pendingResolve = null;
+  pendingReject = null;
+}
+
+/** Cancel an in-progress interactive auth (called by UI Cancel button). */
+export function cancelGoogleAuth() {
+  if (!authInProgress) return;
+  const reject = pendingReject;
+  cleanupAuth();
+  reject?.(new Error('Authentication was cancelled.'));
+}
+
+function getOrCreateTokenClient(): any {
+  const gis = (window as any).google?.accounts?.oauth2;
+  if (!gis) return null;
+
+  if (cachedTokenClient) return cachedTokenClient;
+
+  cachedTokenClient = gis.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: GOOGLE_CALENDAR_SCOPES,
+    callback: async (response: any) => {
+      gisRequestInProgress = false;
+      console.log('[Google Auth] GIS callback fired', response.error ? `error: ${response.error}` : 'success');
+      try {
+        if (response.error) {
+          pendingReject?.(new Error(response.error_description || response.error));
+          return;
+        }
+        if (!response.access_token) {
+          pendingReject?.(new Error('No access token received from Google'));
+          return;
+        }
+
+        let email = '__unknown__';
+        try {
+          const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${response.access_token}` },
+          }).then(r => r.json());
+          email = userInfo.email || '__unknown__';
+        } catch (e) {
+          console.warn('[Google Auth] Could not fetch user email', e);
+        }
+
+        persistAccountToken(email, response.access_token, response.expires_in || 3600);
+        console.log('[Google Auth] Token stored for', email, '— calling pendingResolve:', !!pendingResolve);
+        pendingResolve?.({ token: response.access_token, email });
+      } catch (callbackErr) {
+        console.error('[Google Auth] Callback error:', callbackErr);
+        pendingReject?.(
+          callbackErr instanceof Error
+            ? callbackErr
+            : new Error('Unexpected error during Google sign-in')
+        );
+      } finally {
+        cleanupAuth();
+      }
+    },
+    error_callback: (err: any) => {
+      const msg = err?.message || err?.type || 'Google sign-in was cancelled or blocked';
+      console.warn('[Google Auth] error_callback:', err);
+      pendingReject?.(new Error(msg));
+      cleanupAuth();
+    },
+  });
+
+  return cachedTokenClient;
+}
 
 // Initialize Google OAuth — returns the token AND the account email
 export interface GoogleAuthResult {
   token: string;
   email: string;
+  googleAccountId?: string;
 }
 
-export function initGoogleCalendarAuth(): Promise<GoogleAuthResult> {
+async function initBackendGoogleCalendarAuth(loginHint?: string): Promise<GoogleAuthResult> {
+  const { authUrl, callbackUrl } = await FirebaseFunctions.getGoogleCalendarAuthUrl({
+    origin: window.location.origin,
+    loginHint,
+  });
+
+  const allowedOrigins = new Set<string>([window.location.origin]);
+  try {
+    allowedOrigins.add(new URL(callbackUrl).origin);
+  } catch {
+    // Ignore malformed callback URL and fall back to the app origin check.
+  }
+
+  return new Promise((resolve, reject) => {
+    const popup = window.open(
+      authUrl,
+      'malleabite-google-auth',
+      'width=520,height=720,left=200,top=80,toolbar=no,menubar=no',
+    );
+
+    if (!popup) {
+      reject(new Error('Google sign-in popup was blocked. Please allow popups for this site and try again.'));
+      return;
+    }
+
+    let settled = false;
+    let closePoll: ReturnType<typeof setInterval> | null = null;
+
+    const cleanup = () => {
+      if (closePoll) {
+        clearInterval(closePoll);
+        closePoll = null;
+      }
+      window.removeEventListener('message', onMessage);
+    };
+
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        source?: string;
+        type?: string;
+        error?: string;
+        accessToken?: string;
+        expiresIn?: number;
+        email?: string;
+        googleAccountId?: string;
+      };
+
+      if (data?.source !== 'malleabite-google-oauth') return;
+      if (!allowedOrigins.has(event.origin)) {
+        console.warn('[Google Auth] Ignoring OAuth message from unexpected origin:', event.origin);
+        return;
+      }
+      if (settled) return;
+
+      settled = true;
+      cleanup();
+
+      if (data.type === 'success' && data.accessToken && data.email) {
+        persistAccountToken(data.email, data.accessToken, data.expiresIn || 3600);
+        persistGoogleAccountId(data.email, data.googleAccountId);
+        resolve({
+          token: data.accessToken,
+          email: data.email,
+          googleAccountId: data.googleAccountId,
+        });
+        return;
+      }
+
+      reject(new Error(data?.error || 'Google Calendar connection failed.'));
+    };
+
+    window.addEventListener('message', onMessage);
+    closePoll = setInterval(() => {
+      if (!settled && popup.closed) {
+        settled = true;
+        cleanup();
+        reject(new Error('Google sign-in window was closed before completing.'));
+      }
+    }, 500);
+  });
+}
+
+export async function fetchGoogleCalendarsViaBackend(googleAccountId: string): Promise<ListGoogleCalendarsResponse['calendars']> {
+  const response = await FirebaseFunctions.listGoogleCalendarsForAccount({ googleAccountId });
+  return response.calendars;
+}
+
+/**
+ * Uses GIS to request an access token for an explicit user-driven connect
+ * action. This path should always trigger a visible Google sign-in / consent
+ * flow instead of silently reusing cached state.
+ */
+export function initGoogleCalendarAuth(loginHint?: string): Promise<GoogleAuthResult> {
+  if (USE_BACKEND_GOOGLE_OAUTH) {
+    return initBackendGoogleCalendarAuth(loginHint);
+  }
+
   return new Promise((resolve, reject) => {
     if (!GOOGLE_CLIENT_ID) {
       reject(new Error('Google Client ID not configured. Add VITE_GOOGLE_CLIENT_ID to your .env file.'));
       return;
     }
 
-    // Prevent re-entrant popup calls — if an auth is already in progress,
-    // reject immediately so callers don't stack up multiple popups.
     if (authInProgress) {
       reject(new Error('Google authentication is already in progress.'));
       return;
     }
     authInProgress = true;
+    gisRequestInProgress = true;
 
-    let settled = false;
-    const settle = (fn: () => void) => {
-      if (!settled) { settled = true; authInProgress = false; fn(); }
+    pendingResolve = (result) => {
+      console.log('[Google Auth] ✓ Promise resolved for', result.email);
+      cleanupAuth();
+      resolve(result);
+    };
+    pendingReject = (err) => {
+      console.log('[Google Auth] ✗ Promise rejected:', err.message);
+      cleanupAuth();
+      reject(err);
     };
 
-    // Safety timeout — if the popup is blocked or GIS never calls back
-    const timeout = setTimeout(() => {
-      settle(() => reject(new Error(
-        'Google authentication timed out. Make sure popups are allowed for this site.'
-      )));
-    }, 60_000);
-
-    // Use Google Identity Services
-    const client = (window as any).google?.accounts?.oauth2?.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_CALENDAR_SCOPES,
-      callback: async (response: any) => {
-        // Wrap the entire callback in try/catch so the promise can never hang.
-        // clearTimeout is called first — if something throws afterwards
-        // without this guard, the promise would never settle.
-        try {
-          clearTimeout(timeout);
-          if (response.error) {
-            settle(() => reject(new Error(response.error_description || response.error)));
-            return;
-          }
-          if (!response.access_token) {
-            settle(() => reject(new Error('No access token received from Google')));
-            return;
-          }
-
-          // Fetch the email of the account that just authenticated
-          let email = '__unknown__';
-          try {
-            const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${response.access_token}` },
-            }).then(r => r.json());
-            email = userInfo.email || '__unknown__';
-          } catch (e) {
-            console.warn('[Google Auth] Failed to fetch user email, using fallback', e);
-          }
-
-          persistAccountToken(email, response.access_token, response.expires_in || 3600);
-          settle(() => resolve({ token: response.access_token, email }));
-        } catch (callbackErr) {
-          console.error('[Google Auth] Unexpected error in GIS callback:', callbackErr);
-          settle(() => reject(
-            callbackErr instanceof Error
-              ? callbackErr
-              : new Error('Unexpected error during Google sign-in')
-          ));
-        }
-      },
-      error_callback: (err: any) => {
-        // GIS calls this when popup is closed, blocked, or fails to open
-        clearTimeout(timeout);
-        const msg = err?.message || err?.type || 'Google sign-in was cancelled or blocked';
-        console.warn('[Google Auth] error_callback:', err);
-        settle(() => reject(new Error(msg)));
-      },
-    });
-
+    const client = getOrCreateTokenClient();
     if (!client) {
-      clearTimeout(timeout);
-      settle(() => reject(new Error(
+      cleanupAuth();
+      reject(new Error(
         'Google Identity Services not loaded. Check your internet connection and try again.'
-      )));
+      ));
       return;
     }
 
-    // 'select_account' shows account picker every time.
-    // Avoid 'consent' — it triggers stricter COOP handling in some browsers
-    // that blocks the popup callback.
-    client.requestAccessToken({ prompt: 'select_account' });
+    console.log('[Google Auth] Calling GIS requestAccessToken with prompt=consent...');
+    const overrides: any = {};
+    if (loginHint) overrides.login_hint = loginHint;
+    overrides.prompt = 'consent';
+    client.requestAccessToken(overrides);
   });
 }
 
@@ -237,18 +416,36 @@ export function isGoogleCalendarAuthenticated(accountEmail?: string): boolean {
  * so they never trigger a visible popup.
  * Returns true if a valid token was obtained.
  */
-export async function ensureGoogleToken(accountEmail?: string): Promise<boolean> {
+export async function ensureGoogleToken(accountEmail?: string, googleAccountId?: string): Promise<boolean> {
   // Fast path: token is already valid
   if (isGoogleCalendarAuthenticated(accountEmail)) return true;
+
+  // If an interactive or another silent auth is already in progress, don't compete
+  if (gisRequestInProgress || authInProgress) return false;
+
+  const storedGoogleAccountId = googleAccountId || getGoogleAccountId(accountEmail || undefined);
+  if (storedGoogleAccountId) {
+    try {
+      const refreshed = await FirebaseFunctions.refreshGoogleCalendarAccessToken({
+        googleAccountId: storedGoogleAccountId,
+      });
+      persistAccountToken(refreshed.email, refreshed.accessToken, refreshed.expiresIn);
+      persistGoogleAccountId(refreshed.email, refreshed.googleAccountId);
+      return true;
+    } catch (error) {
+      console.warn('[Google Auth] Backend refresh failed, falling back to GIS silent refresh', error);
+    }
+  }
 
   // Attempt a silent token refresh — no popup
   if (!GOOGLE_CLIENT_ID) return false;
   const gis = (window as any).google?.accounts?.oauth2;
   if (!gis) return false;
 
+  gisRequestInProgress = true;
   return new Promise<boolean>((resolve) => {
     // 10-second timeout for the silent attempt
-    const timeout = setTimeout(() => resolve(false), 10_000);
+    const timeout = setTimeout(() => { gisRequestInProgress = false; resolve(false); }, 10_000);
 
     try {
       const client = gis.initTokenClient({
@@ -256,6 +453,7 @@ export async function ensureGoogleToken(accountEmail?: string): Promise<boolean>
         scope: GOOGLE_CALENDAR_SCOPES,
         callback: async (response: any) => {
           clearTimeout(timeout);
+          gisRequestInProgress = false;
           if (response.error || !response.access_token) {
             resolve(false);
             return;
@@ -275,12 +473,14 @@ export async function ensureGoogleToken(accountEmail?: string): Promise<boolean>
         },
         error_callback: () => {
           clearTimeout(timeout);
+          gisRequestInProgress = false;
           resolve(false);
         },
       });
 
       if (!client) {
         clearTimeout(timeout);
+        gisRequestInProgress = false;
         resolve(false);
         return;
       }
@@ -292,6 +492,7 @@ export async function ensureGoogleToken(accountEmail?: string): Promise<boolean>
       client.requestAccessToken({ prompt: 'none' });
     } catch {
       clearTimeout(timeout);
+      gisRequestInProgress = false;
       resolve(false);
     }
   });
@@ -304,6 +505,8 @@ export function disconnectGoogleCalendar(accountEmail?: string): void {
     if (entry) {
       (window as any).google?.accounts?.oauth2?.revoke(entry.accessToken);
       clearAccountToken(accountEmail);
+    } else {
+      clearGoogleAccountId(accountEmail);
     }
   } else {
     // Revoke all tokens
@@ -359,7 +562,17 @@ export async function fetchGoogleCalendars(accountEmail?: string): Promise<Googl
       );
     }
     if (response.status === 401) {
-      if (accountEmail) clearAccountToken(accountEmail); else clearAllTokens();
+      // Only clear the token if it's older than 60s — a brand-new token
+      // getting a 401 is transient (propagation delay); clearing it would
+      // prevent retries.
+      if (accountEmail && tokenMap[accountEmail]) {
+        const age = Date.now() - (tokenMap[accountEmail].expiry - 3600_000);
+        if (age > 60_000) {
+          clearAccountToken(accountEmail);
+        }
+      } else if (!accountEmail) {
+        clearAllTokens();
+      }
       throw new Error('Google session expired. Please reconnect.');
     }
     throw new Error(detail || `Failed to fetch calendars (HTTP ${response.status})`);
@@ -381,32 +594,43 @@ export async function fetchGoogleCalendarEvents(
     throw new Error('Not authenticated with Google');
   }
 
-  const params = new URLSearchParams({
-    maxResults: '250',
-    singleEvents: 'true',
-    orderBy: 'startTime',
-  });
+  const allEvents: GoogleCalendarEvent[] = [];
+  let pageToken: string | undefined;
 
-  if (timeMin) {
-    params.set('timeMin', timeMin.toISOString());
-  }
-  if (timeMax) {
-    params.set('timeMax', timeMax.toISOString());
-  }
+  do {
+    const params = new URLSearchParams({
+      maxResults: '2500',
+      singleEvents: 'true',
+      orderBy: 'startTime',
+    });
 
-  const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
+    if (timeMin) {
+      params.set('timeMin', timeMin.toISOString());
     }
-  );
+    if (timeMax) {
+      params.set('timeMax', timeMax.toISOString());
+    }
+    if (pageToken) {
+      params.set('pageToken', pageToken);
+    }
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch events');
-  }
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
 
-  const data = await response.json();
-  return data.items || [];
+    if (!response.ok) {
+      throw new Error('Failed to fetch events');
+    }
+
+    const data: GoogleCalendarEventsResponse = await response.json();
+    allEvents.push(...(data.items || []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return allEvents;
 }
 
 // Convert Google event to Malleabite format.
@@ -595,8 +819,8 @@ export async function deleteGoogleCalendarEvent(
 // Import all events from Google Calendar
 export async function importFromGoogleCalendar(
   calendarId: string = 'primary',
-  daysBack: number = 30,
-  daysForward: number = 90
+  daysBack: number = GOOGLE_SYNC_DAYS_BACK,
+  daysForward: number = GOOGLE_SYNC_DAYS_FORWARD
 ): Promise<Partial<CalendarEventType>[]> {
   const timeMin = dayjs().subtract(daysBack, 'day').toDate();
   const timeMax = dayjs().add(daysForward, 'day').toDate();

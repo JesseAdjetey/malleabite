@@ -56,6 +56,7 @@ interface GroupSectionProps {
   onMoveCalendar?: (calendarId: string) => void;
   dragHandleProps?: Record<string, any>;
   isDragging?: boolean;
+  isDropTarget?: boolean;
 }
 
 const GroupSection: React.FC<GroupSectionProps> = ({
@@ -71,6 +72,7 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   onMoveCalendar,
   dragHandleProps,
   isDragging = false,
+  isDropTarget = false,
 }) => {
   const IconComponent = GROUP_ICONS[group.icon] || Folder;
   const activeCount = calendars.filter(c => c.isActive).length;
@@ -88,7 +90,8 @@ const GroupSection: React.FC<GroupSectionProps> = ({
       transition={springs.gentle}
       className={cn(
         'rounded-xl',
-        isDragging && 'bg-card border border-border shadow-lg'
+        isDragging && 'bg-card border border-border shadow-lg',
+        isDropTarget && 'ring-2 ring-primary/30 bg-primary/5'
       )}
     >
       {/* Group Header */}

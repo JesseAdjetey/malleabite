@@ -2,7 +2,7 @@
 // Steps: select source → authenticate → pick calendars → assign to group → done.
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -29,8 +29,9 @@ import {
   AddCalendarStep,
 } from '@/types/calendar';
 import { useCalendarSync } from '@/hooks/use-calendar-sync';
-import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft } from 'lucide-react';
-import { springs } from '@/lib/animations';
+import { cancelGoogleAuth } from '@/lib/google-calendar';
+import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface AddCalendarFlowProps {
   open: boolean;
@@ -42,6 +43,7 @@ interface AddCalendarFlowProps {
     selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
     targetGroupId: string;
     accountEmail?: string;
+    googleAccountId?: string;
   }) => void;
 }
 
@@ -62,6 +64,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
     syncState,
     availableCalendars,
     lastAuthEmail,
+    lastAuthGoogleAccountId,
     authenticateSource,
     discoverCalendars,
     resetSyncState,
@@ -76,6 +79,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   // can't keep the calendar-selection spinner stuck.
   const [discoveryStatus, setDiscoveryStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Safety timeout — if discovery takes too long, show error UI instead of
   // an infinite spinner.
@@ -104,6 +108,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
       setTargetGroupId(defaultGroupId || groups[0]?.id || '');
       setDiscoveryStatus('idle');
       setDiscoveryError(null);
+      setAuthError(null);
       resetSyncState();
     }
     onOpenChange(isOpen);
@@ -111,8 +116,12 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
 
   // Step 1: Select source
   const handleSelectSource = async (source: CalendarSource) => {
+    resetSyncState();
+    setDiscoveryStatus('idle');
+    setDiscoveryError(null);
     setSelectedSource(source);
     setStep('authenticate');
+    setAuthError(null);
 
     try {
       const authenticated = await authenticateSource(source);
@@ -120,25 +129,38 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
         setStep('select-calendars');
         setDiscoveryStatus('loading');
         setDiscoveryError(null);
-        try {
-          await discoverCalendars(source);
-          // Only move to idle if the call succeeded —
-          // discoverCalendars now re-throws on failure.
-          setDiscoveryStatus('idle');
-        } catch (discoverErr) {
-          const msg = discoverErr instanceof Error ? discoverErr.message : 'Failed to load calendars';
-          console.error('[AddCalendarFlow] Calendar discovery failed:', discoverErr);
-          setDiscoveryStatus('error');
-          setDiscoveryError(msg);
-        }
+        setAuthError(null);
+
+        // Small delay after auth — Google's token may need a moment to propagate
+        await new Promise(r => setTimeout(r, 500));
+
+        const tryDiscover = async (attempt: number): Promise<void> => {
+          try {
+            await discoverCalendars(source);
+            setDiscoveryStatus('idle');
+          } catch (discoverErr) {
+            const msg = discoverErr instanceof Error ? discoverErr.message : 'Failed to load calendars';
+            console.error(`[AddCalendarFlow] Calendar discovery failed (attempt ${attempt}):`, discoverErr);
+            // Retry once on 401/expired — token may not have propagated yet
+            if (attempt < 2 && msg.includes('expired')) {
+              await new Promise(r => setTimeout(r, 1500));
+              return tryDiscover(attempt + 1);
+            }
+            setDiscoveryStatus('error');
+            setDiscoveryError(msg);
+          }
+        };
+
+        await tryDiscover(1);
       } else {
         // Auth was declined or cancelled — go back
         setStep('select-source');
       }
-    } catch (authErr) {
-      // Auth threw (popup blocked, timeout, etc.) — go back
-      console.error('[AddCalendarFlow] Authentication failed:', authErr);
-      setStep('select-source');
+    } catch (authErr: any) {
+      // Auth threw (popup blocked, timeout, etc.) — show error on auth step
+      const msg = authErr instanceof Error ? authErr.message : 'Authentication failed';
+      console.error('[AddCalendarFlow] Authentication failed:', msg);
+      setAuthError(msg);
     }
   };
 
@@ -164,25 +186,10 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
       selectedCalendars: selected,
       targetGroupId,
       accountEmail: lastAuthEmail || undefined,
+      googleAccountId: lastAuthGoogleAccountId || undefined,
     });
 
     handleOpenChange(false);
-  };
-
-  // Slide animation direction
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 40 : -40,
-      opacity: 0,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: number) => ({
-      x: direction > 0 ? -40 : 40,
-      opacity: 0,
-    }),
   };
 
   const stepTitles: Record<AddCalendarStep['step'], string> = {
@@ -209,19 +216,9 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
         </DialogHeader>
 
         <div className="py-2 min-h-[200px]">
-          <AnimatePresence mode="wait" custom={1}>
             {/* Step 1: Select Source */}
             {step === 'select-source' && (
-              <motion.div
-                key="source"
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                custom={1}
-                transition={springs.gentle}
-                className="space-y-2"
-              >
+              <div className="space-y-2">
                 {Object.values(CALENDAR_SOURCES).map(source => {
                   const Icon = SOURCE_ICONS[source.id];
                   return (
@@ -255,46 +252,101 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
                     </motion.button>
                   );
                 })}
-              </motion.div>
+              </div>
             )}
 
             {/* Step 2: Authenticating */}
             {step === 'authenticate' && (
-              <motion.div
-                key="auth"
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                custom={1}
-                transition={springs.gentle}
-                className="flex flex-col items-center justify-center py-8 gap-4"
-              >
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">
-                  {syncState.message || 'Connecting...'}
-                </p>
-              </motion.div>
+              <div className="flex flex-col items-center justify-center py-6 gap-3">
+                {authError ? (
+                  <>
+                    <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                      <AlertTriangle size={20} className="text-amber-600" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground text-center">
+                      Sign-in didn't complete
+                    </p>
+                    <p className="text-xs text-muted-foreground text-center max-w-[260px]">
+                      {authError.includes('timed out') || authError.includes('popup')
+                        ? 'Your browser may be blocking the sign-in popup. Check for a popup-blocked icon in the address bar.'
+                        : authError}
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAuthError(null);
+                          setStep('select-source');
+                          resetSyncState();
+                        }}
+                      >
+                        <ArrowLeft size={14} className="mr-1" />
+                        Back
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setAuthError(null);
+                          if (selectedSource) handleSelectSource(selectedSource);
+                        }}
+                      >
+                        Try Again
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">
+                      {syncState.message || 'Connecting...'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/60 text-center">
+                      A Google sign-in window should open.
+                      <br />
+                      If it doesn't appear, check your popup blocker.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 text-xs text-muted-foreground"
+                      onClick={() => {
+                        cancelGoogleAuth();
+                        setAuthError(null);
+                        setStep('select-source');
+                        resetSyncState();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </div>
             )}
 
             {/* Step 3: Select Calendars */}
             {step === 'select-calendars' && (
-              <motion.div
-                key="calendars"
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                custom={1}
-                transition={springs.gentle}
-                className="space-y-2"
-              >
+              <div className="space-y-2">
                 {discoveryStatus === 'loading' ? (
                   <div className="flex flex-col items-center justify-center py-8 gap-2">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="text-xs text-muted-foreground">
                       Discovering calendars...
                     </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 text-xs text-muted-foreground"
+                      onClick={() => {
+                        setDiscoveryStatus('idle');
+                        setDiscoveryError(null);
+                        resetSyncState();
+                        setStep('select-source');
+                      }}
+                    >
+                      <ArrowLeft size={12} className="mr-1" />
+                      Cancel
+                    </Button>
                   </div>
                 ) : discoveryStatus === 'error' ? (
                   <div className="flex flex-col items-center py-6 gap-3 text-center">
@@ -368,21 +420,12 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
                     </motion.label>
                   ))
                 )}
-              </motion.div>
+              </div>
             )}
 
             {/* Step 4: Assign Group */}
             {step === 'assign-group' && (
-              <motion.div
-                key="group"
-                variants={slideVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                custom={1}
-                transition={springs.gentle}
-                className="space-y-4"
-              >
+              <div className="space-y-4">
                 {groups.length === 0 ? (
                   <div className="text-center py-6 space-y-3">
                     <p className="text-sm text-muted-foreground">
@@ -434,9 +477,8 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
                     </div>
                   </>
                 )}
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
         </div>
 
         <DialogFooter className="gap-2">

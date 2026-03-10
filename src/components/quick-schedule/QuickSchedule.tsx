@@ -4,6 +4,7 @@ import { Calendar, Clock, Plus, Zap, Trash2, ChevronLeft, ChevronRight, LayoutTe
 import { Badge } from '@/components/ui/badge';
 import { useTemplates } from '@/hooks/use-templates';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useEventCRUD } from '@/hooks/use-event-crud';
 import { findFreeTimeBlocks } from '@/lib/algorithms/time-blocks';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -29,7 +30,8 @@ interface QuickEvent {
 
 export function QuickSchedule() {
   const { favoriteTemplates, mostUsedTemplates, useTemplate } = useTemplates();
-  const { events, addEvent } = useCalendarEvents();
+  const { events } = useCalendarEvents();
+  const { addEvent } = useEventCRUD();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [quickEvents, setQuickEvents] = useState<QuickEvent[]>([]);

@@ -13,6 +13,8 @@ export interface GoogleSyncBridgeContextValue {
   pushUpdateToGoogle: (event: CalendarEventType) => Promise<boolean>;
   /** Push a delete to Google Calendar. */
   pushDeleteToGoogle: (event: CalendarEventType) => Promise<boolean>;
+  /** Reconnect a Google account whose token expired. Opens sign-in popup. */
+  reconnectAccount: (accountEmail: string) => Promise<boolean>;
 }
 
 const GoogleSyncBridgeContext = createContext<GoogleSyncBridgeContextValue | null>(null);

@@ -22,6 +22,9 @@ import type { EisenhowerItem } from '@/hooks/use-eisenhower';
 import type { Alarm } from '@/hooks/use-alarms';
 import type { Reminder } from '@/hooks/use-reminders';
 import type { Invite } from '@/hooks/use-invites';
+import type { CalendarAccount } from '@/lib/stores/calendar-filter-store';
+import type { ConnectedCalendar } from '@/types/calendar';
+import type { CalendarTemplate } from '@/types/calendar';
 import {
   ListTodo,
   CheckSquare,
@@ -38,6 +41,8 @@ import {
   Inbox,
   ChevronRight,
   ChevronLeft,
+  Bookmark,
+  Palette,
 } from 'lucide-react';
 
 /* ─── Icon Mapping ───────────────────────────────────────────────────── */
@@ -56,6 +61,8 @@ const ICON_MAP: Record<IconName, React.FC<{ className?: string }>> = {
   'circle-dot': CircleDot,
   'send': Send,
   'inbox': Inbox,
+  'bookmark': Bookmark,
+  'palette': Palette,
 };
 
 /** Render a Lucide icon by name string. Exported for use in MentionTagBar. */
@@ -74,6 +81,7 @@ interface TabMeta {
 
 const TABS: TabMeta[] = [
   { id: 'pages',      label: 'Pages',       iconName: 'file-text' },
+  { id: 'calendars',  label: 'Calendars',   iconName: 'palette' },
   { id: 'events',     label: 'Events',      iconName: 'calendar' },
   { id: 'todo-lists', label: 'To Do Lists', iconName: 'list-todo' },
   { id: 'alarms',     label: 'Alarms',      iconName: 'bell' },
@@ -114,6 +122,9 @@ interface MentionPopoverProps {
   reminders: Reminder[];
   sentInvites: Invite[];
   receivedInvites: Invite[];
+  calendarAccounts: CalendarAccount[];
+  connectedCalendars: ConnectedCalendar[];
+  calendarTemplates: CalendarTemplate[];
   filterText: string;
 }
 
@@ -163,6 +174,9 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
   reminders,
   sentInvites,
   receivedInvites,
+  calendarAccounts,
+  connectedCalendars,
+  calendarTemplates,
   filterText,
 }) => {
   const [activeTab, setActiveTab] = useState<MentionTabId>('pages');
@@ -184,8 +198,10 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
         : opts;
 
     // ── To Do Lists (drillable → children are todo items) ──
-    const todoListOpts: MentionOption[] = lists.map(l => {
-      const items = todos.filter(t => t.listId === l.id && !t.completed);
+    // Filter out ghost/orphan lists that have zero total todos
+    const activeLists = lists.filter(l => todos.some(t => t.listId === l.id && t.text?.trim()));
+    const todoListOpts: MentionOption[] = activeLists.map(l => {
+      const items = todos.filter(t => t.listId === l.id && !t.completed && t.text?.trim());
       return {
         entityId: l.id,
         entityType: 'todo-list' as const,
@@ -268,14 +284,12 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
       })),
     ];
 
-    // ── Events (next 50 upcoming) ──
-    const now = new Date();
-    const upcoming = [...events]
-      .filter(e => new Date(e.startsAt) >= now || new Date(e.endsAt) >= now)
-      .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
-      .slice(0, 50);
+    // ── Events (all events, sorted newest first, capped at 100) ──
+    const sortedEvents = [...events]
+      .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
+      .slice(0, 100);
 
-    const eventOpts: MentionOption[] = upcoming.map(e => ({
+    const eventOpts: MentionOption[] = sortedEvents.map(e => ({
       entityId: e.id,
       entityType: 'event' as const,
       label: e.title,
@@ -301,7 +315,7 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
         // Find the todo list that matches this module (by title or first list)
         const matchedList = lists.find(l => l.name === m.title) || lists[0];
         if (matchedList) {
-          const items = todos.filter(t => t.listId === matchedList.id && !t.completed);
+          const items = todos.filter(t => t.listId === matchedList.id && !t.completed && t.text?.trim());
           if (items.length > 0) {
             children = items.map(t => ({
               entityId: t.id,
@@ -386,6 +400,110 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
       children: p.modules.map(m => enrichModule(m, p.title)),
     }));
 
+    // ── Calendars (derived from actual events + metadata from ConnectedCalendar) ──
+
+    // Build a lookup for calendar metadata from ConnectedCalendar (most reliable source)
+    // Map by both id (Firestore docId) AND sourceCalendarId (e.g. Google email)
+    const calMeta = new Map<string, { name: string; color: string }>();
+    for (const acc of calendarAccounts) {
+      calMeta.set(acc.id, { name: acc.name, color: acc.color });
+    }
+    for (const cc of connectedCalendars) {
+      if (!calMeta.has(cc.id)) {
+        calMeta.set(cc.id, { name: cc.name, color: cc.color });
+      }
+      // Also map sourceCalendarId (e.g. email like "user@gmail.com") so events
+      // using the Google calendar ID as calendarId still get a name
+      if (cc.sourceCalendarId && !calMeta.has(cc.sourceCalendarId)) {
+        calMeta.set(cc.sourceCalendarId, { name: cc.name, color: cc.color });
+      }
+    }
+
+    // Group events by calendarId
+    const eventsByCalendar = new Map<string, CalendarEventType[]>();
+    for (const e of events) {
+      const cid = e.calendarId || 'personal';
+      if (!eventsByCalendar.has(cid)) eventsByCalendar.set(cid, []);
+      eventsByCalendar.get(cid)!.push(e);
+    }
+
+    // Build templates as a separate drillable entry with template event children
+    const templateOpts: MentionOption[] = calendarTemplates.map(t => {
+      // Find events created from this template (calendarId = "template_{id}")
+      const templateCalId = `template_${t.id}`;
+      const tEvents = eventsByCalendar.get(templateCalId) || [];
+      const templateColor = t.events[0]?.color || '#8B5CF6';
+      const children: MentionOption[] = tEvents
+        .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
+        .map(e => ({
+          entityId: e.id,
+          entityType: 'event' as const,
+          label: e.title,
+          iconName: 'calendar' as IconName,
+          color: e.color || templateColor,
+          description: formatEventDate(e.startsAt),
+        }));
+      return {
+        entityId: t.id,
+        entityType: 'template' as const,
+        label: t.name,
+        iconName: 'bookmark' as IconName,
+        color: templateColor,
+        description: `${t.events.length} slots${t.isActive ? ' · Active' : ''}${children.length > 0 ? ` · ${children.length} events` : ''}`,
+        drillable: children.length > 0,
+        children: children.length > 0 ? children : undefined,
+      };
+    });
+
+    // Collect all unique calendarIds (excluding template_* ones which go in Templates group)
+    // Only show calendars that have actual events — no phantom entries
+    const allCalendarIds = new Set<string>();
+    for (const cid of eventsByCalendar.keys()) {
+      if (!cid.startsWith('template_')) allCalendarIds.add(cid);
+    }
+
+    const calendarOpts: MentionOption[] = Array.from(allCalendarIds).map(calId => {
+      const meta = calMeta.get(calId);
+      const calName = meta?.name || (calId === 'personal' ? 'Personal' : calId);
+      const calColor = meta?.color || '#8B5CF6';
+      const calEvents = (eventsByCalendar.get(calId) || [])
+        .sort((a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime())
+        .slice(0, 50);
+
+      const children: MentionOption[] = calEvents.map(e => ({
+        entityId: e.id,
+        entityType: 'event' as const,
+        label: e.title,
+        iconName: 'calendar' as IconName,
+        color: e.color || calColor,
+        description: formatEventDate(e.startsAt),
+      }));
+
+      return {
+        entityId: calId,
+        entityType: 'calendar' as const,
+        label: calName,
+        iconName: 'palette' as IconName,
+        color: calColor,
+        description: `${calEvents.length} event${calEvents.length !== 1 ? 's' : ''}`,
+        drillable: children.length > 0,
+        children: children.length > 0 ? children : undefined,
+      };
+    });
+
+    // Add templates as a top-level drillable group in the Calendars tab
+    if (templateOpts.length > 0) {
+      calendarOpts.push({
+        entityId: 'templates-group',
+        entityType: 'template' as const,
+        label: 'Templates',
+        iconName: 'bookmark' as IconName,
+        description: `${templateOpts.length} template${templateOpts.length !== 1 ? 's' : ''}`,
+        drillable: true,
+        children: templateOpts,
+      });
+    }
+
     return {
       'todo-lists': applyFilter(todoListOpts),
       'pomodoro': applyFilter(pomodoroOpts),
@@ -393,9 +511,10 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
       'eisenhower': applyFilter(eisenhowerOpts),
       'invites': applyFilter(inviteOpts),
       'events': applyFilter(eventOpts),
+      'calendars': applyFilter(calendarOpts),
       'pages': applyFilter(pageOpts),
     };
-  }, [pages, events, todos, lists, eisenhowerItems, alarms, reminders, sentInvites, receivedInvites, filterText]);
+  }, [pages, events, todos, lists, eisenhowerItems, alarms, reminders, sentInvites, receivedInvites, calendarAccounts, connectedCalendars, calendarTemplates, filterText]);
 
   /* ── Current display list (root or drilled-into children) ──────────── */
 
@@ -529,8 +648,8 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
     >
       {/* ── Tab header ──────────────────────────────────────────────── */}
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as MentionTabId); }}>
-        <div className="border-b border-border/50 px-1 pt-1">
-          <TabsList className="w-full h-9 bg-transparent gap-0.5 px-1">
+        <div className="border-b border-border/50 px-1 pt-1 overflow-x-auto scrollbar-none">
+          <TabsList className="inline-flex w-max h-9 bg-transparent gap-0.5 px-1">
             {TABS.map(tab => {
               const count = (tabOptions[tab.id] || []).length;
               const TabIcon = ICON_MAP[tab.iconName];
@@ -539,13 +658,13 @@ export const MentionPopover: React.FC<MentionPopoverProps> = ({
                   key={tab.id}
                   value={tab.id}
                   className={cn(
-                    'flex-1 h-7 text-xs gap-1 px-2 rounded-md data-[state=active]:bg-accent',
-                    'data-[state=active]:shadow-none',
+                    'h-7 text-xs gap-1 px-2.5 rounded-md whitespace-nowrap data-[state=active]:bg-accent',
+                    'data-[state=active]:shadow-none flex-shrink-0',
                     count === 0 && 'opacity-40',
                   )}
                 >
-                  <TabIcon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline truncate">{tab.label}</span>
+                  <TabIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{tab.label}</span>
                   {count > 0 && (
                     <span className="ml-0.5 text-[10px] text-muted-foreground">{count}</span>
                   )}

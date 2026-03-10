@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { getTimeInfo } from "../calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
 import { CalendarEventType } from "@/lib/stores/types";
-import { useCalendarEvents } from "@/hooks/use-calendar-events.unified";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 
 interface TimeSlotProps {
   hour: dayjs.Dayjs;
@@ -37,7 +37,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
   onToggleSelection = () => { },
 }) => {
   const { openEventSummary, toggleEventLock } = useEventStore();
-  const { updateEvent } = useCalendarEvents();
+  const { updateEvent } = useEventCRUD();
 
   // State for drag-over visual feedback
   const [isDragOver, setIsDragOver] = useState(false);
@@ -187,7 +187,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       console.log("Updating event with new time:", updatedEvent);
 
       // Update the event in the database
-      updateEvent(updatedEvent);
+      void updateEvent(updatedEvent);
 
       // Show success message with visual feedback
       toast.success(`Event moved to ${newStartTime}`, {

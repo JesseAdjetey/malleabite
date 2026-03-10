@@ -5,11 +5,11 @@ import EventForm from "@/components/calendar/EventForm";
 import { useState, useMemo } from "react";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
-import { useCalendarEvents } from "@/hooks/use-calendar-events";
+import { useEventCRUD } from "@/hooks/use-event-crud";
 import dayjs from "dayjs";
 
 const AddEventButton = () => {
-  const { addEvent: dbAddEvent } = useCalendarEvents();
+  const { addEvent: dbAddEvent } = useEventCRUD();
   const [open, setOpen] = useState(false);
 
   // Calculate the initial time: today's date with the next hour

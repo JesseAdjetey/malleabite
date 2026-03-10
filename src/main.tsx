@@ -2,17 +2,24 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import "./index.css"
-import { registerServiceWorker } from './lib/sw-registration';
+import { registerServiceWorker, unregisterServiceWorker } from './lib/sw-registration';
 import { initSentry } from './lib/sentry';
 import { isNative } from './lib/platform';
 
-// Register service worker for PWA functionality (skip on native — assets are bundled)
+// During local/dev debugging we do not want a stale PWA bundle masking UI changes.
+// Keep SW only for production web builds.
 if (!isNative && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    registerServiceWorker().catch((error) => {
-      console.error('Service worker registration failed:', error);
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      registerServiceWorker().catch((error) => {
+        console.error('Service worker registration failed:', error);
+      });
     });
-  });
+  } else {
+    unregisterServiceWorker().catch((error) => {
+      console.error('Service worker unregistration failed:', error);
+    });
+  }
 }
 
 // Error boundary for initialization errors

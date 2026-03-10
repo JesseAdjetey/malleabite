@@ -1,13 +1,15 @@
 import { useCallback } from 'react';
 import { CalendarEventType } from '@/lib/stores/types';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useEventCRUD } from '@/hooks/use-event-crud';
 import { useBulkSelectionStore } from '@/lib/stores/bulk-selection-store';
 import dayjs from 'dayjs';
 
 export type RecurringDeleteScope = 'single' | 'all' | 'thisAndFuture';
 
 export function useBulkSelection() {
-  const { events, updateEvent, removeEvent, addEvent, addRecurrenceException } = useCalendarEvents();
+  const { events, addRecurrenceException } = useCalendarEvents();
+  const { updateEvent, removeEvent, addEvent } = useEventCRUD();
   
   // Use global Zustand store for bulk selection state
   const {

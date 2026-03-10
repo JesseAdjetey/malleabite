@@ -653,6 +653,52 @@ export async function upsertSyncedEvents(
 }
 
 /**
+ * Replace the cached synced events for a specific connected calendar.
+ * This removes stale events that no longer exist in the latest imported
+ * result for that calendar, then upserts the fresh set.
+ */
+export async function replaceSyncedEventsForCalendar(
+  userId: string,
+  calendarId: string,
+  events: SyncedCalendarEvent[]
+): Promise<number> {
+  try {
+    const eventsRef = collection(db, syncedEventsPath(userId));
+    const snapshot = await getDocs(eventsRef);
+    const existingDocs = snapshot.docs.filter((docSnap) => docSnap.data().calendarId === calendarId);
+    const nextExternalIds = new Set(events.map((event) => event.externalId));
+
+    const deleteRefs = existingDocs.filter((docSnap) => {
+      const data = docSnap.data();
+      return !nextExternalIds.has(data.externalId);
+    });
+
+    for (let index = 0; index < deleteRefs.length; index += 400) {
+      const batch = writeBatch(db);
+      for (const docSnap of deleteRefs.slice(index, index + 400)) {
+        batch.delete(docSnap.ref);
+      }
+      await batch.commit();
+    }
+
+    if (events.length === 0) {
+      logger.info('CalendarService', `Replaced synced events for ${calendarId} with empty set`);
+      return 0;
+    }
+
+    const count = await upsertSyncedEvents(userId, events);
+    logger.info('CalendarService', `Replaced synced events for ${calendarId} with ${count} event(s)`);
+    return count;
+  } catch (error) {
+    logger.error('CalendarService', 'Failed to replace synced events for calendar', {
+      error,
+      calendarId,
+    });
+    throw error;
+  }
+}
+
+/**
  * Get synced events for specific calendars within a date range.
  */
 export async function getSyncedEvents(

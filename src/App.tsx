@@ -141,8 +141,12 @@ function App() {
   }, []);
 
   // ── Firestore network management on visibility change ─────────────────────
-  // Prevents massive reconnection storms when tab is backgrounded
+  // Prevents native WebView background reconnection storms.
+  // On regular web tabs this can interrupt pending writes and cause flaky
+  // write-stream errors when the browser backgrounds/restores the page.
   useEffect(() => {
+    if (!isNative) return;
+
     let firestoreDisabled = false;
 
     const handleVisibility = () => {

@@ -19,6 +19,7 @@ export type MentionTabId =
   | 'eisenhower'
   | 'invites'
   | 'events'
+  | 'calendars'
   | 'pages';
 
 /**
@@ -33,6 +34,8 @@ export type MentionEntityType =
   | 'eisenhower-item' // An item in the matrix
   | 'invite'         // A specific invite
   | 'event'          // A calendar event
+  | 'calendar'       // A user calendar (e.g. Work, Personal)
+  | 'template'       // An event template
   | 'page'           // A sidebar page
   | 'module';        // A module instance on a page
 
@@ -52,7 +55,9 @@ export type IconName =
   | 'layers'
   | 'circle-dot'
   | 'send'
-  | 'inbox';
+  | 'inbox'
+  | 'bookmark'
+  | 'palette';
 
 export interface MentionReference {
   /** Unique ID for this mention instance (React keys / dedup) */
@@ -107,6 +112,8 @@ export function createMentionReference(option: MentionOption, tabId: MentionTabI
     'eisenhower-item': 'priority',
     'invite': 'invite',
     'event': 'event',
+    'calendar': 'calendar',
+    'template': 'template',
     'page': 'page',
     'module': 'module',
   };

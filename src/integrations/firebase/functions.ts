@@ -70,6 +70,44 @@ export interface TranscriptionResponse {
   error?: string;
 }
 
+export interface GoogleCalendarAuthUrlRequest {
+  origin: string;
+  loginHint?: string;
+}
+
+export interface GoogleCalendarAuthUrlResponse {
+  authUrl: string;
+  callbackUrl: string;
+  state: string;
+}
+
+export interface RefreshGoogleCalendarTokenRequest {
+  googleAccountId: string;
+}
+
+export interface RefreshGoogleCalendarTokenResponse {
+  googleAccountId: string;
+  email: string;
+  accessToken: string;
+  expiresIn: number;
+}
+
+export interface ListGoogleCalendarsRequest {
+  googleAccountId: string;
+}
+
+export interface ListGoogleCalendarsResponse {
+  googleAccountId: string;
+  email: string;
+  displayName: string;
+  calendars: Array<{
+    id: string;
+    summary: string;
+    primary?: boolean;
+    backgroundColor?: string;
+  }>;
+}
+
 // Cloud function wrappers
 export class FirebaseFunctions {
   // Process AI requests with intelligent scheduling (replaces process-scheduling)
@@ -230,6 +268,33 @@ export class FirebaseFunctions {
       console.error(`Error calling ${functionName} function:`, error);
       throw error;
     }
+  }
+
+  static async getGoogleCalendarAuthUrl(
+    data: GoogleCalendarAuthUrlRequest
+  ): Promise<GoogleCalendarAuthUrlResponse> {
+    return FirebaseFunctions.callFunction<GoogleCalendarAuthUrlRequest, GoogleCalendarAuthUrlResponse>(
+      'getGoogleCalendarAuthUrl',
+      data,
+    );
+  }
+
+  static async refreshGoogleCalendarAccessToken(
+    data: RefreshGoogleCalendarTokenRequest
+  ): Promise<RefreshGoogleCalendarTokenResponse> {
+    return FirebaseFunctions.callFunction<RefreshGoogleCalendarTokenRequest, RefreshGoogleCalendarTokenResponse>(
+      'refreshGoogleCalendarAccessToken',
+      data,
+    );
+  }
+
+  static async listGoogleCalendarsForAccount(
+    data: ListGoogleCalendarsRequest
+  ): Promise<ListGoogleCalendarsResponse> {
+    return FirebaseFunctions.callFunction<ListGoogleCalendarsRequest, ListGoogleCalendarsResponse>(
+      'listGoogleCalendarsForAccount',
+      data,
+    );
   }
 
   // ─── Streaming endpoint — real-time Gemini speech + TTS ─────────────────────

@@ -39,6 +39,7 @@ import { useMallyActions } from "@/hooks/use-mally-actions";
 import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proactive-suggestions";
 import { logger } from "@/lib/logger";
 import { useThemeStore } from "@/lib/stores/theme-store";
+import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -49,26 +50,18 @@ import { haptics } from "@/lib/haptics";
 import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
 import { MentionReference, MentionOption, MentionTabId, createMentionReference, serializeReferences } from "./mention-types";
+import { useEventStore } from "@/lib/store";
+import { useCalendarGroups } from "@/hooks/use-calendar-groups";
+import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
 import { MallyVoiceOverlay } from "./MallyVoiceOverlay";
 import { mallyVapi } from '@/lib/ai/vapi-service';
+import { RichMessageRenderer } from "./RichMessageRenderer";
+import { ActionProgress } from "./ActionProgress";
+import type { RichMessage, SuggestionChip, PendingAction, ActionCardData } from "./rich-message-types";
+import { generateSuggestions, actionsToCards, detectExpandableSections, detectGuidedFlow, extractCleanText } from "./rich-message-types";
 
-interface Message {
-  id: string;
-  text: string;
-  sender: "user" | "ai";
-  timestamp: Date;
-  isLoading?: boolean;
-  isError?: boolean;
-  image?: {
-    dataUrl: string;
-    fileName: string;
-    mimeType: string;
-  };
-  sources?: Array<{
-    title: string;
-    uri: string;
-  }>;
-}
+// Message type is now RichMessage from rich-message-types.ts
+type Message = RichMessage;
 
 interface QuickAction {
   id: string;
@@ -252,7 +245,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-
+  // Settings: auto-execute toggle
+  const { aiAutoExecute } = useSettingsStore();
 
 
   const { user } = useAuth();
@@ -271,7 +265,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     reminders,
     sentInvites,
     receivedInvites,
+    templates,
+    calendarAccounts,
   } = useMallyActions();
+
+  // Use merged events (local + synced/imported + template) for the mention popover
+  const allEvents = useEventStore(state => state.events);
+
+  // Connected calendars (from Firestore 'connectedCalendars' collection)
+  const { calendars: connectedCalendars } = useCalendarGroups();
+
+  // Calendar templates (weekly schedule templates that generate events)
+  const { templates: calendarTemplates } = useTemplateEventsLoader();
 
   // @ Mention system state
   const [mentionRefs, setMentionRefs] = useState<MentionReference[]>([]);
@@ -989,14 +994,17 @@ RULES:
     setShowMentionPopover(false);
     setIsLoading(true);
 
-    // Add loading message
+    // Add loading message with animated progress
     const loadingId = crypto.randomUUID();
     setMessages(prev => [...prev, {
       id: loadingId,
-      text: "Thinking...",
+      text: "",
       sender: "ai",
       timestamp: new Date(),
       isLoading: true,
+      actionProgress: [
+        { id: 'understand', label: 'Understanding your request...', status: 'running' },
+      ],
     }]);
 
     try {
@@ -1032,55 +1040,221 @@ RULES:
         augmentedMessage = `[Referenced: ${refSummary}] ${messageText}`;
       }
 
-      // Call Firebase function
-      const response = await FirebaseFunctions.processScheduling({
-        userMessage: augmentedMessage,
-        userId: user.uid,
-        context: JSON.stringify(context),
-        history: messageHistory,
-        imageData: uploadedImage ? {
-          dataUrl: uploadedImage.dataUrl,
-          mimeType: uploadedImage.mimeType,
-        } : undefined,
-      });
-
-      // Increment AI usage
-      await incrementAICount();
-
-      // Process response and execute actions
-      const aiResponse = response.message || "I couldn't process that request.";
-
-      console.log('AI Response:', response);
-
-      // Execute actions if present (support both single action and multiple actions)
-      if (response.action) {
-        console.log('Single action found:', response.action);
-        const success = await executeAction(response.action);
-        if (success) haptics.success();
-      }
-
-      // Handle multiple actions array
-      if ((response as any).actions && Array.isArray((response as any).actions)) {
-        console.log('Multiple actions found:', (response as any).actions);
-        for (const action of (response as any).actions) {
-          const success = await executeAction(action);
-          if (success) haptics.success();
-        }
-      }
-
-      // Update with AI response + sources
-      const responseSources = (response as any).sources || [];
+      // Update progress: calling AI
       setMessages(prev => prev.map(m =>
         m.id === loadingId
-          ? { ...m, text: aiResponse, isLoading: false, sources: responseSources.length > 0 ? responseSources : undefined }
+          ? { ...m, actionProgress: [
+              { id: 'understand', label: 'Understanding your request...', status: 'done' },
+              { id: 'thinking', label: 'Mally is thinking...', status: 'running' },
+            ]}
           : m
       ));
 
-      // Speak the AI response
-      speak(aiResponse);
+      // Call Firebase function
+      // ── Helper: process response actions + rich content after text is received ──
+      const processResponseActions = async (
+        aiResponse: string,
+        allActions: Array<{ type: string; data?: any }>,
+        responseIntent: string,
+        responseSources: any[],
+      ) => {
+        // Detect rich content from the AI text
+        const sections = detectExpandableSections(aiResponse);
+        const guidedFlow = detectGuidedFlow(aiResponse);
+        const displayText = extractCleanText(aiResponse, !!sections, !!guidedFlow);
 
-      // Update quick actions based on context
-      updateQuickActionsFromContext(aiResponse, response.action);
+        if (allActions.length > 0 && !aiAutoExecute) {
+          // ── Confirmation mode ──────────────────────────────────────────
+          const pendingActions: PendingAction[] = allActions.map((action) => ({
+            id: crypto.randomUUID(),
+            type: action.type,
+            label: describeAction(action),
+            data: action.data || action,
+            status: 'pending' as const,
+          }));
+          const suggestions = generateSuggestions(responseIntent, allActions, aiResponse);
+          setMessages(prev => prev.map(m =>
+            m.id === loadingId
+              ? {
+                  ...m,
+                  text: displayText,
+                  isLoading: false,
+                  isStreaming: false,
+                  intent: responseIntent,
+                  pendingActions,
+                  suggestions,
+                  expandableSections: sections?.sections,
+                  guidedFlow: guidedFlow ?? undefined,
+                  actionProgress: undefined,
+                  sources: responseSources.length > 0 ? responseSources : undefined,
+                }
+              : m
+          ));
+        } else {
+          // ── Auto-execute mode ──────────────────────────────────────────
+          if (allActions.length > 0) {
+            const actionSteps = allActions.map((a, i) => ({
+              id: `action-${i}`,
+              label: describeAction(a),
+              status: 'pending' as const,
+            }));
+            setMessages(prev => prev.map(m =>
+              m.id === loadingId
+                ? { ...m, text: displayText, isLoading: false, isStreaming: false, actionProgress: actionSteps }
+                : m
+            ));
+          }
+
+          const executionResults: boolean[] = [];
+          for (let i = 0; i < allActions.length; i++) {
+            setMessages(prev => prev.map(m => {
+              if (m.id !== loadingId || !m.actionProgress) return m;
+              return {
+                ...m,
+                actionProgress: m.actionProgress.map((s, j) => ({
+                  ...s,
+                  status: j < i ? 'done' : j === i ? 'running' : 'pending',
+                })) as any,
+              };
+            }));
+            const success = await executeAction(allActions[i]);
+            executionResults.push(success);
+            if (success) haptics.success();
+            setMessages(prev => prev.map(m => {
+              if (m.id !== loadingId || !m.actionProgress) return m;
+              return {
+                ...m,
+                actionProgress: m.actionProgress.map((s, j) => ({
+                  ...s,
+                  status: j <= i ? (j === i && !success ? 'error' : 'done') : s.status,
+                })) as any,
+              };
+            }));
+          }
+
+          const actionCards = actionsToCards(allActions, executionResults);
+          const suggestions = generateSuggestions(responseIntent, allActions, aiResponse);
+
+          setMessages(prev => prev.map(m =>
+            m.id === loadingId
+              ? {
+                  ...m,
+                  text: displayText,
+                  isLoading: false,
+                  isStreaming: false,
+                  intent: responseIntent,
+                  actionCards: actionCards.length > 0 ? actionCards : undefined,
+                  actionProgress: undefined,
+                  expandableSections: sections?.sections,
+                  guidedFlow: !allActions.length ? (guidedFlow ?? undefined) : undefined,
+                  suggestions,
+                  sources: responseSources.length > 0 ? responseSources : undefined,
+                }
+              : m
+          ));
+        }
+
+        speak(aiResponse);
+        updateQuickActionsFromContext(aiResponse, allActions[0] || null);
+      };
+
+      // ── Choose streaming vs non-streaming path ──────────────────────────
+      const hasImage = !!uploadedImage;
+
+      if (hasImage) {
+        // Non-streaming path for image messages (streaming endpoint doesn't support imageData)
+        const response = await FirebaseFunctions.processScheduling({
+          userMessage: augmentedMessage,
+          userId: user.uid,
+          context: JSON.stringify(context),
+          history: messageHistory,
+          imageData: { dataUrl: uploadedImage.dataUrl, mimeType: uploadedImage.mimeType },
+        });
+        await incrementAICount();
+
+        const aiResponse = response.message || "I couldn't process that request.";
+        const responseIntent = (response as any).intent || 'general';
+        const responseSources = (response as any).sources || [];
+        const allActions: Array<{ type: string; data?: any }> = [];
+        if (response.action) allActions.push(response.action);
+        if ((response as any).actions && Array.isArray((response as any).actions)) {
+          allActions.push(...(response as any).actions);
+        }
+        await processResponseActions(aiResponse, allActions, responseIntent, responseSources);
+      } else {
+        // ── SSE Streaming path ──────────────────────────────────────────────
+        try {
+          let speechText = '';
+
+          // Switch loading message to streaming mode
+          setMessages(prev => prev.map(m =>
+            m.id === loadingId
+              ? { ...m, text: '', isLoading: false, isStreaming: true, actionProgress: undefined }
+              : m
+          ));
+
+          let donePayload: { speechText?: string; actions?: any[]; intent?: string } | null = null;
+
+          for await (const event of FirebaseFunctions.processSchedulingStreamEvents({
+            userMessage: augmentedMessage,
+            userId: user.uid,
+            context: JSON.stringify(context),
+            history: messageHistory,
+          })) {
+            if (event.type === 'speech' && event.text) {
+              speechText += event.text;
+              // Progressive text update
+              setMessages(prev => prev.map(m =>
+                m.id === loadingId ? { ...m, text: speechText } : m
+              ));
+            } else if (event.type === 'done') {
+              donePayload = event;
+            } else if (event.type === 'error') {
+              throw new Error(event.message || 'Stream error');
+            }
+          }
+
+          // Process final response
+          const aiResponse = donePayload?.speechText || speechText || "I couldn't process that request.";
+          const responseIntent = donePayload?.intent || 'general';
+          await incrementAICount();
+
+          const allActions: Array<{ type: string; data?: any }> = donePayload?.actions || [];
+          await processResponseActions(aiResponse, allActions, responseIntent, []);
+
+        } catch (streamError: any) {
+          // ── FALLBACK: non-streaming ─────────────────────────────────────
+          console.warn('[Mally] Text stream failed, falling back to classic:', streamError?.message);
+
+          // Reset loading state
+          setMessages(prev => prev.map(m =>
+            m.id === loadingId
+              ? { ...m, text: '', isLoading: true, isStreaming: false, actionProgress: [
+                  { id: 'understand', label: 'Understanding your request...', status: 'done' as const },
+                  { id: 'thinking', label: 'Mally is thinking...', status: 'running' as const },
+                ]}
+              : m
+          ));
+
+          const response = await FirebaseFunctions.processScheduling({
+            userMessage: augmentedMessage,
+            userId: user.uid,
+            context: JSON.stringify(context),
+            history: messageHistory,
+          });
+          await incrementAICount();
+
+          const aiResponse = response.message || "I couldn't process that request.";
+          const responseIntent = (response as any).intent || 'general';
+          const responseSources = (response as any).sources || [];
+          const allActions: Array<{ type: string; data?: any }> = [];
+          if (response.action) allActions.push(response.action);
+          if ((response as any).actions && Array.isArray((response as any).actions)) {
+            allActions.push(...(response as any).actions);
+          }
+          await processResponseActions(aiResponse, allActions, responseIntent, responseSources);
+        }
+      }
 
     } catch (error: any) {
       logger.error('BottomMallyAI', 'Chat error', error);
@@ -1119,6 +1293,110 @@ RULES:
     }
     setInputText(action.prompt);
     inputRef.current?.focus();
+  };
+
+  // ── Rich message interaction handlers ────────────────────────────────────
+
+  /** Human-readable description of an AI action */
+  const describeAction = (action: { type: string; data?: any }): string => {
+    const data = action.data || action;
+    switch (action.type) {
+      case 'create_event': return `Create event "${data.title || 'Untitled'}"`;
+      case 'update_event': return `Update event "${data.title || 'event'}"`;
+      case 'delete_event': return `Delete event "${data.title || 'event'}"`;
+      case 'create_todo': return `Add task "${data.text || data.title || 'Untitled'}"`;
+      case 'create_alarm': return `Set alarm "${data.title || ''}" at ${data.time || ''}`;
+      case 'create_reminder': return `Set reminder "${data.title || data.text || ''}"`;
+      case 'start_pomodoro': return 'Start focus timer';
+      case 'resume_pomodoro': return 'Resume focus timer';
+      default: return `${action.type.replace(/_/g, ' ')}`;
+    }
+  };
+
+  /** Approve a single pending action and execute it */
+  const handleApproveAction = async (actionId: string) => {
+    haptics.selection();
+    // Find the message containing this pending action
+    const msg = messages.find(m => m.pendingActions?.some(a => a.id === actionId));
+    if (!msg) return;
+    const pending = msg.pendingActions?.find(a => a.id === actionId);
+    if (!pending) return;
+
+    // Execute
+    const success = await executeAction({ type: pending.type, data: pending.data });
+    if (success) haptics.success();
+
+    // Update status and build card
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msg.id) return m;
+      const updatedPending = m.pendingActions?.map(a =>
+        a.id === actionId ? { ...a, status: 'approved' as const } : a
+      );
+      const card: ActionCardData | null = success ? {
+        id: crypto.randomUUID(),
+        type: pending.type.includes('event') ? 'event' : pending.type.includes('todo') ? 'todo' : 'generic',
+        title: pending.label,
+        status: 'created',
+        sourceAction: { type: pending.type, data: pending.data },
+      } : null;
+      return {
+        ...m,
+        pendingActions: updatedPending,
+        actionCards: card ? [...(m.actionCards || []), card] : m.actionCards,
+      };
+    }));
+  };
+
+  /** Reject a single pending action */
+  const handleRejectAction = (actionId: string) => {
+    haptics.selection();
+    setMessages(prev => prev.map(m => ({
+      ...m,
+      pendingActions: m.pendingActions?.map(a =>
+        a.id === actionId ? { ...a, status: 'rejected' as const } : a
+      ),
+    })));
+  };
+
+  /** Approve all pending actions in the latest message */
+  const handleApproveAll = async () => {
+    haptics.selection();
+    const msg = messages.findLast(m => m.pendingActions?.some(a => a.status === 'pending'));
+    if (!msg?.pendingActions) return;
+    for (const pending of msg.pendingActions.filter(a => a.status === 'pending')) {
+      await handleApproveAction(pending.id);
+    }
+  };
+
+  /** Handle clicking a suggestion chip — sends the prompt as a new message */
+  const handleSuggestionSelect = (chip: SuggestionChip) => {
+    haptics.selection();
+    // If the prompt ends with a space or colon, put it in the input for the user to complete
+    if (chip.prompt.endsWith(': ') || chip.prompt.endsWith(' ')) {
+      setInputText(chip.prompt);
+      inputRef.current?.focus();
+    } else {
+      // Full prompt — send directly
+      handleSendMessage(chip.prompt);
+    }
+  };
+
+  /** Handle selecting an option in a guided flow */
+  const handleGuidedFlowSelect = (optionId: string, prompt: string) => {
+    haptics.selection();
+    handleSendMessage(prompt);
+  };
+
+  /** Handle submitting multiple selections in a guided flow */
+  const handleGuidedFlowSubmitMulti = (optionIds: string[]) => {
+    haptics.selection();
+    // Find the guided flow in the latest AI message to get labels
+    const msg = messages.findLast(m => m.guidedFlow);
+    if (!msg?.guidedFlow) return;
+    const labels = optionIds.map(id =>
+      msg.guidedFlow!.step.options.find(o => o.id === id)?.label || id
+    );
+    handleSendMessage(labels.join(', '));
   };
 
   // Handle key press
@@ -1390,7 +1668,10 @@ RULES:
                 >
                   <div className="flex-1 overflow-y-auto px-4 py-3 max-h-[40vh] scrollbar-hide">
                     <div className="space-y-3 max-w-4xl mx-auto w-full">
-                      {messages.map((message, index) => (
+                      {messages.map((message, index) => {
+                        const isLastAiMessage = message.sender === 'ai' &&
+                          index === messages.findLastIndex(m => m.sender === 'ai' && !m.isLoading);
+                        return (
                         <motion.div
                           key={message.id}
                           initial={{ opacity: 0, y: 10 }}
@@ -1402,7 +1683,10 @@ RULES:
                         >
                           {message.sender === "ai" && (
                             <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                              <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center">
+                              <div className={cn(
+                                "w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center",
+                                message.isLoading && "animate-pulse",
+                              )}>
                                 <Bot className="h-4 w-4 text-white" />
                               </div>
                               {isSpeaking && index === messages.length - 1 && (
@@ -1414,7 +1698,7 @@ RULES:
                           )}
                           <div
                             className={cn(
-                              "max-w-[75%] px-3 py-2 rounded-2xl text-sm",
+                              "max-w-[80%] px-3 py-2 rounded-2xl text-sm",
                               message.sender === "user"
                                 ? "bg-purple-600 text-white rounded-br-md"
                                 : message.isError
@@ -1429,11 +1713,35 @@ RULES:
                                 className="max-w-full h-auto rounded-lg mb-2 max-h-32"
                               />
                             )}
-                            {message.isLoading ? (
-                              <div className="flex items-center gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>{message.text}</span>
-                              </div>
+                            {/* AI messages use the rich renderer */}
+                            {message.sender === "ai" ? (
+                              message.isLoading ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex space-x-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                  </div>
+                                  {/* Show action progress during loading */}
+                                  {message.actionProgress && message.actionProgress.length > 0 && (
+                                    <ActionProgress steps={message.actionProgress} />
+                                  )}
+                                </div>
+                              ) : (
+                                <RichMessageRenderer
+                                  message={message}
+                                  isLastAiMessage={isLastAiMessage}
+                                  onSuggestionSelect={handleSuggestionSelect}
+                                  onUndoAction={undefined}
+                                  onApproveAction={handleApproveAction}
+                                  onRejectAction={handleRejectAction}
+                                  onApproveAll={handleApproveAll}
+                                  onGuidedFlowSelect={handleGuidedFlowSelect}
+                                  onGuidedFlowSubmitMulti={handleGuidedFlowSubmitMulti}
+                                />
+                              )
                             ) : (
                               <span className="whitespace-pre-wrap">{message.text}</span>
                             )}
@@ -1498,7 +1806,8 @@ RULES:
                             </div>
                           )}
                         </motion.div>
-                      ))}
+                        );
+                      })}
                       <div ref={messagesEndRef} />
                     </div>
                   </div>
@@ -1651,7 +1960,7 @@ RULES:
                     onSelect={handleMentionSelect}
                     position={mentionPopoverPosition.current}
                     pages={pages}
-                    events={events}
+                    events={allEvents}
                     todos={todos}
                     lists={lists}
                     eisenhowerItems={eisenhowerItems}
@@ -1659,6 +1968,9 @@ RULES:
                     reminders={reminders}
                     sentInvites={sentInvites}
                     receivedInvites={receivedInvites}
+                    calendarAccounts={calendarAccounts}
+                    connectedCalendars={connectedCalendars}
+                    calendarTemplates={calendarTemplates}
                     filterText={mentionFilter}
                   />
                 </div>

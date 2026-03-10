@@ -19,7 +19,6 @@ import {
   Plus,
   Trash2,
   Pencil,
-  Play,
   Calendar,
   X,
   Layers,
@@ -308,15 +307,15 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {/* Apply */}
+                        {/* Add to Calendar */}
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-primary/60 hover:text-primary"
                           onClick={() => handleApplyClick(tmpl)}
-                          title="Apply to this week"
+                          title="Add to calendar"
                         >
-                          <Play size={13} />
+                          <Plus size={13} />
                         </Button>
                         {/* Edit (enters template mode) */}
                         <Button
@@ -382,9 +381,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
       <Dialog open={!!applyingTemplate} onOpenChange={(v) => { if (!v) { setApplyingTemplate(null); setSelectedGroupId(null); } }}>
         <DialogContent className="max-w-xs">
           <DialogHeader>
-            <DialogTitle className="text-title3">Apply to Group</DialogTitle>
+            <DialogTitle className="text-title3">Add to Calendar</DialogTitle>
             <DialogDescription>
-              Choose which group the events from &ldquo;{applyingTemplate?.name}&rdquo; should be added to.
+              Choose which group to add the events from &ldquo;{applyingTemplate?.name}&rdquo; to.
             </DialogDescription>
           </DialogHeader>
 
@@ -435,8 +434,8 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
               onClick={handleApplyConfirm}
               className="gap-1.5"
             >
-              <Play size={13} />
-              Apply
+              <Plus size={13} />
+              Add to Calendar
             </Button>
           </DialogFooter>
         </DialogContent>

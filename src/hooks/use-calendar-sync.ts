@@ -15,9 +15,13 @@ import * as calendarService from '@/lib/services/calendarService';
 import {
   initGoogleCalendarAuth,
   fetchGoogleCalendars,
+  fetchGoogleCalendarsViaBackend,
   fetchGoogleCalendarEvents,
   isGoogleCalendarAuthenticated,
+  ensureGoogleToken,
   disconnectGoogleCalendar,
+  GOOGLE_SYNC_DAYS_BACK,
+  GOOGLE_SYNC_DAYS_FORWARD,
 } from '@/lib/google-calendar';
 import dayjs from 'dayjs';
 
@@ -43,6 +47,7 @@ interface UseCalendarSyncReturn {
   syncState: SyncState;
   availableCalendars: AvailableExternalCalendar[];
   lastAuthEmail: string | null;
+  lastAuthGoogleAccountId: string | null;
 
   // Authentication
   authenticateSource: (source: CalendarSource) => Promise<boolean>;
@@ -66,6 +71,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
   const [availableCalendars, setAvailableCalendars] = useState<AvailableExternalCalendar[]>([]);
   const syncAbortRef = useRef<AbortController | null>(null);
   const lastAuthEmailRef = useRef<string | null>(null);
+  const lastAuthGoogleAccountIdRef = useRef<string | null>(null);
 
   // ─── Authentication ─────────────────────────────────────────────────────
 
@@ -77,6 +83,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
         case 'google': {
           const result = await initGoogleCalendarAuth();
           lastAuthEmailRef.current = result.email;
+          lastAuthGoogleAccountIdRef.current = result.googleAccountId || null;
           setSyncState({ status: 'idle' });
           return true;
         }
@@ -146,17 +153,82 @@ export function useCalendarSync(): UseCalendarSyncReturn {
 
       switch (source) {
         case 'google': {
-          // We just authenticated — go straight to fetching calendars.
-          // If the token expired between auth and now, fetchGoogleCalendars
-          // will throw and we'll show the error UI.
-          const googleCalendars = await fetchGoogleCalendars(lastAuthEmailRef.current || undefined);
-          discovered = googleCalendars.map(gc => ({
-            id: gc.id,
-            name: gc.summary,
-            color: gc.backgroundColor || '#4285F4',
-            primary: gc.primary || false,
-            source: 'google' as CalendarSource,
-          }));
+          const discoverGoogleCalendars = async (): Promise<AvailableExternalCalendar[]> => {
+            const preferredEmail = lastAuthEmailRef.current || undefined;
+            const fetchWithTimeout = async (accountEmail?: string) => {
+              return Promise.race([
+                fetchGoogleCalendars(accountEmail),
+                new Promise<never>((_, reject) => {
+                  setTimeout(() => reject(new Error('Loading calendars timed out. Please try again.')), 12_000);
+                }),
+              ]);
+            };
+
+            let lastError: Error | null = null;
+
+            for (let attempt = 1; attempt <= 4; attempt++) {
+              try {
+                // Give Google a chance to finish propagating the token.
+                await ensureGoogleToken(preferredEmail, lastAuthGoogleAccountIdRef.current || undefined);
+
+                const googleCalendars = lastAuthGoogleAccountIdRef.current
+                  ? await Promise.race([
+                      fetchGoogleCalendarsViaBackend(lastAuthGoogleAccountIdRef.current),
+                      new Promise<never>((_, reject) => {
+                        setTimeout(() => reject(new Error('Loading calendars timed out. Please try again.')), 12_000);
+                      }),
+                    ])
+                  : await fetchWithTimeout(preferredEmail);
+                return googleCalendars.map(gc => ({
+                  id: gc.id,
+                  name: gc.summary,
+                  color: gc.backgroundColor || '#4285F4',
+                  primary: gc.primary || false,
+                  source: 'google' as CalendarSource,
+                }));
+              } catch (primaryErr) {
+                lastError = primaryErr instanceof Error
+                  ? primaryErr
+                  : new Error('Failed to load Google calendars');
+
+                // Fallback: if the authenticated email key is stale/missing,
+                // try using the first valid token in storage.
+                if (preferredEmail) {
+                  try {
+                    const fallbackCalendars = await fetchWithTimeout(undefined);
+                    return fallbackCalendars.map(gc => ({
+                      id: gc.id,
+                      name: gc.summary,
+                      color: gc.backgroundColor || '#4285F4',
+                      primary: gc.primary || false,
+                      source: 'google' as CalendarSource,
+                    }));
+                  } catch (fallbackErr) {
+                    lastError = fallbackErr instanceof Error
+                      ? fallbackErr
+                      : lastError;
+                  }
+                }
+
+                const transient =
+                  lastError.message.includes('expired') ||
+                  lastError.message.includes('timed out') ||
+                  lastError.message.includes('Network error') ||
+                  lastError.message.includes('Not authenticated');
+
+                if (!transient || attempt === 4) {
+                  throw lastError;
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+              }
+            }
+
+            throw lastError || new Error('Failed to load Google calendars');
+          };
+
+          const googleCalendars = await discoverGoogleCalendars();
+          discovered = googleCalendars;
           break;
         }
         case 'microsoft':
@@ -196,13 +268,17 @@ export function useCalendarSync(): UseCalendarSyncReturn {
 
     try {
       let events: SyncedCalendarEvent[] = [];
-      const timeMin = dayjs().subtract(30, 'day').toDate();
-      const timeMax = dayjs().add(90, 'day').toDate();
+      const timeMin = dayjs().subtract(GOOGLE_SYNC_DAYS_BACK, 'day').toDate();
+      const timeMax = dayjs().add(GOOGLE_SYNC_DAYS_FORWARD, 'day').toDate();
 
       switch (calendar.source) {
         case 'google': {
           if (!isGoogleCalendarAuthenticated(calendar.accountEmail)) {
-            throw new Error(`Google token expired for ${calendar.accountEmail || 'unknown account'}. Please re-connect.`);
+            // Try silent token refresh before giving up
+            const refreshed = await ensureGoogleToken(calendar.accountEmail, calendar.googleAccountId);
+            if (!refreshed) {
+              throw new Error(`Google token expired for ${calendar.accountEmail || 'unknown account'}. Please reconnect.`);
+            }
           }
 
           setSyncState(prev => ({ ...prev, progress: 30 }));
@@ -240,10 +316,8 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           break;
       }
 
-      // Save to Firestore
-      if (events.length > 0) {
-        await calendarService.upsertSyncedEvents(user.uid, events);
-      }
+      // Replace cached synced events for this calendar inside the current sync window.
+      await calendarService.replaceSyncedEventsForCalendar(user.uid, calendar.id, events);
 
       // Update last sync time on calendar
       await calendarService.updateConnectedCalendar(user.uid, calendar.id, {
@@ -325,6 +399,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
     syncState,
     availableCalendars,
     lastAuthEmail: lastAuthEmailRef.current,
+    lastAuthGoogleAccountId: lastAuthGoogleAccountIdRef.current,
     authenticateSource,
     disconnectSource,
     isAuthenticated,

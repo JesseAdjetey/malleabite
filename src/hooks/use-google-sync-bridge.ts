@@ -15,6 +15,7 @@ import { useCalendarSync } from '@/hooks/use-calendar-sync';
 import {
   isGoogleCalendarAuthenticated,
   ensureGoogleToken,
+  initGoogleCalendarAuth,
   createGoogleCalendarEvent,
   updateGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
@@ -23,9 +24,57 @@ import { ConnectedCalendar } from '@/types/calendar';
 import { CalendarEventType } from '@/lib/stores/types';
 import { logger } from '@/lib/logger';
 import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
+import { useSyncStatusStore } from '@/lib/stores/sync-status-store';
+import { toast } from 'sonner';
 
 // Default poll interval: 60 seconds
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
+const GOOGLE_WRITE_RETRY_DELAYS_MS = [800, 1600];
+
+function isTransientGoogleWriteError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return [
+    'failed to fetch',
+    'network',
+    'load failed',
+    'timeout',
+    'timed out',
+    'http 500',
+    'http 502',
+    'http 503',
+    'http 504',
+    'status 500',
+    'status 502',
+    'status 503',
+    'status 504',
+    'quota exceeded',
+    'rate limit',
+  ].some(fragment => message.includes(fragment));
+}
+
+async function retryGoogleWrite<T>(
+  operation: 'create' | 'update' | 'delete',
+  execute: () => Promise<T>
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= GOOGLE_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      lastError = error;
+      if (attempt === GOOGLE_WRITE_RETRY_DELAYS_MS.length || !isTransientGoogleWriteError(error)) {
+        throw error;
+      }
+
+      const delayMs = GOOGLE_WRITE_RETRY_DELAYS_MS[attempt];
+      logger.warn('GoogleSyncBridge', `Transient Google ${operation} failure, retrying in ${delayMs}ms`, { error });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Google ${operation} failed`);
+}
 
 /**
  * Hook that sets up the two-way Google Calendar sync bridge.
@@ -45,6 +94,43 @@ export function useGoogleSyncBridge() {
   // calendars array.  The poll function reads from the ref instead.
   const calendarsRef = useRef(calendars);
   calendarsRef.current = calendars;
+
+  // ─── Reconnect ──────────────────────────────────────────────────────────
+
+  /**
+   * Reconnect a Google account whose token has expired.
+   * Opens the Google sign-in popup, refreshes the token, then auto-syncs.
+   */
+  const reconnectAccount = useCallback(
+    async (accountEmail: string): Promise<boolean> => {
+      try {
+        const result = await initGoogleCalendarAuth();
+        // The user may pick the same or a different account in the popup.
+        // Clear expired state for the email they originally had AND the
+        // email that was just authenticated.
+        useSyncStatusStore.getState().clearExpired(accountEmail);
+        useSyncStatusStore.getState().clearExpired(result.email);
+
+        // Auto-sync all Google calendars for that account
+        const matchingCals = calendarsRef.current.filter(
+          (c) => c.source === 'google' && c.accountEmail === accountEmail && c.isActive
+        );
+        for (const cal of matchingCals) {
+          try {
+            await syncCalendar(cal);
+          } catch { /* non-blocking */ }
+        }
+
+        toast.success(`Reconnected ${accountEmail}`);
+        return true;
+      } catch (err) {
+        logger.error('GoogleSyncBridge', 'Reconnect failed', { error: err });
+        toast.error('Failed to reconnect. Please try again.');
+        return false;
+      }
+    },
+    [syncCalendar]
+  );
 
   // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -76,16 +162,20 @@ export function useGoogleSyncBridge() {
 
       // Try silent token refresh (no popup) if expired
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
-        const ok = await ensureGoogleToken(googleCal.accountEmail);
+        const ok = await ensureGoogleToken(googleCal.accountEmail, googleCal.googleAccountId);
         if (!ok) {
-          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; event not pushed. Please reconnect.`);
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; event not pushed.`);
+          useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
           return null;
         }
       }
 
       try {
         const sourceCalId = googleCal.sourceCalendarId || 'primary';
-        const googleEvent = await createGoogleCalendarEvent(event, sourceCalId, googleCal.accountEmail);
+        const googleEvent = await retryGoogleWrite(
+          'create',
+          () => createGoogleCalendarEvent(event, sourceCalId, googleCal.accountEmail)
+        );
         logger.info('GoogleSyncBridge', `Pushed create → Google: ${googleEvent.id}`);
         return googleEvent.id;
       } catch (err) {
@@ -120,16 +210,20 @@ export function useGoogleSyncBridge() {
       }
 
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
-        const ok = await ensureGoogleToken(googleCal.accountEmail);
+        const ok = await ensureGoogleToken(googleCal.accountEmail, googleCal.googleAccountId);
         if (!ok) {
-          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; update not pushed. Please reconnect.`);
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; update not pushed.`);
+          useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
           return false;
         }
       }
 
       try {
         const sourceCalId = googleCal.sourceCalendarId || 'primary';
-        await updateGoogleCalendarEvent(event.googleEventId, event, sourceCalId, googleCal.accountEmail);
+        await retryGoogleWrite(
+          'update',
+          () => updateGoogleCalendarEvent(event.googleEventId, event, sourceCalId, googleCal.accountEmail)
+        );
         logger.info('GoogleSyncBridge', `Pushed update → Google: ${event.googleEventId}`);
         return true;
       } catch (err) {
@@ -150,16 +244,20 @@ export function useGoogleSyncBridge() {
       if (!event.googleEventId) return false;
 
       if (!isGoogleCalendarAuthenticated(googleCal.accountEmail)) {
-        const ok = await ensureGoogleToken(googleCal.accountEmail);
+        const ok = await ensureGoogleToken(googleCal.accountEmail, googleCal.googleAccountId);
         if (!ok) {
-          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; delete not pushed. Please reconnect.`);
+          logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; delete not pushed.`);
+          useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
           return false;
         }
       }
 
       try {
         const sourceCalId = googleCal.sourceCalendarId || 'primary';
-        await deleteGoogleCalendarEvent(event.googleEventId, sourceCalId, googleCal.accountEmail);
+        await retryGoogleWrite(
+          'delete',
+          () => deleteGoogleCalendarEvent(event.googleEventId, sourceCalId, googleCal.accountEmail)
+        );
         logger.info('GoogleSyncBridge', `Pushed delete → Google: ${event.googleEventId}`);
         return true;
       } catch (err) {
@@ -214,10 +312,14 @@ export function useGoogleSyncBridge() {
         // Check token per-account so multi-account setups work.
         // Try silent refresh if expired (no popup).
         if (!isGoogleCalendarAuthenticated(cal.accountEmail)) {
-          const ok = await ensureGoogleToken(cal.accountEmail);
+          const ok = await ensureGoogleToken(cal.accountEmail, cal.googleAccountId);
           if (!ok) {
-            logger.warn('GoogleSyncBridge', `Skipping poll for ${cal.name}: token expired for ${cal.accountEmail}. Please reconnect.`);
+            logger.warn('GoogleSyncBridge', `Token expired for ${cal.accountEmail}. Marking for reconnect.`);
+            useSyncStatusStore.getState().markExpired(cal.accountEmail);
             continue;
+          } else {
+            // Silent refresh succeeded — clear any stale expired flag
+            useSyncStatusStore.getState().clearExpired(cal.accountEmail);
           }
         }
 
@@ -253,5 +355,6 @@ export function useGoogleSyncBridge() {
     pushUpdateToGoogle,
     pushDeleteToGoogle,
     getGoogleCalendar,
+    reconnectAccount,
   };
 }

@@ -711,6 +711,9 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
    - Add/remove/minimize/maximize modules. Create/delete/switch pages.
    - Each module has a unique moduleId. ALWAYS use moduleId when targeting a specific module instance.
    - Check SIDEBAR_PAGES to avoid duplicates. Valid types: "todo", "pomodoro", "alarms", "reminders", "eisenhower", "invites", "archives", "templates", "calendars"
+   - CRITICAL: When the user specifies a page name (e.g. "add a todo module to my Work page"), you MUST include "pageName" in the add_module data. Check SIDEBAR_PAGES for the exact page title.
+   - If no page is mentioned, omit pageName so it defaults to the active page.
+   - To create a new page, use create_page with a title. You can combine create_page + add_module in one actions array to create a page and immediately add modules to it (use the same pageName/title).
 
 6. TODO LIST & POMODORO: Use listName for targeting. Use start/pause/reset/set_pomodoro_settings.
 
@@ -923,7 +926,7 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     // ── View & Navigation ──
     { "type": "change_view", "data": { "view": "Day|Week|Month" } },
     // ── Module Control ──
-    { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "optional" } },
+    { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "REQUIRED if user specifies a page, omit for active page" } },
     { "type": "remove_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "title": "optional", "pageName": "optional" } },
     { "type": "minimize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },
     { "type": "maximize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },

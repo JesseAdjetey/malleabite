@@ -2081,7 +2081,14 @@ RULES:
                                   calendarAccounts={calendarAccounts}
                                   onAddToLists={handleAddToLists}
                                   onRemoveFromLists={handleRemoveFromLists}
-                                  todoLists={lists.map(l => ({ id: l.id, name: l.name, color: l.color }))}
+                                  todoLists={(() => {
+                                    // Filter to lists that are in use: referenced by a module, have todos, or are default
+                                    const moduleListIds = new Set(pages.flatMap(p => p.modules.filter(m => m.listId).map(m => m.listId!)));
+                                    const todoListIds = new Set(todos.map(t => t.listId));
+                                    return lists
+                                      .filter(l => l.isDefault || moduleListIds.has(l.id) || todoListIds.has(l.id) || l.id === activeListId)
+                                      .map(l => ({ id: l.id, name: l.name, color: l.color }));
+                                  })()}
                                 />
                               )
                             ) : (

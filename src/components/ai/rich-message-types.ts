@@ -285,7 +285,7 @@ export function actionsToCards(
   actions: Array<{ type: string; data?: any }>,
   executionResults: boolean[],
   resolveCalendar?: (calendarId?: string) => { id: string; name: string; color: string },
-  resolveList?: (listId?: string) => { id: string; name: string; color: string } | undefined,
+  resolveList?: (listId?: string, listName?: string) => { id: string; name: string; color: string } | undefined,
 ): ActionCardData[] {
   return actions
     .map((action, i) => {
@@ -339,7 +339,7 @@ export function actionsToCards(
             status: 'created' as const,
             icon: 'check-square',
             sourceAction: action,
-            listInfo: resolveList?.(data.listId),
+            listInfo: resolveList?.(data.listId, data.listName),
           };
         case 'create_alarm':
           return {

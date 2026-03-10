@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useEisenhower, EisenhowerItem } from '@/hooks/use-eisenhower';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { Loader2 } from 'lucide-react';
+import { useEventHighlightStore } from '@/lib/stores/event-highlight-store';
 
 interface QuadrantConfig {
   title: string;
@@ -42,6 +43,15 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
   const [dragOverQuadrant, setDragOverQuadrant] = useState<QuadrantType>(null);
   const { items, loading, error, addItem, removeItem, updateQuadrant, lastResponse } = useEisenhower(instanceId);
   const { user } = useAuth();
+
+  // Spotlight highlight
+  const highlightedItemId = useEventHighlightStore(s => s.highlightedItemId);
+  const highlightedItemType = useEventHighlightStore(s => s.highlightedItemType);
+  const spotlightRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, []);
 
   const quadrantConfig: Record<EisenhowerItem['quadrant'], QuadrantConfig> = {
     'urgent_important': {
@@ -226,7 +236,12 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
               quadrantItems.map(item => (
                 <div
                   key={item.id}
-                  className="bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white cursor-grab active:cursor-grabbing select-none"
+                  ref={highlightedItemId === item.id && highlightedItemType === 'eisenhower' ? spotlightRef : undefined}
+                  data-eisenhower-id={item.id}
+                  className={cn(
+                    "bg-white/50 dark:bg-white/10 text-xs p-2 rounded mb-1 flex justify-between text-gray-800 dark:text-white cursor-grab active:cursor-grabbing select-none",
+                    highlightedItemId === item.id && highlightedItemType === 'eisenhower' && "event-spotlight"
+                  )}
                   draggable={true}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                     e.stopPropagation();
@@ -308,7 +323,12 @@ const EisenhowerModule: React.FC<EisenhowerModuleProps> = ({
                 quadrantItems.slice(0, 3).map(item => (
                   <div
                     key={item.id}
-                    className="bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing select-none text-gray-800 dark:text-white"
+                    ref={highlightedItemId === item.id && highlightedItemType === 'eisenhower' ? spotlightRef : undefined}
+                    data-eisenhower-id={item.id}
+                    className={cn(
+                      "bg-white/50 dark:bg-white/10 text-xs p-1 rounded mb-1 flex justify-between cursor-grab active:cursor-grabbing select-none text-gray-800 dark:text-white",
+                      highlightedItemId === item.id && highlightedItemType === 'eisenhower' && "event-spotlight"
+                    )}
                     draggable={true}
                     onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                       e.stopPropagation();

@@ -34,7 +34,7 @@ export interface RichMessage {
 }
 
 // ── Action Card ──────────────────────────────────────────────────
-export type ActionCardType = 'event' | 'todo' | 'alarm' | 'reminder' | 'pomodoro' | 'generic';
+export type ActionCardType = 'event' | 'todo' | 'alarm' | 'reminder' | 'pomodoro' | 'eisenhower' | 'generic';
 
 export interface ActionCardData {
   id: string;
@@ -47,6 +47,16 @@ export interface ActionCardData {
   metadata?: Record<string, string>; // extra display fields
   /** The original action that produced this card, for undo */
   sourceAction?: { type: string; data: any };
+  /** Primary calendar the event was added to (event cards only) */
+  calendarInfo?: { id: string; name: string; color: string; eventId?: string };
+  /** Additional calendars the event was also added to */
+  additionalCalendars?: Array<{ id: string; name: string; color: string; eventId?: string }>;
+  /** Todo list the item was added to (todo cards) */
+  listInfo?: { id: string; name: string; color: string; todoId?: string };
+  /** Additional lists the todo was also added to */
+  additionalLists?: Array<{ id: string; name: string; color: string; todoId?: string }>;
+  /** Eisenhower quadrant info */
+  quadrantInfo?: { quadrant: string; label: string; color: string };
 }
 
 // ── Suggestion Chips ─────────────────────────────────────────────
@@ -82,11 +92,114 @@ export interface PendingAction {
  * Generate contextual suggestion chips based on the AI response intent and actions.
  * This is the frontend-driven logic — no backend changes needed.
  */
+// ── Contextual Question Detection ─────────────────────────────────
+// When the AI poses a follow-up question with clear options (e.g. "Would you
+// like to X, or Y?"), we extract those options as quick-reply chips so the user
+// can tap instead of typing.
+
+function detectContextualQuestion(text: string): SuggestionChip[] {
+  const lower = text.toLowerCase();
+
+  // Only proceed if the text looks like it's asking the user something
+  const hasQuestion =
+    lower.includes('would you like') ||
+    lower.includes('do you want') ||
+    lower.includes('should i') ||
+    lower.includes('shall i') ||
+    lower.includes('which one') ||
+    lower.includes('what would you') ||
+    lower.includes('how would you') ||
+    lower.includes('would you prefer') ||
+    lower.includes('want me to') ||
+    text.includes('?');
+
+  if (!hasQuestion) return [];
+
+  // Find the sentence(s) containing the question
+  const sentences = text.split(/[.!]\s+/);
+  const questionSentences = sentences.filter(s => s.includes('?'));
+  if (questionSentences.length === 0) return [];
+
+  const questionBlock = questionSentences.join(' ').toLowerCase();
+  const chips: SuggestionChip[] = [];
+
+  // ── Pattern: "X, or Y?" / "X or Y?" ──
+  // e.g. "Would you like to create a new to-do list for it, or for future tasks?"
+  // e.g. "Should I add it to your calendar, or just keep it as a todo?"
+  const orSplit = questionBlock.split(/,?\s+or\s+/);
+  if (orSplit.length >= 2) {
+    // Extract the tail options
+    for (let i = 0; i < orSplit.length; i++) {
+      let option = orSplit[i]
+        .replace(/^(would you like to |do you want to |do you want me to |should i |shall i |want me to )/i, '')
+        .replace(/\?+$/, '')
+        .trim();
+      // For the first segment, grab only the actionable part after the last comma
+      if (i === 0) {
+        const parts = option.split(/,\s*/);
+        option = parts[parts.length - 1].trim();
+        // Also strip leading connectors from the extracted portion
+        option = option.replace(/^(would you like to |do you want to |do you want me to |should i |shall i |want me to )/i, '').trim();
+      }
+      if (option.length > 2 && option.length < 80) {
+        const label = option.charAt(0).toUpperCase() + option.slice(1);
+        chips.push({
+          id: `ctx-${i}`,
+          label,
+          prompt: label,
+        });
+      }
+    }
+  }
+
+  // ── Pattern: Numbered list of options ──
+  // e.g. "1. Create a new list\n2. Add to existing list"
+  const numberedOptions = text.match(/(?:^|\n)\s*\d+[.)]\s+(.+)/gm);
+  if (numberedOptions && numberedOptions.length >= 2 && chips.length === 0) {
+    for (let i = 0; i < Math.min(numberedOptions.length, 4); i++) {
+      const option = numberedOptions[i].replace(/^\s*\d+[.)]\s+/, '').trim();
+      if (option.length > 2 && option.length < 80) {
+        chips.push({
+          id: `ctx-num-${i}`,
+          label: option,
+          prompt: option,
+        });
+      }
+    }
+  }
+
+  // ── Pattern: Yes/No question ──
+  // e.g. "Would you like me to create it?" / "Should I go ahead?"
+  if (chips.length === 0 && (
+    questionBlock.includes('would you like') ||
+    questionBlock.includes('do you want') ||
+    questionBlock.includes('should i') ||
+    questionBlock.includes('shall i') ||
+    questionBlock.includes('want me to')
+  ) && !questionBlock.includes(' or ')) {
+    chips.push(
+      { id: 'ctx-yes', label: 'Yes, go ahead', prompt: 'Yes, please go ahead' },
+      { id: 'ctx-no', label: 'No thanks', prompt: "No, that's okay" },
+    );
+  }
+
+  return chips;
+}
+
 export function generateSuggestions(
   intent: string | undefined,
   actions: Array<{ type: string; data?: any }>,
   messageText: string,
 ): SuggestionChip[] {
+  // ── Priority 1: Detect follow-up questions in the AI text ──
+  // If the AI is asking the user a question with implied options, generate
+  // contextual quick-reply chips instead of generic ones.
+  const contextualChips = detectContextualQuestion(messageText);
+  if (contextualChips.length > 0) {
+    return contextualChips.slice(0, 4);
+  }
+
+  // ── Priority 2: Action-based suggestions ──
   const chips: SuggestionChip[] = [];
 
   // After creating an event
@@ -171,6 +284,8 @@ export function generateSuggestions(
 export function actionsToCards(
   actions: Array<{ type: string; data?: any }>,
   executionResults: boolean[],
+  resolveCalendar?: (calendarId?: string) => { id: string; name: string; color: string },
+  resolveList?: (listId?: string) => { id: string; name: string; color: string } | undefined,
 ): ActionCardData[] {
   return actions
     .map((action, i) => {
@@ -178,7 +293,8 @@ export function actionsToCards(
       const data = action.data || action;
 
       switch (action.type) {
-        case 'create_event':
+        case 'create_event': {
+          const cal = resolveCalendar?.(data.calendarId);
           return {
             id: crypto.randomUUID(),
             type: 'event' as ActionCardType,
@@ -188,8 +304,11 @@ export function actionsToCards(
             status: 'created' as const,
             icon: 'calendar',
             sourceAction: action,
+            calendarInfo: cal,
           };
-        case 'update_event':
+        }
+        case 'update_event': {
+          const cal = resolveCalendar?.(data.calendarId);
           return {
             id: crypto.randomUUID(),
             type: 'event' as ActionCardType,
@@ -199,7 +318,9 @@ export function actionsToCards(
             status: 'updated' as const,
             icon: 'calendar',
             sourceAction: action,
+            calendarInfo: cal,
           };
+        }
         case 'delete_event':
           return {
             id: crypto.randomUUID(),
@@ -218,6 +339,7 @@ export function actionsToCards(
             status: 'created' as const,
             icon: 'check-square',
             sourceAction: action,
+            listInfo: resolveList?.(data.listId),
           };
         case 'create_alarm':
           return {
@@ -250,6 +372,26 @@ export function actionsToCards(
             icon: 'timer',
             sourceAction: action,
           };
+        case 'create_eisenhower': {
+          const quadrantLabels: Record<string, { label: string; color: string }> = {
+            urgent_important: { label: 'Urgent & Important', color: '#ef4444' },
+            not_urgent_important: { label: 'Important', color: '#eab308' },
+            urgent_not_important: { label: 'Urgent', color: '#3b82f6' },
+            not_urgent_not_important: { label: 'Neither', color: '#22c55e' },
+          };
+          const q = quadrantLabels[data.quadrant] || { label: data.quadrant, color: '#8b5cf6' };
+          return {
+            id: crypto.randomUUID(),
+            type: 'eisenhower' as ActionCardType,
+            title: data.text || 'Priority Item',
+            subtitle: q.label,
+            color: q.color,
+            status: 'created' as const,
+            icon: 'star',
+            sourceAction: action,
+            quadrantInfo: { quadrant: data.quadrant, label: q.label, color: q.color },
+          };
+        }
         default:
           return null;
       }

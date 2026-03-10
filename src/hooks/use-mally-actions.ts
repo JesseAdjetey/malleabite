@@ -18,6 +18,7 @@ import { SidebarPage } from "@/lib/stores/types";
 import { useGoogleCalendar } from "@/hooks/use-google-calendar";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
+import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import dayjs from "dayjs";
 
 // ── New imports for expanded AI capabilities ─────────────────────────────────
@@ -33,6 +34,8 @@ import { useCalendarSnapshots } from "@/hooks/use-calendar-snapshots";
 import { useEventSearch } from "@/hooks/use-event-search";
 import { useWorkingHours } from "@/hooks/use-working-hours";
 import { useRecurringEvents } from "@/hooks/use-recurring-events";
+import { useCalendarPreferences } from "@/hooks/use-calendar-preferences";
+import { PERSONAL_CALENDAR_ID } from "@/lib/stores/calendar-filter-store";
 import { useAnalyticsData } from "@/hooks/use-analytics-data";
 import { exportToICalendar, downloadICalendar } from "@/lib/utils/calendar-import-export";
 import { usePrintCalendar } from "@/hooks/use-print-calendar";
@@ -99,6 +102,65 @@ export function useMallyActions() {
   const calendarAccounts = useCalendarFilterStore(state => state.accounts);
   const toggleVisibility = useCalendarFilterStore(state => state.toggleVisibility);
   const setAllVisible = useCalendarFilterStore(state => state.setAllVisible);
+
+  // Calendar preferences (primary calendar for new events)
+  const { primaryCalendarId } = useCalendarPreferences();
+
+  /** Resolve the target calendar for a new AI-created event.
+   *  Priority: AI-specified → user preference → first visible calendar → Personal */
+  const resolveTargetCalendar = useCallback((aiCalendarId?: string) => {
+    // 1. If the AI explicitly specified a calendarId, use it
+    if (aiCalendarId) {
+      const match = calendarAccounts.find(a => a.id === aiCalendarId);
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 2. If user set a primary calendar in preferences, use it
+    if (primaryCalendarId) {
+      const match = calendarAccounts.find(a => a.id === primaryCalendarId && a.visible);
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 3. Use the first visible calendar (matches what the user currently sees)
+    const visibleAccounts = calendarAccounts.filter(a => a.visible);
+    if (visibleAccounts.length > 0) {
+      const first = visibleAccounts[0];
+      return { id: first.id, name: first.name, color: first.color };
+    }
+    // 4. Fall back to Personal
+    const personal = calendarAccounts.find(a => a.id === PERSONAL_CALENDAR_ID) || { id: PERSONAL_CALENDAR_ID, name: 'Personal', color: '#8B5CF6' };
+    return { id: personal.id, name: personal.name, color: personal.color };
+  }, [calendarAccounts, primaryCalendarId]);
+
+  // Default todo list preference
+  const defaultTodoListId = useSettingsStore(s => s.defaultTodoListId);
+
+  /** Resolve the target todo list for a new AI-created todo.
+   *  Priority: AI-specified ID → AI-specified name → user default preference → activeListId → first list */
+  const resolveTargetList = useCallback((aiListId?: string, aiListName?: string): { id: string; name: string; color: string } | undefined => {
+    // 1. AI explicitly specified a listId
+    if (aiListId) {
+      const match = lists.find(l => l.id === aiListId);
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 2. AI specified a list name
+    if (aiListName) {
+      const match = lists.find(l => l.name.toLowerCase().trim() === aiListName.toLowerCase().trim());
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 3. User set a default todo list preference
+    if (defaultTodoListId) {
+      const match = lists.find(l => l.id === defaultTodoListId);
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 4. Active list in the sidebar
+    if (activeListId) {
+      const match = lists.find(l => l.id === activeListId);
+      if (match) return { id: match.id, name: match.name, color: match.color };
+    }
+    // 5. Default list or first available
+    const defaultList = lists.find(l => l.isDefault) || lists[0];
+    if (defaultList) return { id: defaultList.id, name: defaultList.name, color: defaultList.color };
+    return undefined;
+  }, [lists, defaultTodoListId, activeListId]);
 
   // ── New capabilities ───────────────────────────────────────────────────────
 
@@ -295,6 +357,7 @@ export function useMallyActions() {
             }
           }
 
+          const targetCal = resolveTargetCalendar(data.calendarId);
           const rawEventData = {
             title: data.title,
             startsAt: data.start || data.startsAt,
@@ -303,7 +366,7 @@ export function useMallyActions() {
             color: data.color || '#8b5cf6',
             isRecurring: data.isRecurring || false,
             recurrenceRule: data.recurrenceRule,
-            calendarId: data.calendarId,
+            calendarId: targetCal.id,
           };
 
           const formattedEvent = formatAIEvent(rawEventData);
@@ -322,8 +385,10 @@ export function useMallyActions() {
             }
           }
 
-          toast.success(`Event "${data.title}" created`);
+          // Navigate to event date and spotlight it on the calendar
           if (rawEventData.startsAt) setDate(dayjs(rawEventData.startsAt));
+          const createdEventId = result.data?.id || formattedEvent.id;
+          useEventHighlightStore.getState().setHighlight(createdEventId, rawEventData.startsAt);
           return true;
         }
 
@@ -337,6 +402,7 @@ export function useMallyActions() {
             startsAt: data.start ? new Date(data.start).toISOString() : existing.startsAt,
             endsAt: data.end ? new Date(data.end).toISOString() : existing.endsAt,
             description: data.description || existing.description,
+            calendarId: data.calendarId || existing.calendarId,
           };
           const result = await updateEvent(updated);
           if (result?.success) { toast.success('Event updated'); return true; }
@@ -366,16 +432,11 @@ export function useMallyActions() {
         // ── Todos ────────────────────────────────────────────────────────────
 
         case 'create_todo': {
-          let targetListId = data.listId;
-          if (!targetListId && data.listName) {
-            const found = lists.find(l =>
-              l.name.toLowerCase().trim() === (data.listName as string).toLowerCase().trim()
-            );
-            if (found) targetListId = found.id;
-          }
-          if (!targetListId && activeListId) targetListId = activeListId;
-          if (!targetListId) targetListId = lists.find(l => l.isDefault)?.id;
-          if (!targetListId && lists.length > 0) targetListId = lists[0].id;
+          // Resolve target list using the new priority chain
+          const targetList = resolveTargetList(data.listId, data.listName);
+          let targetListId = targetList?.id;
+
+          // Last resort: create a default list
           if (!targetListId) {
             const r = await createList("My Tasks");
             if (r.success) targetListId = r.listId;
@@ -384,7 +445,14 @@ export function useMallyActions() {
 
           await ensureModuleVisible('todo', lists.find(l => l.id === targetListId)?.name || 'Tasks', targetListId);
           const result = await addTodo(data.text || data.title, targetListId);
-          if (result?.success) { toast.success(`Todo "${data.text || data.title}" added`); return true; }
+          if (result?.success) {
+            // Spotlight the new todo item
+            const todoId = result.todoId;
+            if (todoId) {
+              useEventHighlightStore.getState().setItemHighlight(todoId, 'todo');
+            }
+            return true;
+          }
           return false;
         }
 
@@ -449,7 +517,12 @@ export function useMallyActions() {
           if (!data.text || !data.quadrant) { toast.error('Missing text or quadrant'); return false; }
           await ensureModuleVisible('eisenhower', 'Priorities');
           const result = await addEisenhowerItem(data.text, data.quadrant);
-          if (result?.success) { toast.success('Priority item added'); return true; }
+          if (result?.success) {
+            if (result.itemId) {
+              useEventHighlightStore.getState().setItemHighlight(result.itemId, 'eisenhower');
+            }
+            return true;
+          }
           return false;
         }
 
@@ -483,7 +556,12 @@ export function useMallyActions() {
             linkedTodoId: data.linkedTodoId,
             repeatDays: data.repeatDays || [],
           });
-          if (result?.success) { toast.success(`Alarm "${data.title}" set`); return true; }
+          if (result?.success) {
+            if (result.alarmId) {
+              useEventHighlightStore.getState().setItemHighlight(result.alarmId, 'alarm');
+            }
+            return true;
+          }
           return false;
         }
 
@@ -541,7 +619,12 @@ export function useMallyActions() {
             eventId: data.eventId,
             soundId: data.soundId || 'default',
           });
-          if (result?.success) { toast.success(`Reminder "${data.title}" set`); return true; }
+          if (result?.success) {
+            if (result.reminderId) {
+              useEventHighlightStore.getState().setItemHighlight(result.reminderId, 'reminder');
+            }
+            return true;
+          }
           return false;
         }
 
@@ -1700,9 +1783,12 @@ export function useMallyActions() {
 
   // ─── Context builder ───────────────────────────────────────────────────────
 
-  const buildContext = useCallback(() => ({
+  const buildContext = useCallback(() => {
+    const targetCal = resolveTargetCalendar();
+    return {
     currentTime: new Date().toISOString(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    defaultCalendarForNewEvents: { id: targetCal.id, name: targetCal.name },
     availableCalendars: calendarAccounts.map(a => ({
       id: a.id, name: a.name, isDefault: a.isDefault || false, isGoogle: a.isGoogle || false,
     })),
@@ -1799,7 +1885,8 @@ export function useMallyActions() {
         endTime: e.endTime,
       })),
     })),
-  }), [
+  };
+  }, [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
     eisenhowerItems, events, todos, alarms, userMemory,
@@ -1807,7 +1894,7 @@ export function useMallyActions() {
     calendarGroups, goalsWithProgress, bookingPages, snapshots,
     workingHours, analyticsMetrics,
     isBulkMode, selectedCount, canUndo, canRedo,
-    calendarTemplates,
+    calendarTemplates, resolveTargetCalendar, resolveTargetList, defaultTodoListId,
   ]);
 
   return {
@@ -1827,5 +1914,7 @@ export function useMallyActions() {
     receivedInvites: receivedInvites || [],
     templates: templates || [],
     calendarAccounts,
+    resolveTargetCalendar,
+    resolveTargetList,
   };
 }

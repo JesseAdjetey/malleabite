@@ -117,7 +117,7 @@ export function useReminders(instanceId?: string) {
   }, [user, instanceId]);
 
   // Add a new reminder
-  const addReminder = async (data: ReminderFormData): Promise<{ success: boolean, error?: any }> => {
+  const addReminder = async (data: ReminderFormData): Promise<{ success: boolean, error?: any, reminderId?: string }> => {
     if (!user) {
       toast.error('You must be logged in to create reminders');
       return { success: false };
@@ -153,7 +153,7 @@ export function useReminders(instanceId?: string) {
       console.log('Reminder created with ID:', docRef.id);
       toast.success('Reminder created');
 
-      return { success: true };
+      return { success: true, reminderId: docRef.id };
     } catch (error: any) {
       console.error('Error creating reminder:', error);
       toast.error(`Failed to create reminder: ${error.message}`);

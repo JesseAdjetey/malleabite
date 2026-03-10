@@ -232,7 +232,8 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       <div className="flex-1 px-0.5 md:px-1 pb-1 overflow-hidden space-y-1">
         {visibleEvents.map(event => (
           <div 
-            key={event.id} 
+            key={event.id}
+            data-event-id={event.id}
             className={cn(
               "gradient-border calendar-event-wrapper overflow-hidden",
               event.isAllDay ? "rounded-[3px]" : "rounded-sm"

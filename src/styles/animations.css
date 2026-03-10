@@ -41,6 +41,45 @@
   50% { opacity: 0.8; }
 }
 
+/* Event Spotlight — AI-created event highlight */
+@keyframes event-spotlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.6), 0 0 0 0 rgba(139, 92, 246, 0.3);
+    transform: scale(1);
+  }
+  15% {
+    box-shadow: 0 0 8px 2px rgba(139, 92, 246, 0.5), 0 0 20px 6px rgba(139, 92, 246, 0.15);
+    transform: scale(1.03);
+  }
+  30% {
+    box-shadow: 0 0 4px 1px rgba(139, 92, 246, 0.3), 0 0 12px 4px rgba(139, 92, 246, 0.1);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 8px 2px rgba(139, 92, 246, 0.5), 0 0 20px 6px rgba(139, 92, 246, 0.15);
+    transform: scale(1.03);
+  }
+  70% {
+    box-shadow: 0 0 4px 1px rgba(139, 92, 246, 0.3), 0 0 12px 4px rgba(139, 92, 246, 0.1);
+    transform: scale(1);
+  }
+  85% {
+    box-shadow: 0 0 6px 1px rgba(139, 92, 246, 0.2), 0 0 10px 3px rgba(139, 92, 246, 0.05);
+    transform: scale(1.01);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0), 0 0 0 0 rgba(139, 92, 246, 0);
+    transform: scale(1);
+  }
+}
+
+.event-spotlight {
+  animation: event-spotlight 4s ease-out forwards;
+  z-index: 20 !important;
+  position: relative;
+  border-radius: inherit;
+}
+
 /* Draggable elements — calendar events DnD */
 .draggable {
   cursor: grab;

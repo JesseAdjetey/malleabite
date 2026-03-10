@@ -8,6 +8,9 @@ interface SettingsState {
   /** When true, AI actions execute immediately without confirmation. When false, user must confirm. */
   aiAutoExecute: boolean;
   setAiAutoExecute: (value: boolean) => void;
+  /** Default todo list ID for AI-created todos (persists user preference) */
+  defaultTodoListId: string | null;
+  setDefaultTodoListId: (id: string | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -17,6 +20,8 @@ export const useSettingsStore = create<SettingsState>()(
       setBackgroundColor: (color) => set({ backgroundColor: color }),
       aiAutoExecute: true,
       setAiAutoExecute: (value) => set({ aiAutoExecute: value }),
+      defaultTodoListId: null,
+      setDefaultTodoListId: (id) => set({ defaultTodoListId: id }),
     }),
     {
       name: 'timegeist-settings',

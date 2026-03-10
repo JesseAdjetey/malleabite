@@ -106,6 +106,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
         return (
           <div
             key={event.id}
+            data-event-id={event.id}
             className="absolute z-10"
             style={{
               top: `${topPosition}px`,

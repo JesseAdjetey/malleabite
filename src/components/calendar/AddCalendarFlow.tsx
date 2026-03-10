@@ -25,19 +25,18 @@ import {
 import {
   CalendarSource,
   CalendarGroup,
-  CALENDAR_SOURCES,
   AddCalendarStep,
 } from '@/types/calendar';
 import { useCalendarSync } from '@/hooks/use-calendar-sync';
 import { cancelGoogleAuth } from '@/lib/google-calendar';
-import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft, AlertTriangle, LayoutTemplate } from 'lucide-react';
 
 interface AddCalendarFlowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groups: CalendarGroup[];
   defaultGroupId?: string;
+  onOpenTemplates: () => void;
   onComplete: (result: {
     source: CalendarSource;
     selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
@@ -47,17 +46,50 @@ interface AddCalendarFlowProps {
   }) => void;
 }
 
-const SOURCE_ICONS: Record<CalendarSource, React.ElementType> = {
-  google: Calendar,
-  microsoft: Mail,
-  apple: Calendar,
+type AddFlowOptionId = CalendarSource | 'template';
+
+type AddFlowOption = {
+  id: AddFlowOptionId;
+  label: string;
+  description: string;
+  color: string;
+  icon: React.ElementType;
+  disabled?: boolean;
+  badge?: string;
 };
+
+const SOURCE_OPTIONS: AddFlowOption[] = [
+  {
+    id: 'google',
+    label: 'Google Calendar',
+    description: 'Connect your Google Calendar',
+    color: '#4285F4',
+    icon: Calendar,
+  },
+  {
+    id: 'template',
+    label: 'Templates',
+    description: 'Add from saved templates or create a new one',
+    color: '#8B5CF6',
+    icon: LayoutTemplate,
+  },
+  {
+    id: 'microsoft',
+    label: 'Microsoft Outlook',
+    description: 'Coming soon',
+    color: '#0078D4',
+    icon: Mail,
+    disabled: true,
+    badge: 'Coming soon',
+  },
+];
 
 const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   open,
   onOpenChange,
   groups,
   defaultGroupId,
+  onOpenTemplates,
   onComplete,
 }) => {
   const {
@@ -115,6 +147,11 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   };
 
   // Step 1: Select source
+  const handleOpenTemplates = () => {
+    handleOpenChange(false);
+    onOpenTemplates();
+  };
+
   const handleSelectSource = async (source: CalendarSource) => {
     resetSyncState();
     setDiscoveryStatus('idle');
@@ -208,7 +245,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
             {stepTitles[step]}
           </DialogTitle>
           <DialogDescription>
-            {step === 'select-source' && 'Choose a calendar provider to connect.'}
+            {step === 'select-source' && 'Choose what you want to add to your calendar.'}
             {step === 'authenticate' && `Authenticating with ${selectedSource}...`}
             {step === 'select-calendars' && 'Choose which calendars to import.'}
             {step === 'assign-group' && 'Pick a group for your new calendars.'}
@@ -219,36 +256,54 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
             {/* Step 1: Select Source */}
             {step === 'select-source' && (
               <div className="space-y-2">
-                {Object.values(CALENDAR_SOURCES).map(source => {
-                  const Icon = SOURCE_ICONS[source.id];
+                {SOURCE_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const isDisabled = Boolean(option.disabled);
                   return (
                     <motion.button
-                      key={source.id}
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleSelectSource(source.id)}
+                      key={option.id}
+                      whileHover={isDisabled ? undefined : { scale: 1.01 }}
+                      whileTap={isDisabled ? undefined : { scale: 0.98 }}
+                      onClick={() => {
+                        if (option.id === 'template') {
+                          handleOpenTemplates();
+                          return;
+                        }
+
+                        if (isDisabled) return;
+                        handleSelectSource(option.id);
+                      }}
+                      disabled={isDisabled}
                       className={cn(
                         'w-full flex items-center gap-3 p-3.5 rounded-xl border border-border/60',
-                        'hover:border-primary/30 hover:bg-primary/[0.02]',
-                        'dark:hover:bg-primary/[0.04]',
+                        !isDisabled && 'hover:border-primary/30 hover:bg-primary/[0.02]',
+                        !isDisabled && 'dark:hover:bg-primary/[0.04]',
+                        isDisabled && 'cursor-not-allowed opacity-70',
                         'transition-all duration-200 text-left'
                       )}
                     >
                       <div
                         className="w-10 h-10 rounded-xl flex items-center justify-center"
-                        style={{ backgroundColor: `${source.color}15` }}
+                        style={{ backgroundColor: `${option.color}15` }}
                       >
-                        <Icon size={20} style={{ color: source.color }} />
+                        <Icon size={20} style={{ color: option.color }} />
                       </div>
                       <div className="flex-1">
-                        <div className="text-sm font-semibold text-foreground">{source.label}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-semibold text-foreground">{option.label}</div>
+                          {option.badge && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {option.badge}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {source.id === 'google' && 'Connect your Google Calendar'}
-                          {source.id === 'microsoft' && 'Connect Outlook calendar'}
-                          {source.id === 'apple' && 'Connect Apple Calendar'}
+                          {option.description}
                         </div>
                       </div>
-                      <ArrowRight size={16} className="text-muted-foreground/40" />
+                      {!isDisabled && (
+                        <ArrowRight size={16} className="text-muted-foreground/40" />
+                      )}
                     </motion.button>
                   );
                 })}

@@ -51,6 +51,7 @@ import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
 import { MentionReference, MentionOption, MentionTabId, createMentionReference, serializeReferences } from "./mention-types";
 import { useEventStore } from "@/lib/store";
+import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
 import { MallyVoiceOverlay } from "./MallyVoiceOverlay";
@@ -270,6 +271,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     receivedInvites,
     templates,
     calendarAccounts,
+    resolveTargetCalendar,
+    resolveTargetList,
   } = useMallyActions();
 
   // Use merged events (local + synced/imported + template) for the mention popover
@@ -1193,7 +1196,25 @@ RULES:
             }));
           }
 
-          const actionCards = actionsToCards(allActions, executionResults);
+          const actionCards = actionsToCards(allActions, executionResults, resolveTargetCalendar, resolveTargetList);
+
+          // Enrich cards with created item IDs so we can delete them later
+          const freshEventsForEnrich = useEventStore.getState().events;
+          for (const card of actionCards) {
+            if (card.type === 'event' && card.calendarInfo && card.sourceAction?.data) {
+              const title = card.sourceAction.data.title || card.title;
+              const calId = card.calendarInfo.id;
+              const match = freshEventsForEnrich.find(e => e.title === title && e.calendarId === calId);
+              if (match) card.calendarInfo.eventId = match.id;
+            }
+            if (card.type === 'todo' && card.listInfo && card.sourceAction?.data) {
+              const text = card.sourceAction.data.text || card.sourceAction.data.title || card.title;
+              const listId = card.listInfo.id;
+              const match = todos.find(t => t.text === text && t.listId === listId);
+              if (match) card.listInfo.todoId = match.id;
+            }
+          }
+
           const suggestions = generateSuggestions(responseIntent, allActions, aiResponse);
 
           setMessages(prev => prev.map(m =>
@@ -1213,6 +1234,9 @@ RULES:
                 }
               : m
           ));
+
+          // Spotlight reveal: auto-minimize to show the event on the calendar
+          maybeSpotlightAfterAction(allActions);
         }
 
         speak(aiResponse);
@@ -1247,14 +1271,11 @@ RULES:
         try {
           let speechText = '';
 
-          // Switch loading message to streaming mode
-          setMessages(prev => prev.map(m =>
-            m.id === loadingId
-              ? { ...m, text: '', isLoading: false, isStreaming: true, actionProgress: undefined }
-              : m
-          ));
+          // Keep loading state until first text chunk arrives
+          // (don't switch to streaming yet — the empty bubble looks broken)
 
           let donePayload: { speechText?: string; actions?: any[]; intent?: string } | null = null;
+          let firstChunkReceived = false;
 
           for await (const event of FirebaseFunctions.processSchedulingStreamEvents({
             userMessage: augmentedMessage,
@@ -1264,10 +1285,20 @@ RULES:
           })) {
             if (event.type === 'speech' && event.text) {
               speechText += event.text;
-              // Progressive text update
-              setMessages(prev => prev.map(m =>
-                m.id === loadingId ? { ...m, text: speechText } : m
-              ));
+              // On first chunk, switch from loading dots to streaming text
+              if (!firstChunkReceived) {
+                firstChunkReceived = true;
+                setMessages(prev => prev.map(m =>
+                  m.id === loadingId
+                    ? { ...m, text: speechText, isLoading: false, isStreaming: true, actionProgress: undefined }
+                    : m
+                ));
+              } else {
+                // Progressive text update
+                setMessages(prev => prev.map(m =>
+                  m.id === loadingId ? { ...m, text: speechText } : m
+                ));
+              }
             } else if (event.type === 'done') {
               donePayload = event;
             } else if (event.type === 'error') {
@@ -1387,25 +1418,51 @@ RULES:
     const success = await executeAction({ type: pending.type, data: pending.data });
     if (success) haptics.success();
 
-    // Update status and build card
-    setMessages(prev => prev.map(m => {
-      if (m.id !== msg.id) return m;
-      const updatedPending = m.pendingActions?.map(a =>
-        a.id === actionId ? { ...a, status: 'approved' as const } : a
-      );
-      const card: ActionCardData | null = success ? {
+    // Build the card and enrich with created item IDs
+    let card: ActionCardData | null = null;
+    if (success) {
+      const calInfo = pending.type.includes('event') ? resolveTargetCalendar(pending.data?.calendarId) : undefined;
+      const listInf = pending.type.includes('todo') ? resolveTargetList(pending.data?.listId, pending.data?.listName) : undefined;
+      // Look up the created item's ID from the store
+      if (calInfo) {
+        const title = pending.data?.title || pending.label;
+        const freshEvents = useEventStore.getState().events;
+        const match = freshEvents.find(e => e.title === title && e.calendarId === calInfo.id);
+        if (match) calInfo.eventId = match.id;
+      }
+      if (listInf) {
+        const text = pending.data?.text || pending.data?.title || pending.label;
+        const match = todos.find(t => t.text === text && t.listId === listInf.id);
+        if (match) listInf.todoId = match.id;
+      }
+      card = {
         id: crypto.randomUUID(),
         type: pending.type.includes('event') ? 'event' : pending.type.includes('todo') ? 'todo' : 'generic',
         title: pending.label,
         status: 'created',
         sourceAction: { type: pending.type, data: pending.data },
-      } : null;
+        calendarInfo: calInfo,
+        listInfo: listInf,
+      };
+    }
+
+    // Update status and add card
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msg.id) return m;
+      const updatedPending = m.pendingActions?.map(a =>
+        a.id === actionId ? { ...a, status: 'approved' as const } : a
+      );
       return {
         ...m,
         pendingActions: updatedPending,
         actionCards: card ? [...(m.actionCards || []), card] : m.actionCards,
       };
     }));
+
+    // Spotlight reveal for manually approved event actions
+    if (success) {
+      maybeSpotlightAfterAction([{ type: pending.type }]);
+    }
   };
 
   /** Reject a single pending action */
@@ -1429,9 +1486,69 @@ RULES:
     }
   };
 
+  /**
+   * Spotlight Reveal: auto-minimize the panel so the user sees the
+   * highlighted event on the calendar behind it.
+   */
+  const spotlightReveal = useCallback(() => {
+    // Only act when the panel is expanded
+    if (!isExpanded) return;
+    haptics.success();
+    setIsExpanded(false);
+    setIsMinimized(true);
+  }, [isExpanded]);
+
+  /**
+   * After actions that create/modify calendar events, decide whether to
+   * auto-reveal (Option A) or offer a "Show on calendar" chip (Option D).
+   */
+  const maybeSpotlightAfterAction = useCallback((actions: Array<{ type: string }>) => {
+    const hasEventAction = actions.some(a =>
+      a.type === 'create_event' || a.type === 'update_event'
+    );
+    const hasModuleAction = actions.some(a =>
+      a.type === 'create_todo' || a.type === 'create_eisenhower' || a.type === 'create_alarm' || a.type === 'create_reminder'
+    );
+    if (!hasEventAction && !hasModuleAction) return;
+
+    // Check if user is mid-conversation (input focused or has text)
+    const isUserTyping =
+      inputRef.current === document.activeElement ||
+      (inputRef.current && inputRef.current.value.length > 0);
+
+    if (isUserTyping) {
+      // Fallback (Option D): inject a "Show on calendar" suggestion chip
+      setMessages(prev => {
+        const lastAiMsg = [...prev].reverse().find(m => m.role === 'assistant');
+        if (!lastAiMsg) return prev;
+        const showChip: SuggestionChip = {
+          id: 'show-on-calendar',
+          label: 'Show on calendar →',
+          prompt: '__SPOTLIGHT_REVEAL__',
+          icon: '📍',
+        };
+        const existing = lastAiMsg.suggestions || [];
+        if (existing.some(s => s.id === 'show-on-calendar')) return prev;
+        return prev.map(m =>
+          m.id === lastAiMsg.id
+            ? { ...m, suggestions: [showChip, ...existing] }
+            : m
+        );
+      });
+    } else {
+      // Option A: auto-reveal after a short delay so user reads the confirmation
+      setTimeout(spotlightReveal, 900);
+    }
+  }, [spotlightReveal]);
+
   /** Handle clicking a suggestion chip — sends the prompt as a new message */
   const handleSuggestionSelect = (chip: SuggestionChip) => {
     haptics.selection();
+    // Special: "Show on calendar" chip triggers spotlight reveal
+    if (chip.prompt === '__SPOTLIGHT_REVEAL__') {
+      spotlightReveal();
+      return;
+    }
     // If the prompt ends with a space or colon, put it in the input for the user to complete
     if (chip.prompt.endsWith(': ') || chip.prompt.endsWith(' ')) {
       setInputText(chip.prompt);
@@ -1458,6 +1575,164 @@ RULES:
       msg.guidedFlow!.step.options.find(o => o.id === id)?.label || id
     );
     handleSendMessage(labels.join(', '));
+  };
+
+  /** Add an event to additional calendars (creates duplicates in each calendar) */
+  const handleAddToCalendars = async (card: ActionCardData, calendarIds: string[]) => {
+    if (!card.sourceAction?.data) return;
+    haptics.selection();
+
+    const eventData = card.sourceAction.data;
+    const addedCalendars: Array<{ id: string; name: string; color: string; eventId?: string }> = [];
+
+    for (const calId of calendarIds) {
+      // Snapshot current event IDs before creation
+      const beforeIds = new Set(useEventStore.getState().events.map(e => e.id));
+      const success = await executeAction({
+        type: 'create_event',
+        data: {
+          ...eventData,
+          calendarId: calId,
+        },
+      });
+      if (success) {
+        const cal = calendarAccounts.find(a => a.id === calId);
+        // Use getState() to bypass stale closure and get fresh events
+        const freshEvents = useEventStore.getState().events;
+        const newEvent = freshEvents.find(e => !beforeIds.has(e.id) && e.calendarId === calId);
+        if (cal) addedCalendars.push({ id: cal.id, name: cal.name, color: cal.color, eventId: newEvent?.id });
+      }
+    }
+
+    if (addedCalendars.length > 0) {
+      setMessages(prev => prev.map(m => ({
+        ...m,
+        actionCards: m.actionCards?.map(c =>
+          c.id === card.id
+            ? { ...c, additionalCalendars: [...(c.additionalCalendars || []), ...addedCalendars] }
+            : c
+        ),
+      })));
+      const names = addedCalendars.map(c => c.name).join(', ');
+      toast.success(`Added to ${names}`);
+    }
+  };
+
+  /** Add a todo to additional lists (creates duplicates in each list) */
+  const handleAddToLists = async (card: ActionCardData, listIds: string[]) => {
+    if (!card.sourceAction?.data) return;
+    haptics.selection();
+
+    const todoData = card.sourceAction.data;
+    const addedLists: Array<{ id: string; name: string; color: string; todoId?: string }> = [];
+
+    for (const listId of listIds) {
+      // Snapshot current todo IDs before creation
+      const beforeIds = new Set(todos.map(t => t.id));
+      const success = await executeAction({
+        type: 'create_todo',
+        data: {
+          ...todoData,
+          listId,
+        },
+      });
+      if (success) {
+        const list = lists.find(l => l.id === listId);
+        const newTodo = todos.find(t => !beforeIds.has(t.id) && t.listId === listId);
+        if (list) addedLists.push({ id: list.id, name: list.name, color: list.color, todoId: newTodo?.id });
+      }
+    }
+
+    if (addedLists.length > 0) {
+      setMessages(prev => prev.map(m => ({
+        ...m,
+        actionCards: m.actionCards?.map(c =>
+          c.id === card.id
+            ? { ...c, additionalLists: [...(c.additionalLists || []), ...addedLists] }
+            : c
+        ),
+      })));
+      const names = addedLists.map(l => l.name).join(', ');
+      toast.success(`Added to ${names}`);
+    }
+  };
+
+  /** Remove an event from calendars (deletes the event copy and updates card display) */
+  const handleRemoveFromCalendars = async (card: ActionCardData, calendarIds: string[]) => {
+    haptics.selection();
+    const removedSet = new Set(calendarIds);
+
+    // Actually delete the events from the deselected calendars
+    for (const calId of calendarIds) {
+      // Find the event ID for this calendar from the card data
+      let eventId: string | undefined;
+      if (card.calendarInfo?.id === calId) eventId = card.calendarInfo.eventId;
+      if (!eventId) eventId = card.additionalCalendars?.find(c => c.id === calId)?.eventId;
+      // Fallback: search events store for matching title + calendarId
+      if (!eventId) {
+        const title = card.sourceAction?.data?.title || card.title;
+        const freshEvents = useEventStore.getState().events;
+        const match = freshEvents.find(e => e.title === title && e.calendarId === calId);
+        eventId = match?.id;
+      }
+      if (eventId) {
+        await executeAction({ type: 'delete_event', data: { eventId } });
+      }
+    }
+
+    // Update card display
+    setMessages(prev => prev.map(m => ({
+      ...m,
+      actionCards: m.actionCards?.map(c => {
+        if (c.id !== card.id) return c;
+        const newAdditional = (c.additionalCalendars || []).filter(cal => !removedSet.has(cal.id));
+        let newPrimary = c.calendarInfo;
+        if (newPrimary && removedSet.has(newPrimary.id)) {
+          newPrimary = newAdditional.shift() || undefined;
+        }
+        return { ...c, calendarInfo: newPrimary, additionalCalendars: newAdditional.length > 0 ? newAdditional : undefined };
+      }),
+    })));
+    const names = calendarIds.map(id => calendarAccounts.find(a => a.id === id)?.name || id).join(', ');
+    toast.success(`Removed from ${names}`);
+  };
+
+  /** Remove a todo from lists (deletes the todo copy and updates card display) */
+  const handleRemoveFromLists = async (card: ActionCardData, listIds: string[]) => {
+    haptics.selection();
+    const removedSet = new Set(listIds);
+
+    // Actually delete the todos from the deselected lists
+    for (const listId of listIds) {
+      let todoId: string | undefined;
+      if (card.listInfo?.id === listId) todoId = card.listInfo.todoId;
+      if (!todoId) todoId = card.additionalLists?.find(l => l.id === listId)?.todoId;
+      // Fallback: search todos store for matching text + listId
+      if (!todoId) {
+        const text = card.sourceAction?.data?.text || card.sourceAction?.data?.title || card.title;
+        const match = todos.find(t => t.text === text && t.listId === listId);
+        todoId = match?.id;
+      }
+      if (todoId) {
+        await executeAction({ type: 'delete_todo', data: { todoId } });
+      }
+    }
+
+    // Update card display
+    setMessages(prev => prev.map(m => ({
+      ...m,
+      actionCards: m.actionCards?.map(c => {
+        if (c.id !== card.id) return c;
+        const newAdditional = (c.additionalLists || []).filter(l => !removedSet.has(l.id));
+        let newPrimary = c.listInfo;
+        if (newPrimary && removedSet.has(newPrimary.id)) {
+          newPrimary = newAdditional.shift() || undefined;
+        }
+        return { ...c, listInfo: newPrimary, additionalLists: newAdditional.length > 0 ? newAdditional : undefined };
+      }),
+    })));
+    const names = listIds.map(id => lists.find(l => l.id === id)?.name || id).join(', ');
+    toast.success(`Removed from ${names}`);
   };
 
   // Handle key press
@@ -1801,6 +2076,12 @@ RULES:
                                   onApproveAll={handleApproveAll}
                                   onGuidedFlowSelect={handleGuidedFlowSelect}
                                   onGuidedFlowSubmitMulti={handleGuidedFlowSubmitMulti}
+                                  onAddToCalendars={handleAddToCalendars}
+                                  onRemoveFromCalendars={handleRemoveFromCalendars}
+                                  calendarAccounts={calendarAccounts}
+                                  onAddToLists={handleAddToLists}
+                                  onRemoveFromLists={handleRemoveFromLists}
+                                  todoLists={lists.map(l => ({ id: l.id, name: l.name, color: l.color }))}
                                 />
                               )
                             ) : (

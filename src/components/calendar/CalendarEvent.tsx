@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useEventDrag } from "@/hooks/use-event-drag";
 import EventIndicators from "./event-components/EventIndicators";
@@ -7,6 +7,7 @@ import EventLockToggle from "./event-components/EventLockToggle";
 import DragHandle from "./event-components/DragHandle";
 import { CalendarEventType } from "@/lib/stores/types";
 import { CheckSquare, ListTodo, Repeat } from "lucide-react";
+import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 
 interface CalendarEventProps {
   event: CalendarEventType;
@@ -45,6 +46,18 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
     handleClick,
   } = useEventDrag(event, isLocked, color);
 
+  // Spotlight: glow + scroll into view when this event is highlighted
+  const highlightedEventId = useEventHighlightStore(s => s.highlightedEventId);
+  const isSpotlit = highlightedEventId === event.id;
+  const spotlightRef = useCallback((node: HTMLDivElement | null) => {
+    if (node && isSpotlit) {
+      // Slight delay so the panel has time to minimize and layout to settle
+      requestAnimationFrame(() => {
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }, [isSpotlit]);
+
   const handleLockToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onLockToggle) onLockToggle(!isLocked);
@@ -63,12 +76,14 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
 
   return (
     <div
+      ref={spotlightRef}
       className={cn(
         "calendar-event group rounded-sm sm:rounded overflow-hidden",
         bgClass,
         !isLocked && "cursor-move",
         isDragging && "opacity-70",
-        compact ? "h-auto" : "h-full"
+        compact ? "h-auto" : "h-full",
+        isSpotlit && "event-spotlight"
       )}
       style={{ minHeight: compact ? 'auto' : '100%', ...bgStyle }}
       onClick={(e) => handleClick(e, onClick)}

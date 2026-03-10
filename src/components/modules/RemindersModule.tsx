@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Bell, Calendar, Clock, Volume2, Plus, Edit2, Trash2, Play, AlarmClock } from 'lucide-react';
 import { useReminders, Reminder, ReminderFormData } from '@/hooks/use-reminders';
@@ -15,6 +15,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import dayjs from 'dayjs';
 import { Timestamp } from 'firebase/firestore';
+import { useEventHighlightStore } from '@/lib/stores/event-highlight-store';
+import { cn } from '@/lib/utils';
 
 // Helper to handle both Date/string and Firestore Timestamp
 const resolveDate = (date: any) => {
@@ -58,6 +60,15 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   const { reminders, loading, addReminder, updateReminder, deleteReminder, toggleReminderActive, playSound, getSounds, REMINDER_SOUNDS } = useReminders(instanceId);
   const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms(instanceId);
   const { events } = useCalendarEvents();
+
+  // Spotlight highlight
+  const highlightedItemId = useEventHighlightStore(s => s.highlightedItemId);
+  const highlightedItemType = useEventHighlightStore(s => s.highlightedItemType);
+  const spotlightRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, []);
 
   // Combine reminders and alarms into a single sorted list
   const allItems = useMemo(() => {
@@ -183,7 +194,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                 // Alarm item
                 <div
                   key={`alarm-${item.id}`}
-                  className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${item.enabled ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
+                  ref={highlightedItemId === item.id && highlightedItemType === 'alarm' ? spotlightRef : undefined}
+                  data-alarm-id={item.id}
+                  className={cn(
+                    `flex items-start gap-2 p-2 rounded-lg transition-colors ${item.enabled ? 'bg-blue-100/50 dark:bg-blue-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`,
+                    highlightedItemId === item.id && highlightedItemType === 'alarm' && "event-spotlight"
+                  )}
                 >
                   <div className="mt-1 flex-shrink-0">
                     <AlarmClock size={16} className={item.enabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'} />
@@ -227,7 +243,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                 // Reminder item
                 <div
                   key={`reminder-${item.id}`}
-                  className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${item.isActive ? 'bg-purple-100/50 dark:bg-purple-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`}
+                  ref={highlightedItemId === item.id && highlightedItemType === 'reminder' ? spotlightRef : undefined}
+                  data-reminder-id={item.id}
+                  className={cn(
+                    `flex items-start gap-2 p-2 rounded-lg transition-colors ${item.isActive ? 'bg-purple-100/50 dark:bg-purple-900/30' : 'bg-gray-100/50 dark:bg-gray-800/30 opacity-60'}`,
+                    highlightedItemId === item.id && highlightedItemType === 'reminder' && "event-spotlight"
+                  )}
                 >
                   <div
                     className={`mt-1 w-4 h-4 rounded-full flex-shrink-0 cursor-pointer ${item.isActive ? 'bg-primary' : 'bg-gray-400 dark:bg-secondary'}`}

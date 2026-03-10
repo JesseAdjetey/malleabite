@@ -686,6 +686,7 @@ const CalendarDropdown: React.FC = () => {
         onOpenChange={setAddCalendarOpen}
         groups={groups}
         defaultGroupId={addCalendarGroupId}
+        onOpenTemplates={() => setTemplateManagerOpen(true)}
         onComplete={handleAddCalendarComplete}
       />
 

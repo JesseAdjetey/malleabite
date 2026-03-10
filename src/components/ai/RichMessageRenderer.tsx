@@ -9,6 +9,19 @@ import { StreamingText } from "./StreamingText";
 import { ExpandableSectionList } from "./ExpandableSection";
 import { GuidedFlow } from "./GuidedFlow";
 
+interface CalendarAccount {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+}
+
+interface TodoListInfo {
+  id: string;
+  name: string;
+  color: string;
+}
+
 interface RichMessageRendererProps {
   message: RichMessage;
   isLastAiMessage: boolean;
@@ -19,6 +32,12 @@ interface RichMessageRendererProps {
   onApproveAll?: () => void;
   onGuidedFlowSelect?: (optionId: string, prompt: string) => void;
   onGuidedFlowSubmitMulti?: (optionIds: string[]) => void;
+  onAddToCalendars?: (card: ActionCardData, calendarIds: string[]) => Promise<void> | void;
+  onRemoveFromCalendars?: (card: ActionCardData, calendarIds: string[]) => Promise<void> | void;
+  calendarAccounts?: CalendarAccount[];
+  onAddToLists?: (card: ActionCardData, listIds: string[]) => Promise<void> | void;
+  onRemoveFromLists?: (card: ActionCardData, listIds: string[]) => Promise<void> | void;
+  todoLists?: TodoListInfo[];
 }
 
 export const RichMessageRenderer: React.FC<RichMessageRendererProps> = ({
@@ -31,6 +50,12 @@ export const RichMessageRenderer: React.FC<RichMessageRendererProps> = ({
   onApproveAll,
   onGuidedFlowSelect,
   onGuidedFlowSubmitMulti,
+  onAddToCalendars,
+  onRemoveFromCalendars,
+  calendarAccounts,
+  onAddToLists,
+  onRemoveFromLists,
+  todoLists,
 }) => {
   return (
     <>
@@ -66,7 +91,17 @@ export const RichMessageRenderer: React.FC<RichMessageRendererProps> = ({
       {message.actionCards && message.actionCards.length > 0 && (
         <div className="space-y-1">
           {message.actionCards.map(card => (
-            <ActionCard key={card.id} card={card} onUndo={onUndoAction} />
+            <ActionCard
+              key={card.id}
+              card={card}
+              onUndo={onUndoAction}
+              onAddToCalendars={onAddToCalendars}
+              onRemoveFromCalendars={onRemoveFromCalendars}
+              calendarAccounts={calendarAccounts}
+              onAddToLists={onAddToLists}
+              onRemoveFromLists={onRemoveFromLists}
+              todoLists={todoLists}
+            />
           ))}
         </div>
       )}

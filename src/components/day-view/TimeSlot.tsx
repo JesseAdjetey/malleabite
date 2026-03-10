@@ -307,6 +307,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       {hourEvents.map(event => (
         <div
           key={event.id}
+          data-event-id={event.id}
           className="absolute inset-x-2 z-10"
           style={{ top: '2px' }}
           onClick={(e) => {

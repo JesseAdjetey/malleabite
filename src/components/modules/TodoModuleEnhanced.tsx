@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ModuleContainer from "./ModuleContainer";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext.firebase";
 import { useEisenhower } from "@/hooks/use-eisenhower";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useMirrorSync } from "@/hooks/use-mirror-sync";
+import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { CalendarEventType } from "@/lib/stores/types";
 
 
@@ -61,6 +62,15 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   const { removeItem: removeEisenhowerItem } = useEisenhower();
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { syncTodoCompletion } = useMirrorSync();
+
+  // Spotlight highlight
+  const highlightedItemId = useEventHighlightStore(s => s.highlightedItemId);
+  const highlightedItemType = useEventHighlightStore(s => s.highlightedItemType);
+  const spotlightRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, []);
   
   // Use module-specific list
   const activeList = lists.find(l => l.id === moduleListId);
@@ -281,7 +291,12 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           activeTodos.map((item) => (
             <div
               key={item.id}
-              className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer hover:bg-gray-200 dark:hover:bg-white/10 transition-colors"
+              ref={highlightedItemId === item.id && highlightedItemType === 'todo' ? spotlightRef : undefined}
+              data-todo-id={item.id}
+              className={cn(
+                "flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer hover:bg-gray-200 dark:hover:bg-white/10 transition-colors",
+                highlightedItemId === item.id && highlightedItemType === 'todo' && "event-spotlight"
+              )}
               draggable={true}
               onDragStart={(e) => handleDragStart(e, item)}
               onDragEnd={handleDragEnd}

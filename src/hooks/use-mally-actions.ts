@@ -1726,6 +1726,7 @@ export function useMallyActions() {
     eisenhowerItems,
     events: events.slice(0, 20),
     todos: todos.slice(0, 30),
+    alarms: alarms.slice(0, 20).map(a => ({ id: a.id, title: a.title, time: (a as any).time })),
     // Persistent AI memory (preferences, patterns, goals, observations)
     userMemory: userMemory ? {
       preferences: userMemory.preferences,
@@ -1801,7 +1802,7 @@ export function useMallyActions() {
   }), [
     calendarAccounts, pages, activePageId, lists, activeListId,
     getPomodoroInstance,
-    eisenhowerItems, events, todos, userMemory,
+    eisenhowerItems, events, todos, alarms, userMemory,
     // New deps
     calendarGroups, goalsWithProgress, bookingPages, snapshots,
     workingHours, analyticsMetrics,

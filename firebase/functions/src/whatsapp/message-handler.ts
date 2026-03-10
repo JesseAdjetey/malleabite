@@ -334,6 +334,87 @@ async function executePendingAction(
         { id: 'btn_todos', title: 'Todos' },
       ]
     );
+
+  } else if (action.type === 'update_event') {
+    if (!action.eventId) { await sendTextMessage(send, "I couldn't find which event to update."); return; }
+    const updates: Record<string, any> = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+    if (action.title) updates.title = action.title;
+    if (action.start) updates.startsAt = admin.firestore.Timestamp.fromDate(new Date(action.start));
+    if (action.end) updates.endsAt = admin.firestore.Timestamp.fromDate(new Date(action.end));
+    await db().collection('calendar_events').doc(action.eventId).update(updates);
+    await sendButtonMessage(send, `✅ Updated! *${action.title || 'Event'}* has been changed.`,
+      [{ id: 'btn_today', title: 'Today' }]);
+
+  } else if (action.type === 'delete_event') {
+    if (!action.eventId) { await sendTextMessage(send, "I couldn't find which event to delete."); return; }
+    await db().collection('calendar_events').doc(action.eventId).delete();
+    await sendButtonMessage(send, `🗑️ Event deleted.`, [{ id: 'btn_today', title: 'Today' }]);
+
+  } else if (action.type === 'complete_todo') {
+    if (!action.todoId) { await sendTextMessage(send, "I couldn't find which todo to complete."); return; }
+    const doneUpdate = { completed: true, completedAt: admin.firestore.FieldValue.serverTimestamp() };
+    await db().collection('todo_items').doc(action.todoId).update(doneUpdate)
+      .catch(() => db().collection('todos').doc(action.todoId!).update(doneUpdate));
+    await sendButtonMessage(send, `✅ Todo marked as done!`, [{ id: 'btn_todos', title: 'Todos' }]);
+
+  } else if (action.type === 'delete_todo') {
+    if (!action.todoId) { await sendTextMessage(send, "I couldn't find which todo to delete."); return; }
+    await db().collection('todo_items').doc(action.todoId).delete()
+      .catch(() => db().collection('todos').doc(action.todoId!).delete());
+    await sendTextMessage(send, `🗑️ Todo deleted.`);
+
+  } else if (action.type === 'create_alarm') {
+    const alarmRef = await db().collection('alarms').add({
+      userId,
+      title: action.title || 'Alarm',
+      time: action.time || '08:00',
+      enabled: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await setLastCreated(phone, alarmRef.id, 'alarm', 'alarms');
+    await sendButtonMessage(send, `⏰ Alarm *${action.title || 'Alarm'}* set for ${action.time}.`,
+      [{ id: 'action_undo', title: 'Undo' }]);
+
+  } else if (action.type === 'delete_alarm') {
+    if (!action.alarmId) { await sendTextMessage(send, "I couldn't find which alarm to delete."); return; }
+    await db().collection('alarms').doc(action.alarmId).delete();
+    await sendTextMessage(send, `⏰ Alarm deleted.`);
+
+  } else if (action.type === 'create_eisenhower') {
+    const quadrantLabels: Record<string, string> = {
+      'urgent-important': '🔥 Urgent & Important',
+      'not-urgent-important': '📌 Important, Not Urgent',
+      'urgent-not-important': '⚡ Urgent, Not Important',
+      'not-urgent-not-important': '💭 Neither Urgent nor Important',
+    };
+    const eisRef = await db().collection('eisenhower_items').add({
+      userId,
+      text: action.text || action.title || 'New item',
+      quadrant: action.quadrant || 'urgent-important',
+      completed: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await setLastCreated(phone, eisRef.id, 'eisenhower', 'eisenhower_items');
+    const label = quadrantLabels[action.quadrant || 'urgent-important'];
+    await sendButtonMessage(send, `Added to *${label}*: "${action.text || action.title}"`,
+      [{ id: 'action_undo', title: 'Undo' }]);
+
+  } else if (action.type === 'create_goal') {
+    const goalRef = await db().collection('goals').add({
+      userId,
+      title: action.title || 'New Goal',
+      category: action.category || 'personal',
+      frequency: action.frequency || 'daily',
+      target: action.target || 1,
+      isActive: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await setLastCreated(phone, goalRef.id, 'goal', 'goals');
+    await sendButtonMessage(send, `🎯 Goal created: *${action.title}* (${action.frequency || 'daily'})`,
+      [{ id: 'action_undo', title: 'Undo' }]);
+
+  } else {
+    await sendTextMessage(send, 'Done! Open the app to see the changes.');
   }
 }
 
@@ -523,7 +604,79 @@ async function handleAIMessage(
         );
         return;
       }
-    }
+
+      if (action.type === 'update_event') {
+        const pending: PendingAction = { type: 'update_event', eventId: action.eventId, title: action.title, start: action.start, end: action.end };
+        await setPendingAction(ctx.from, pending);
+        const timeStr = action.start ? ` → ${fmtDate(new Date(action.start))}, ${fmtTime(new Date(action.start))}` : '';
+        await sendButtonMessage(send, `Update '${action.title}'${timeStr}?`,
+          [{ id: 'action_yes', title: 'Yes' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'delete_event') {
+        const pending: PendingAction = { type: 'delete_event', eventId: action.eventId, title: action.title };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `🗑️ Delete '${action.title}'?`,
+          [{ id: 'action_yes', title: 'Yes, delete' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'complete_todo') {
+        const pending: PendingAction = { type: 'complete_todo', todoId: action.todoId, text: action.text };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `✅ Mark '${action.text}' as done?`,
+          [{ id: 'action_yes', title: 'Yes' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'delete_todo') {
+        const pending: PendingAction = { type: 'delete_todo', todoId: action.todoId, text: action.text };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `🗑️ Delete todo '${action.text}'?`,
+          [{ id: 'action_yes', title: 'Yes, delete' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'create_alarm') {
+        const pending: PendingAction = { type: 'create_alarm', title: action.title, time: action.time };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `⏰ Set alarm '${action.title}' at ${action.time}?`,
+          [{ id: 'action_yes', title: 'Yes' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'delete_alarm') {
+        const pending: PendingAction = { type: 'delete_alarm', alarmId: action.alarmId, title: action.title };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `🗑️ Delete alarm '${action.title}'?`,
+          [{ id: 'action_yes', title: 'Yes, delete' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'create_eisenhower') {
+        const qLabels: Record<string, string> = {
+          'urgent-important': '🔥 Do First',
+          'not-urgent-important': '📌 Schedule',
+          'urgent-not-important': '⚡ Delegate',
+          'not-urgent-not-important': '💭 Eliminate',
+        };
+        const pending: PendingAction = { type: 'create_eisenhower', text: action.text || action.title, quadrant: action.quadrant };
+        await setPendingAction(ctx.from, pending);
+        const qlabel = qLabels[action.quadrant || 'urgent-important'];
+        await sendButtonMessage(send, `Add '${pending.text}' to Eisenhower matrix as *${qlabel}*?`,
+          [{ id: 'action_yes', title: 'Yes' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+
+      if (action.type === 'create_goal') {
+        const pending: PendingAction = { type: 'create_goal', title: action.title, category: action.category, frequency: action.frequency, target: action.target };
+        await setPendingAction(ctx.from, pending);
+        await sendButtonMessage(send, `🎯 Create goal '${action.title}' (${action.frequency || 'daily'})?`,
+          [{ id: 'action_yes', title: 'Yes' }, { id: 'action_no', title: 'No' }]);
+        return;
+      }
+    } // end if response.actions
 
     // ── AI responded with text only (general chat / info / missing info) ──
     const reply = response.text || '';

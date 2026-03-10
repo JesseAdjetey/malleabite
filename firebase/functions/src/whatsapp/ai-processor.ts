@@ -25,14 +25,32 @@ export interface AIResponse {
 }
 
 export interface ProposedAction {
-  type: 'create_event' | 'create_todo';
+  type:
+    | 'create_event' | 'update_event' | 'delete_event'
+    | 'create_todo' | 'complete_todo' | 'delete_todo'
+    | 'create_alarm' | 'delete_alarm'
+    | 'create_eisenhower'
+    | 'create_goal';
+  // Event fields
   title?: string;
   start?: string;
   end?: string;
   description?: string;
   isAllDay?: boolean;
+  eventId?: string;
+  // Todo fields
   text?: string;
   listName?: string;
+  todoId?: string;
+  // Alarm fields
+  alarmId?: string;
+  time?: string;
+  // Eisenhower fields
+  quadrant?: 'urgent-important' | 'not-urgent-important' | 'urgent-not-important' | 'not-urgent-not-important';
+  // Goal fields
+  category?: string;
+  frequency?: 'daily' | 'weekly' | 'monthly';
+  target?: number;
 }
 
 // ─── Main Entry ───────────────────────────────────────────────────────────────
@@ -50,17 +68,24 @@ export async function processAIRequestInternal(
     }
 
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      // Native Google Search grounding — gives the bot real-time internet access
+      // for news, weather, stocks, flights, facts, etc. without any extra API keys.
+      tools: [{ googleSearch: {} } as any],
+    });
 
     // Load user context
-    const [events, todos, userName] = await Promise.all([
+    const [events, todos, alarms, eisenhower, userName] = await Promise.all([
       loadUpcomingEvents(userId),
       loadTodos(userId),
+      loadAlarms(userId),
+      loadEisenhower(userId),
       loadUserName(userId),
     ]);
 
     const now = new Date();
-    const systemPrompt = buildSystemPrompt(now, userName, events, todos);
+    const systemPrompt = buildSystemPrompt(now, userName, events, todos, alarms, eisenhower);
 
     // Build conversation contents with history
     const contents: { role: string; parts: { text: string }[] }[] = [];
@@ -103,62 +128,106 @@ function buildSystemPrompt(
   now: Date,
   userName: string | null,
   events: any[],
-  todos: any[]
+  todos: any[],
+  alarms: any[],
+  eisenhower: any[]
 ): string {
-  return `You are Mally, an AI assistant for the Malleabite calendar app, responding via WhatsApp.
+  return `You are Mally, an AI assistant for the Malleabite productivity app, responding via WhatsApp.
 
 Current date & time: ${now.toISOString()}
 User: ${userName || 'User'}
 
 YOUR ROLE:
-You help users quickly capture events and todos from WhatsApp. Be friendly but concise.
+You help users manage their full productivity life via WhatsApp — events, todos, alarms, priorities, and goals. Be concise and action-oriented.
 
 TONE:
-- Friendly, concise, helpful
+- Friendly, concise, direct
 - Use WhatsApp formatting: *bold*, _italic_
-- Keep messages short (1-3 lines for confirmations, brief for chat)
-- Never be overly enthusiastic or use too many emojis
+- Keep messages short (1-3 lines for confirmations)
+- Never be overly enthusiastic
 
-WHEN THE USER WANTS TO CREATE AN EVENT:
-- Extract: title, date, time, duration
-- If date/time is MISSING, ask for it. Don't assume. Say something like "What date and time?"
-- If you have enough info, output the action block below
-- ALWAYS include the action block when you have enough info to create
+CAPABILITIES — you can propose ALL of these actions:
+1. *Events*: create, update (reschedule/rename), delete
+2. *Todos*: create, complete, delete
+3. *Alarms*: create, delete
+4. *Priorities (Eisenhower matrix)*: add items to urgent/important quadrants
+5. *Goals*: create with category and frequency
+6. *Real-time info*: weather, news, stocks, flights (use Google Search)
 
-WHEN THE USER WANTS TO CREATE A TODO:
-- Extract: task text, optional list name
-- Output the action block below
-- Don't ask for a list name unless the user mentions one
+RULES:
+- If info is missing (date, time, title), ask ONE short question
+- For deletions/updates: ask for the item name, match it from context below, then include the ID in the action block
+- For real-world questions use Google Search — keep answers WhatsApp-short (2-3 lines)
+- For chat/greetings: reply briefly, end with "Need to add anything?"
 
-WHEN THE USER SENDS GENERAL CHAT (greetings, jokes, questions, random):
-- Respond briefly and naturally
-- End with a gentle nudge like "Need to add anything to your schedule?"
-- Do NOT create action blocks for non-actionable messages
+USER'S CONTEXT:
 
-WHEN THE USER ASKS ABOUT THEIR SCHEDULE:
-- Answer from the context below
-- Be specific with dates/times
-
-USER'S UPCOMING EVENTS (next 7 days):
+*Upcoming Events (next 7 days):*
 ${formatEvents(events)}
 
-USER'S PENDING TODOS:
+*Pending Todos:*
 ${formatTodos(todos)}
 
-ACTION BLOCKS:
-When you have enough info to create something, include ONE action block at the END of your message:
+*Active Alarms:*
+${formatAlarms(alarms)}
 
-For events:
+*Priority Items (Eisenhower):*
+${formatEisenhower(eisenhower)}
+
+ACTION BLOCKS — include ONE at the END of your message when you have enough info:
+
+Create event:
 \`\`\`action
-{"type": "create_event", "title": "Meeting with Sarah", "start": "2026-03-08T14:00:00", "end": "2026-03-08T15:00:00"}
+{"type":"create_event","title":"Meeting with Sarah","start":"2026-03-08T14:00:00","end":"2026-03-08T15:00:00"}
 \`\`\`
 
-For todos:
+Update event (use ID from context above):
 \`\`\`action
-{"type": "create_todo", "text": "Buy groceries", "listName": "Shopping"}
+{"type":"update_event","eventId":"abc123","start":"2026-03-09T14:00:00","end":"2026-03-09T15:00:00"}
 \`\`\`
 
-IMPORTANT: The action will NOT be executed immediately — the user will be asked to confirm first. So your text response should NOT say "I've created..." or "Done!". Instead, the text before the action block is informational context only. Keep it very short or empty if the action block says it all.`;
+Delete event:
+\`\`\`action
+{"type":"delete_event","eventId":"abc123"}
+\`\`\`
+
+Create todo:
+\`\`\`action
+{"type":"create_todo","text":"Buy groceries","listName":"Shopping"}
+\`\`\`
+
+Complete todo:
+\`\`\`action
+{"type":"complete_todo","todoId":"abc123"}
+\`\`\`
+
+Delete todo:
+\`\`\`action
+{"type":"delete_todo","todoId":"abc123"}
+\`\`\`
+
+Create alarm:
+\`\`\`action
+{"type":"create_alarm","title":"Wake up","time":"07:00"}
+\`\`\`
+
+Delete alarm:
+\`\`\`action
+{"type":"delete_alarm","alarmId":"abc123"}
+\`\`\`
+
+Add to Eisenhower priority matrix:
+\`\`\`action
+{"type":"create_eisenhower","text":"Prepare quarterly report","quadrant":"urgent-important"}
+\`\`\`
+Quadrants: urgent-important | not-urgent-important | urgent-not-important | not-urgent-not-important
+
+Create goal:
+\`\`\`action
+{"type":"create_goal","title":"Run 5km","category":"health","frequency":"daily","target":1}
+\`\`\`
+
+IMPORTANT: Actions are NOT executed until user confirms. Your text response should NOT say "Done!" — keep it short and let the action block speak for itself.`;
 }
 
 // ─── Parse Action Blocks ──────────────────────────────────────────────────────
@@ -206,6 +275,29 @@ async function loadTodos(userId: string): Promise<any[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+async function loadAlarms(userId: string): Promise<any[]> {
+  try {
+    const snap = await db()
+      .collection('alarms')
+      .where('userId', '==', userId)
+      .where('enabled', '==', true)
+      .limit(10)
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch { return []; }
+}
+
+async function loadEisenhower(userId: string): Promise<any[]> {
+  try {
+    const snap = await db()
+      .collection('eisenhower_items')
+      .where('userId', '==', userId)
+      .limit(20)
+      .get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch { return []; }
+}
+
 async function loadUserName(userId: string): Promise<string | null> {
   const doc = await db().collection('users').doc(userId).get();
   const data = doc.data();
@@ -219,12 +311,25 @@ function formatEvents(events: any[]): string {
   return events
     .map((e) => {
       const start = e.startsAt?.toDate?.();
-      return `- "${e.title}" at ${start?.toLocaleString() || 'unknown time'}`;
+      return `- [ID: ${e.id}] "${e.title}" at ${start?.toLocaleString() || 'unknown time'}`;
     })
     .join('\n');
 }
 
 function formatTodos(todos: any[]): string {
   if (!todos.length) return 'No pending todos.';
-  return todos.map((t) => `- "${t.text}"`).join('\n');
+  return todos.map((t) => `- [ID: ${t.id}] "${t.text}"`).join('\n');
+}
+
+function formatAlarms(alarms: any[]): string {
+  if (!alarms.length) return 'No active alarms.';
+  return alarms.map((a) => {
+    const time = a.time?.toDate?.() || (a.time ? new Date(a.time) : null);
+    return `- [ID: ${a.id}] "${a.title}" at ${time?.toLocaleTimeString() || 'unknown'}`;
+  }).join('\n');
+}
+
+function formatEisenhower(items: any[]): string {
+  if (!items.length) return 'No priority items.';
+  return items.map((i) => `- [ID: ${i.id}] "${i.text}" (${i.quadrant || 'unset'})`).join('\n');
 }

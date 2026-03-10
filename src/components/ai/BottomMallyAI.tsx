@@ -59,7 +59,10 @@ import { RichMessageRenderer } from "./RichMessageRenderer";
 import { ActionProgress } from "./ActionProgress";
 import type { RichMessage, SuggestionChip, PendingAction, ActionCardData } from "./rich-message-types";
 import { generateSuggestions, actionsToCards, detectExpandableSections, detectGuidedFlow, extractCleanText } from "./rich-message-types";
-
+import {
+  getWeather, getStockPrice, getFlightStatus, searchWeb,
+  formatWeather, formatStock, formatFlight, formatSearch,
+} from '@/lib/ai/realtime-data';
 // Message type is now RichMessage from rich-message-types.ts
 type Message = RichMessage;
 
@@ -772,33 +775,61 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     const context = buildContext();
     const now = new Date();
 
-    // Build dynamic system prompt with current calendar context
+    // Build dynamic system prompt with current calendar context (IDs included for delete/update)
     const eventsSummary = (context.events || []).slice(0, 15).map((e: any) =>
-      `• ${e.title} (${new Date(e.start).toLocaleString()} – ${new Date(e.end).toLocaleString()})`
+      `• [ID:${e.id}] ${e.title} (${new Date(e.start).toLocaleString()} – ${new Date(e.end).toLocaleString()})`
     ).join('\n') || 'No events scheduled.';
 
     const todosSummary = (context.todos || []).slice(0, 15).map((t: any) =>
-      `• ${t.completed ? '✓' : '○'} ${t.text}`
+      `• [ID:${t.id}] ${t.completed ? '✓' : '○'} ${t.text}`
     ).join('\n') || 'No tasks.';
 
-    const systemPrompt = `You are Mally, a warm, witty, and intelligent personal scheduling assistant.
+    const alarmsSummary = (context.alarms || []).slice(0, 10).map((a: any) =>
+      `• [ID:${a.id}] ${a.title} at ${a.time}`
+    ).join('\n') || 'No alarms.';
+
+    const eisenhowerSummary = (context.eisenhowerItems || []).slice(0, 10).map((i: any) =>
+      `• [ID:${i.id}] ${i.text} (${i.quadrant})`
+    ).join('\n') || 'No priority items.';
+
+    const goalsSummary = (context.goals || []).slice(0, 10).map((g: any) =>
+      `• [ID:${g.id}] ${g.title} (${g.category}, ${g.frequency})`
+    ).join('\n') || 'No goals.';
+
+    const systemPrompt = `You are Mally, a warm, witty, and intelligent personal productivity assistant.
 
 Current Time: ${now.toLocaleString()}
 Timezone: ${context.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone}
 
-EXISTING EVENTS:
+CALENDAR EVENTS (use ID for update/delete):
 ${eventsSummary}
 
-TODO LIST:
+TODOS (use ID for complete/delete):
 ${todosSummary}
+
+ALARMS (use ID for delete):
+${alarmsSummary}
+
+PRIORITY MATRIX (Eisenhower):
+${eisenhowerSummary}
+
+GOALS:
+${goalsSummary}
+
+CAPABILITIES — you can:
+- Create, update, delete, or reschedule calendar events
+- Create, complete, or delete todos
+- Create or delete alarms, start/stop Pomodoro timer
+- Add items to the Eisenhower priority matrix
+- Create goals with category and frequency
+- Search the web, check weather, stock prices, flight status
 
 RULES:
 - Be conversational, warm, and concise (1-3 sentences per response)
-- Use the tools provided to create events, todos, alarms, or control the pomodoro timer
-- Check for scheduling conflicts before creating events
+- Always use the exact ID from the context above when updating/deleting — NEVER guess an ID
+- If the user says "delete my gym event" match it by title to find its ID first
 - Default event duration is 1 hour unless specified
 - Use ISO8601 datetime format for tool parameters
-- If the user says goodbye or seems done, acknowledge warmly
 - Never use markdown — you are speaking out loud
 - Be proactive: suggest time slots, remind about conflicts, offer alternatives`;
 
@@ -829,6 +860,36 @@ RULES:
         closeVoiceOverlay();
       },
       onToolCall: async (name, args) => {
+        // ── Real-time data tools ──────────────────────────────────
+        if (name === 'get_weather') {
+          const result = await getWeather(args.location);
+          if (result) return formatWeather(result);
+          return `Sorry, I couldn't get weather data for "${args.location}" right now.`;
+        }
+        if (name === 'get_stock_price') {
+          const result = await getStockPrice(args.symbol);
+          if (result) return formatStock(result);
+          return `No data found for symbol "${args.symbol}". Check the ticker is correct.`;
+        }
+        if (name === 'get_flight_status') {
+          const result = await getFlightStatus(args.flight_number);
+          if (result) return formatFlight(result);
+          return `No flight data found for "${args.flight_number}".`;
+        }
+        if (name === 'search_web') {
+          const results = await searchWeb(args.query);
+          if (results.length) return formatSearch(results);
+          return `No search results found for "${args.query}".`;
+        }
+        // ── reschedule_event → maps to update_event ───────────────
+        if (name === 'reschedule_event') {
+          const ok = await executeAction({ type: 'update_event', data: { eventId: args.eventId, start: args.newStart, end: args.newEnd } });
+          if (ok) haptics.success();
+          return ok ? 'Event rescheduled' : 'Failed to reschedule';
+        }
+        // ── All other tools: delete_event, complete_todo, delete_todo,
+        //    create_alarm, delete_alarm, create_eisenhower, create_goal,
+        //    create_todo, start_pomodoro, stop_pomodoro, etc. ───────
         const action = { type: name, data: args };
         const ok = await executeAction(action);
         if (ok) haptics.success();

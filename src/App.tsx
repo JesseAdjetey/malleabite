@@ -74,7 +74,6 @@ const AppRoutes = () => {
         </Routes>
       </Suspense>
       {!isAuthPage && <BottomMallyAI />}
-      {!isAuthPage && <MobileNavigation />}
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}

@@ -594,7 +594,12 @@ export async function updateCalendarTemplate(
 ): Promise<void> {
   try {
     const ref = doc(db, templatesPath(userId), templateId);
-    await updateDoc(ref, { ...data, updatedAt: new Date().toISOString() });
+    // Strip undefined values from nested template event fields before updating Firestore.
+    const sanitized = JSON.parse(JSON.stringify({
+      ...data,
+      updatedAt: new Date().toISOString(),
+    }));
+    await updateDoc(ref, sanitized);
   } catch (error) {
     logger.error('CalendarService', 'Failed to update template', { error });
     throw error;

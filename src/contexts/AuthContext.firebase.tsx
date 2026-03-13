@@ -46,7 +46,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Safety timeout: if auth hasn't resolved in 5 seconds, stop loading
+    // This prevents infinite spinner on native when Firebase auth hangs
+    const timeout = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn('[DEBUG-AUTH] Auth loading timed out after 5s, setting loading=false');
+          return false;
+        }
+        return prev;
+      });
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const clearError = () => setError(null);

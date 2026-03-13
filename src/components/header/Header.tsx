@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, MoreHorizontal, Settings, Undo2, Redo2 } from 'lucide-react';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,7 +129,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   };
 
   return (
-    <div className="px-4 py-2 flex items-center justify-between w-full relative z-10 pointer-events-none">
+    <div className="px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] flex items-center justify-between w-full relative z-10 pointer-events-none">
       {/* Left Side (Home Button) */}
       <div className="flex items-center gap-1 flex-1 min-w-0 pointer-events-auto">
         {location.pathname !== '/' && (
@@ -202,6 +202,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               iconOnly
             />
 
+            {/* Desktop: inline tools */}
             {!isMobile && <UndoRedoToolbar />}
             {!isMobile && (
               <Button
@@ -215,10 +216,72 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               </Button>
             )}
             {!isMobile && <SettingsNav />}
+
+            {/* Mobile: overflow menu */}
+            {isMobile && <MobileOverflowMenu cycleTheme={cycleTheme} themeLabel={themeLabel} ThemeIcon={ThemeIcon} />}
           </TooltipProvider>
         </div>
       </div>
     </div>
+  );
+};
+
+// ── Mobile Overflow Menu ──────────────────────────────────────────
+const MobileOverflowMenu: React.FC<{
+  cycleTheme: () => void;
+  themeLabel: string;
+  ThemeIcon: React.ElementType;
+}> = ({ cycleTheme, themeLabel, ThemeIcon }) => {
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen(!open)}
+        className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10"
+      >
+        <MoreHorizontal className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+      </Button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-[71] min-w-[180px] bg-popover/95 backdrop-blur-xl border border-border rounded-xl shadow-xl overflow-hidden">
+            <button
+              onClick={() => { cycleTheme(); setOpen(false); }}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+            >
+              <ThemeIcon className="h-4 w-4" />
+              Theme: {themeLabel}
+            </button>
+            <button
+              onClick={() => { navigate('/settings'); setOpen(false); }}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </button>
+            <button
+              onClick={() => { navigate('/analytics'); setOpen(false); }}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              Analytics
+            </button>
+            <button
+              onClick={() => { navigate('/quick-schedule'); setOpen(false); }}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              Quick Schedule
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 };
 

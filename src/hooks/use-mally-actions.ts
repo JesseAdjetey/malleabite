@@ -243,6 +243,11 @@ export function useMallyActions() {
   // Cache of recently-created CalendarTemplates so add_template_event can find
   // them immediately (before the Firestore onSnapshot round-trip updates React state).
   const recentTemplatesRef = useRef<Map<string, CalendarTemplate>>(new Map());
+  // Cache of recently-created pages so same-turn actions can target them before
+  // sidebar page state refreshes from Firestore/onSnapshot.
+  const recentPagesRef = useRef<Map<string, string>>(new Map());
+  // Runtime active-page override for multi-action execution in a single AI turn.
+  const runtimeActivePageIdRef = useRef<string | null>(null);
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
@@ -276,19 +281,28 @@ export function useMallyActions() {
     return d;
   };
 
-  /** Resolve a page reference by name or ID, falling back to the active page. */
-  const resolvePageRef = useCallback((data: { pageName?: string; pageId?: string }) => {
+  /** Resolve a page reference by name or ID, falling back to current runtime-active page. */
+  const resolvePageRef = useCallback((data: { pageName?: string; pageId?: string; title?: string; page?: string; pageTitle?: string }) => {
     if (data.pageId) {
       const page = pages.find(p => p.id === data.pageId) ?? null;
       return { pageId: data.pageId, page };
     }
-    if (data.pageName) {
-      const page = pages.find(p =>
-        p.title.toLowerCase().trim() === (data.pageName as string).toLowerCase().trim()
-      ) ?? null;
+
+    const requestedPageName = (data.pageName || data.page || data.pageTitle || data.title)?.toLowerCase().trim();
+    if (requestedPageName) {
+      const recentPageId = recentPagesRef.current.get(requestedPageName);
+      if (recentPageId) {
+        const recentPage = pages.find(p => p.id === recentPageId) ?? null;
+        return { pageId: recentPageId, page: recentPage };
+      }
+
+      const page = pages.find(p => p.title.toLowerCase().trim() === requestedPageName) ?? null;
       return { pageId: page?.id ?? null, page };
     }
-    return { pageId: activePageId, page: activePage ?? null };
+
+    const fallbackPageId = runtimeActivePageIdRef.current || activePageId;
+    const fallbackPage = pages.find(p => p.id === fallbackPageId) ?? activePage ?? null;
+    return { pageId: fallbackPageId, page: fallbackPage };
   }, [pages, activePage, activePageId]);
 
   /** Find a module's index in a page by ID, type, and/or title. Prefers moduleId. */
@@ -459,10 +473,13 @@ export function useMallyActions() {
         case 'create_list':
         case 'create_todo_list': {
           const result = await createList(data.name, data.color);
-          if (result.success && result.listId && activePageId) {
-            await addModule(activePageId, {
-              type: 'todo', title: data.name, listId: result.listId, minimized: false
-            });
+          if (result.success && result.listId) {
+            const { pageId: targetPageId } = resolvePageRef(data);
+            if (targetPageId) {
+              await addModule(targetPageId, {
+                type: 'todo', title: data.name, listId: result.listId, minimized: false
+              });
+            }
           }
           toast.success(`Todo list "${data.name}" created`);
           return result.success;
@@ -784,26 +801,25 @@ export function useMallyActions() {
           if (!addTemplateName) { toast.error('Template name is required'); return false; }
           console.log('[MallyActions] add_template_event raw data:', JSON.stringify(data));
 
-          // Look in React state first, then in the recent-create cache
-          let tmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((addTemplateName as string).toLowerCase())
-          );
+          // Helper: bidirectional name match — one string must contain the other
+          const nameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          // IMPORTANT: check recent cache first so back-to-back add_template_event
+          // actions in the same batch build on prior updates instead of stale snapshot data.
+          let tmpl: CalendarTemplate | undefined;
+          for (const cached of recentTemplatesRef.current.values()) {
+            if (nameMatch(cached.name, addTemplateName as string)) { tmpl = cached; break; }
+          }
           if (!tmpl) {
-            // Check recently-created templates (not yet in Firestore snapshot)
-            for (const cached of recentTemplatesRef.current.values()) {
-              if (cached.name.toLowerCase().includes((addTemplateName as string).toLowerCase())) {
-                tmpl = cached;
-                break;
-              }
-            }
+            tmpl = calendarTemplates.find(t => nameMatch(t.name, addTemplateName as string));
           }
           if (!tmpl) {
             // Last resort: fetch all templates from Firestore directly
             try {
               const freshTemplates = await calendarService.getCalendarTemplates(user.uid);
-              tmpl = freshTemplates.find(t =>
-                t.name.toLowerCase().includes((addTemplateName as string).toLowerCase())
-              );
+              tmpl = freshTemplates.find(t => nameMatch(t.name, addTemplateName as string));
             } catch { /* ignore */ }
           }
           if (!tmpl) { toast.error(`Template "${addTemplateName}" not found`); return false; }
@@ -858,21 +874,30 @@ export function useMallyActions() {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
           if (!data.templateName || !data.eventTitle) { toast.error('Template name and event title required'); return false; }
 
-          let rmTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
-          );
+          const rmNameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          let rmTmpl = calendarTemplates.find(t => rmNameMatch(t.name, data.templateName as string));
           if (!rmTmpl) {
             for (const cached of recentTemplatesRef.current.values()) {
-              if (cached.name.toLowerCase().includes((data.templateName as string).toLowerCase())) {
-                rmTmpl = cached;
-                break;
-              }
+              if (rmNameMatch(cached.name, data.templateName as string)) { rmTmpl = cached; break; }
             }
+          }
+          if (!rmTmpl) {
+            try {
+              const ft = await calendarService.getCalendarTemplates(user.uid);
+              rmTmpl = ft.find(t => rmNameMatch(t.name, data.templateName as string));
+            } catch { /* ignore */ }
           }
           if (!rmTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
 
+          const rmEventMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
           const filteredEvents = rmTmpl.events.filter(e =>
-            !e.title.toLowerCase().includes((data.eventTitle as string).toLowerCase())
+            !rmEventMatch(e.title, data.eventTitle as string)
           );
           if (filteredEvents.length === rmTmpl.events.length) {
             toast.error(`Event "${data.eventTitle}" not found in template`);
@@ -881,11 +906,81 @@ export function useMallyActions() {
 
           try {
             await calendarService.updateCalendarTemplate(user.uid, rmTmpl.id, { events: filteredEvents });
+            const updatedRmTmpl = { ...rmTmpl, events: filteredEvents };
+            recentTemplatesRef.current.set(rmTmpl.id, updatedRmTmpl);
             toast.success(`Removed event from template "${rmTmpl.name}"`);
             return true;
           } catch (err) {
             console.error('Failed to remove template event:', err);
             toast.error('Failed to remove event from template');
+            return false;
+          }
+        }
+
+        case 'update_template_event': {
+          if (!user?.uid) { toast.error('Not authenticated'); return false; }
+          const uteName = data.templateName || data.template;
+          const uteOldTitle = data.eventTitle || data.currentTitle || data.event;
+          if (!uteName) { toast.error('Template name is required'); return false; }
+          if (!uteOldTitle) { toast.error('Event title to update is required'); return false; }
+          console.log('[MallyActions] update_template_event raw data:', JSON.stringify(data));
+
+          const uteNameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          let uteTmpl = calendarTemplates.find(t => uteNameMatch(t.name, uteName as string));
+          if (!uteTmpl) {
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (uteNameMatch(cached.name, uteName as string)) { uteTmpl = cached; break; }
+            }
+          }
+          if (!uteTmpl) {
+            try {
+              const ft = await calendarService.getCalendarTemplates(user.uid);
+              uteTmpl = ft.find(t => uteNameMatch(t.name, uteName as string));
+            } catch { /* ignore */ }
+          }
+          if (!uteTmpl) { toast.error(`Template "${uteName}" not found`); return false; }
+
+          const uteEventIdx = uteTmpl.events.findIndex(e => uteNameMatch(e.title, uteOldTitle as string));
+          if (uteEventIdx === -1) { toast.error(`Event "${uteOldTitle}" not found in template "${uteTmpl.name}"`); return false; }
+
+          const uteParseDow = (v: any): number => {
+            if (typeof v === 'number') return v;
+            if (typeof v === 'string') {
+              const map: Record<string, number> = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
+              const n = map[v.toLowerCase()]; if (n !== undefined) return n;
+              const p = parseInt(v); if (!isNaN(p)) return p;
+            }
+            return 1;
+          };
+          const existing = uteTmpl.events[uteEventIdx];
+          const newDow = data.dayOfWeek !== undefined ? uteParseDow(data.dayOfWeek) : (data.day !== undefined ? uteParseDow(data.day) : existing.dayOfWeek);
+          const updatedEvent: CalendarTemplateEvent = {
+            ...existing,
+            title: data.title !== undefined ? data.title : existing.title,
+            description: data.description !== undefined ? data.description : existing.description,
+            dayOfWeek: newDow,
+            startTime: data.startTime || data.start || existing.startTime,
+            endTime: data.endTime || data.end || existing.endTime,
+            color: data.color || existing.color,
+            isAllDay: data.isAllDay !== undefined ? data.isAllDay : existing.isAllDay,
+            location: data.location !== undefined ? data.location : existing.location,
+            recurrenceRule: { frequency: 'weekly' as const, interval: 1, daysOfWeek: [newDow] },
+          };
+          const uteUpdatedEvents = [...uteTmpl.events];
+          uteUpdatedEvents[uteEventIdx] = updatedEvent;
+
+          try {
+            await calendarService.updateCalendarTemplate(user.uid, uteTmpl.id, { events: uteUpdatedEvents });
+            const uteUpdatedTmpl = { ...uteTmpl, events: uteUpdatedEvents };
+            recentTemplatesRef.current.set(uteTmpl.id, uteUpdatedTmpl);
+            toast.success(`Updated "${updatedEvent.title}" in template "${uteTmpl.name}"`);
+            return true;
+          } catch (err) {
+            console.error('Failed to update template event:', err);
+            toast.error('Failed to update template event');
             return false;
           }
         }
@@ -896,9 +991,22 @@ export function useMallyActions() {
           const applyName = data.templateName || data.name || data.title;
           if (!applyName) { toast.error('Template name is required'); return false; }
 
-          const applyTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((applyName as string).toLowerCase())
-          );
+          const applyNameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          let applyTmpl = calendarTemplates.find(t => applyNameMatch(t.name, applyName as string));
+          if (!applyTmpl) {
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (applyNameMatch(cached.name, applyName as string)) { applyTmpl = cached; break; }
+            }
+          }
+          if (!applyTmpl) {
+            try {
+              const ft = await calendarService.getCalendarTemplates(user.uid);
+              applyTmpl = ft.find(t => applyNameMatch(t.name, applyName as string));
+            } catch { /* ignore */ }
+          }
           if (!applyTmpl) { toast.error(`Template "${applyName}" not found`); return false; }
           if (applyTmpl.events.length === 0) { toast.error('Template has no events to apply'); return false; }
 
@@ -962,9 +1070,22 @@ export function useMallyActions() {
           if (!user?.uid) { toast.error('Not authenticated'); return false; }
           if (!data.templateName) { toast.error('Template name is required'); return false; }
 
-          const updTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((data.templateName as string).toLowerCase())
-          );
+          const updNameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          let updTmpl = calendarTemplates.find(t => updNameMatch(t.name, data.templateName as string));
+          if (!updTmpl) {
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (updNameMatch(cached.name, data.templateName as string)) { updTmpl = cached; break; }
+            }
+          }
+          if (!updTmpl) {
+            try {
+              const ft = await calendarService.getCalendarTemplates(user.uid);
+              updTmpl = ft.find(t => updNameMatch(t.name, data.templateName as string));
+            } catch { /* ignore */ }
+          }
           if (!updTmpl) { toast.error(`Template "${data.templateName}" not found`); return false; }
 
           const updates: Partial<CalendarTemplate> = {};
@@ -980,6 +1101,9 @@ export function useMallyActions() {
 
           try {
             await calendarService.updateCalendarTemplate(user.uid, updTmpl.id, updates);
+            // Update cache so subsequent actions in same batch see the new metadata
+            const updatedMeta = { ...updTmpl, ...updates };
+            recentTemplatesRef.current.set(updTmpl.id, updatedMeta);
             toast.success(`Updated template "${updTmpl.name}"`);
             return true;
           } catch (err) {
@@ -995,9 +1119,22 @@ export function useMallyActions() {
           const delName = data.templateName || data.name || data.title;
           if (!delName) { toast.error('Template name is required'); return false; }
 
-          const delTmpl = calendarTemplates.find(t =>
-            t.name.toLowerCase().includes((delName as string).toLowerCase())
-          );
+          const delNameMatch = (a: string, b: string) => {
+            const la = a.toLowerCase(); const lb = b.toLowerCase();
+            return la === lb || la.includes(lb) || lb.includes(la);
+          };
+          let delTmpl = calendarTemplates.find(t => delNameMatch(t.name, delName as string));
+          if (!delTmpl) {
+            for (const cached of recentTemplatesRef.current.values()) {
+              if (delNameMatch(cached.name, delName as string)) { delTmpl = cached; break; }
+            }
+          }
+          if (!delTmpl) {
+            try {
+              const ft = await calendarService.getCalendarTemplates(user.uid);
+              delTmpl = ft.find(t => delNameMatch(t.name, delName as string));
+            } catch { /* ignore */ }
+          }
           if (!delTmpl) { toast.error(`Template "${delName}" not found`); return false; }
 
           try {
@@ -1042,8 +1179,9 @@ export function useMallyActions() {
 
         case 'add_module': {
           const { pageId: pid, page: pg } = resolvePageRef(data);
-          if (!pid || !pg) {
-            toast.error(data.pageName ? `Page "${data.pageName}" not found` : 'No active page');
+          if (!pid) {
+            const requested = data.pageName || data.page || data.pageTitle || data.title;
+            toast.error(requested ? `Page "${requested}" not found` : 'No active page');
             return false;
           }
           if (!data.moduleType) { toast.error('Module type is required'); return false; }
@@ -1059,7 +1197,8 @@ export function useMallyActions() {
             listId: data.listId,
           });
           if (result?.success) {
-            toast.success(`Added ${data.title || defaultTitles[data.moduleType] || data.moduleType} module`);
+            runtimeActivePageIdRef.current = pid;
+            toast.success(`Added ${data.title || defaultTitles[data.moduleType] || data.moduleType} module${pg?.title ? ` to ${pg.title}` : ''}`);
             return true;
           }
           return false;
@@ -1133,6 +1272,8 @@ export function useMallyActions() {
           if (!data.title) { toast.error('Page title is required'); return false; }
           const result = await createPage(data.title, data.icon);
           if (result.success && result.pageId) {
+            recentPagesRef.current.set((data.title as string).toLowerCase().trim(), result.pageId);
+            runtimeActivePageIdRef.current = result.pageId;
             setActivePageId(result.pageId);
             return true;
           }
@@ -1156,6 +1297,7 @@ export function useMallyActions() {
             toast.error(data.title ? `Page "${data.title}" not found` : 'No page specified');
             return false;
           }
+          runtimeActivePageIdRef.current = pid;
           setActivePageId(pid);
           toast.success(`Switched to "${pg.title}"`);
           return true;

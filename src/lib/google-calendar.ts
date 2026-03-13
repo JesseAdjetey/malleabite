@@ -416,86 +416,60 @@ export function isGoogleCalendarAuthenticated(accountEmail?: string): boolean {
  * so they never trigger a visible popup.
  * Returns true if a valid token was obtained.
  */
+/**
+ * Ensure a valid Google access token is available for the given account.
+ *
+ * Strategy (in order):
+ * 1. Check if the current localStorage token is still valid
+ * 2. If expiring within 10 minutes OR already expired → refresh via
+ *    the Firebase backend (which holds the encrypted refresh_token).
+ * 3. If no googleAccountId is available (needed for backend refresh),
+ *    log a clear warning — caller should provide it from Firestore data.
+ *
+ * The old GIS `prompt: 'none'` fallback has been removed because it
+ * almost never works in modern browsers due to third-party cookie
+ * blocking (Safari, Firefox, Chrome w/ privacy settings).
+ */
 export async function ensureGoogleToken(accountEmail?: string, googleAccountId?: string): Promise<boolean> {
-  // Fast path: token is already valid
-  if (isGoogleCalendarAuthenticated(accountEmail)) return true;
-
-  // If an interactive or another silent auth is already in progress, don't compete
-  if (gisRequestInProgress || authInProgress) return false;
-
-  const storedGoogleAccountId = googleAccountId || getGoogleAccountId(accountEmail || undefined);
-  if (storedGoogleAccountId) {
-    try {
-      const refreshed = await FirebaseFunctions.refreshGoogleCalendarAccessToken({
-        googleAccountId: storedGoogleAccountId,
-      });
-      persistAccountToken(refreshed.email, refreshed.accessToken, refreshed.expiresIn);
-      persistGoogleAccountId(refreshed.email, refreshed.googleAccountId);
-      return true;
-    } catch (error) {
-      console.warn('[Google Auth] Backend refresh failed, falling back to GIS silent refresh', error);
+  // Fast path: token is still valid and not expiring soon
+  if (isGoogleCalendarAuthenticated(accountEmail)) {
+    // Proactive refresh: if the token expires within 10 minutes, refresh
+    // early so operations don't fail mid-way.
+    const entry = accountEmail ? tokenMap[accountEmail] : Object.values(tokenMap)[0];
+    const expiresInMs = entry ? entry.expiry - Date.now() : Infinity;
+    if (expiresInMs > 10 * 60 * 1000) {
+      return true; // More than 10 min remaining — no refresh needed
     }
+    console.log(`[Google Auth] Token for ${accountEmail || 'default'} expires in ${Math.round(expiresInMs / 1000)}s — proactive refresh`);
   }
 
-  // Attempt a silent token refresh — no popup
-  if (!GOOGLE_CLIENT_ID) return false;
-  const gis = (window as any).google?.accounts?.oauth2;
-  if (!gis) return false;
+  // If an interactive auth is already in progress, don't compete
+  if (authInProgress) return false;
 
-  gisRequestInProgress = true;
-  return new Promise<boolean>((resolve) => {
-    // 10-second timeout for the silent attempt
-    const timeout = setTimeout(() => { gisRequestInProgress = false; resolve(false); }, 10_000);
+  // Resolve the googleAccountId: prefer the explicit parameter,
+  // fall back to localStorage mapping.
+  const resolvedGoogleAccountId = googleAccountId || getGoogleAccountId(accountEmail || undefined);
 
-    try {
-      const client = gis.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: GOOGLE_CALENDAR_SCOPES,
-        callback: async (response: any) => {
-          clearTimeout(timeout);
-          gisRequestInProgress = false;
-          if (response.error || !response.access_token) {
-            resolve(false);
-            return;
-          }
-          // Fetch email for the token
-          let email = accountEmail || '__unknown__';
-          if (!accountEmail) {
-            try {
-              const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${response.access_token}` },
-              }).then(r => r.json());
-              email = userInfo.email || '__unknown__';
-            } catch { /* use fallback */ }
-          }
-          persistAccountToken(email, response.access_token, response.expires_in || 3600);
-          resolve(true);
-        },
-        error_callback: () => {
-          clearTimeout(timeout);
-          gisRequestInProgress = false;
-          resolve(false);
-        },
-      });
+  if (!resolvedGoogleAccountId) {
+    console.warn(
+      `[Google Auth] Cannot refresh token for ${accountEmail || 'unknown'}: no googleAccountId available. ` +
+      'The caller should pass googleAccountId from the ConnectedCalendar Firestore document.'
+    );
+    return false;
+  }
 
-      if (!client) {
-        clearTimeout(timeout);
-        gisRequestInProgress = false;
-        resolve(false);
-        return;
-      }
-
-      // prompt: 'none' is the official GIS silent mode — no UI of any kind.
-      // If a valid session exists and the user previously consented to these
-      // scopes, a new token is returned silently.  Otherwise the error_callback
-      // fires and we resolve(false).
-      client.requestAccessToken({ prompt: 'none' });
-    } catch {
-      clearTimeout(timeout);
-      gisRequestInProgress = false;
-      resolve(false);
-    }
-  });
+  try {
+    const refreshed = await FirebaseFunctions.refreshGoogleCalendarAccessToken({
+      googleAccountId: resolvedGoogleAccountId,
+    });
+    persistAccountToken(refreshed.email, refreshed.accessToken, refreshed.expiresIn);
+    persistGoogleAccountId(refreshed.email, resolvedGoogleAccountId);
+    console.log(`[Google Auth] ✓ Backend refresh succeeded for ${refreshed.email}`);
+    return true;
+  } catch (error) {
+    console.error(`[Google Auth] ✗ Backend refresh failed for ${accountEmail || 'unknown'}:`, error);
+    return false;
+  }
 }
 
 // Disconnect a Google Calendar account (or all if no email given)
@@ -826,8 +800,8 @@ export async function importFromGoogleCalendar(
   const timeMax = dayjs().add(daysForward, 'day').toDate();
 
   const googleEvents = await fetchGoogleCalendarEvents(calendarId, timeMin, timeMax);
-  
+
   logger.info('GoogleCalendar', `Imported ${googleEvents.length} events`);
-  
+
   return googleEvents.map(e => googleEventToMalleabite(e, calendarId));
 }

@@ -6,6 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
+    iosScheme: 'https',
   },
   plugins: {
     SplashScreen: {
@@ -24,6 +25,10 @@ const config: CapacitorConfig = {
       smallIcon: 'ic_launcher',
       iconColor: '#488AFF',
       sound: 'default_notification',
+    },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ['google.com'],
     },
   },
 };

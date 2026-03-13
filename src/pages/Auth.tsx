@@ -381,8 +381,8 @@ const Auth = () => {
             <div
               key={achievement.id}
               className={`rounded-full w-10 h-10 flex items-center justify-center transition-all ${unlockedAchievements.includes(achievement.id)
-                  ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white achievement'
-                  : 'bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50'
+                ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white achievement'
+                : 'bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50'
                 }`}
               title={achievement.title}
             >
@@ -622,8 +622,8 @@ const Auth = () => {
                   <div
                     key={achievement.id}
                     className={`px-2 py-1 rounded-full flex items-center gap-1 ${unlockedAchievements.includes(achievement.id)
-                        ? 'bg-purple-500/20 text-purple-800 dark:bg-purple-500/30 dark:text-white'
-                        : 'bg-gray-200/50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-400'
+                      ? 'bg-purple-500/20 text-purple-800 dark:bg-purple-500/30 dark:text-white'
+                      : 'bg-gray-200/50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-400'
                       }`}
                   >
                     <achievement.icon size={12} />
@@ -633,6 +633,17 @@ const Auth = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Legal footer - required by Google for OAuth verification */}
+        <div className="mt-auto pt-6 pb-4 text-center text-xs text-gray-400 dark:text-gray-500">
+          <a href="/legal/privacy" className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+            Privacy Policy
+          </a>
+          <span className="mx-2">·</span>
+          <a href="/legal/terms" className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+            Terms of Service
+          </a>
         </div>
       </div>
     </div>

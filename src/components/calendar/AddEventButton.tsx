@@ -6,11 +6,13 @@ import { useState, useMemo } from "react";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "@/components/ui/use-toast";
 import { useEventCRUD } from "@/hooks/use-event-crud";
+import { useIsMobile } from "@/hooks/use-mobile";
 import dayjs from "dayjs";
 
 const AddEventButton = () => {
   const { addEvent: dbAddEvent } = useEventCRUD();
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   // Calculate the initial time: today's date with the next hour
   const initialTime = useMemo(() => {
@@ -77,7 +79,9 @@ const AddEventButton = () => {
     <>
       <Button 
         size="icon" 
-        className="h-14 w-14 rounded-full fixed bottom-20 right-8 z-50 shadow-lg bg-primary hover:bg-primary/90"
+        className={`rounded-full fixed right-4 z-50 shadow-lg bg-primary hover:bg-primary/90 ${
+          isMobile ? 'h-11 w-11 bottom-[calc(56px+env(safe-area-inset-bottom,0px))]' : 'h-14 w-14 bottom-20 right-8'
+        }`}
         aria-label="Add event"
         onClick={() => setOpen(true)}
       >

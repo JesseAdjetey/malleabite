@@ -10,7 +10,7 @@ import {
   UserCredential,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect
+  signInWithCredential,
 } from 'firebase/auth';
 import { auth } from './config';
 import { isNative } from '@/lib/platform';
@@ -59,14 +59,23 @@ export const signUp = async (credentials: SignUpCredentials): Promise<UserCreden
 };
 
 export const signInWithGoogle = async (): Promise<UserCredential> => {
-  const provider = new GoogleAuthProvider();
-
   if (isNative) {
-    // On native, use redirect flow (popup blocked in WebView)
-    // The onAuthStateChanged listener will pick up the signed-in user
-    return await signInWithRedirect(auth, provider) as unknown as UserCredential;
+    // Use the Capacitor Firebase Authentication plugin for native Google Sign-In
+    const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+    const result = await FirebaseAuthentication.signInWithGoogle();
+    
+    // Use the credential from the native sign-in to authenticate with the Firebase web SDK
+    const idToken = result.credential?.idToken;
+    const accessToken = result.credential?.accessToken;
+    if (!idToken) {
+      throw new Error('Google Sign-In failed: no ID token returned');
+    }
+    const credential = GoogleAuthProvider.credential(idToken, accessToken);
+    return await signInWithCredential(auth, credential);
   }
 
+  // Web: use popup
+  const provider = new GoogleAuthProvider();
   return await signInWithPopup(auth, provider);
 };
 

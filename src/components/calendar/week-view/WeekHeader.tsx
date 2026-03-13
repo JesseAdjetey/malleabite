@@ -3,9 +3,10 @@ import React, { useRef, useCallback, useState } from "react";
 import { getWeekDays } from "@/lib/getTime";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
-import { useViewStore } from "@/lib/store";
+import { useViewStore, useDateStore } from "@/lib/store";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { haptics } from "@/lib/haptics";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,16 +120,18 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
     setDragging(null);
   }, []);
 
-  // ── Mobile: shift range by 1 day ─────────────────────────────
-  const shiftLeft = () => {
-    if (rangeStart > 0) {
-      setRange(rangeStart - 1, rangeEnd - 1);
-    }
-  };
-  const shiftRight = () => {
-    if (rangeEnd < 6) {
-      setRange(rangeStart + 1, rangeEnd + 1);
-    }
+  // ── Mobile: rolling 3-day view that crosses week boundaries ────
+  const { setDate } = useDateStore();
+
+  const shiftMobile = (direction: 'left' | 'right') => {
+    haptics.selection();
+    const days = direction === 'right' ? 3 : -3;
+    const newDate = userSelectedDate.add(days, 'day');
+    setDate(newDate);
+    // Recompute range for the new week
+    const newDayIdx = newDate.day(); // 0=Sun … 6=Sat
+    const start = Math.max(0, Math.min(newDayIdx - 1, 4));
+    setRange(start, start + 2);
   };
 
   // ── Mobile 3-day view ──────────────────────────────────────────
@@ -162,16 +165,15 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
           </DropdownMenu>
         </div>
 
-        {/* Left arrow */}
+        {/* Left arrow — rolls across weeks */}
         <button
-          onClick={shiftLeft}
-          disabled={rangeStart === 0}
-          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
+          onClick={() => shiftMobile('left')}
+          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 transition-colors"
         >
           <ChevronLeft size={16} className="text-purple-600 dark:text-purple-300" />
         </button>
 
-        {/* Visible day cells */}
+        {/* Visible 3 day cells */}
         <div className="flex-1 flex justify-around">
           {mobileDays.map(({ currentDate, today }, i) => (
             <div key={i} className="flex flex-col items-center">
@@ -195,11 +197,10 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
           ))}
         </div>
 
-        {/* Right arrow */}
+        {/* Right arrow — rolls across weeks */}
         <button
-          onClick={shiftRight}
-          disabled={rangeEnd === 6}
-          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 disabled:opacity-30 transition-colors"
+          onClick={() => shiftMobile('right')}
+          className="p-1 rounded-full hover:bg-purple-100 dark:hover:bg-white/10 transition-colors"
         >
           <ChevronRight size={16} className="text-purple-600 dark:text-purple-300" />
         </button>

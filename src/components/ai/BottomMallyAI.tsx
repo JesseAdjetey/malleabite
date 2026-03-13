@@ -1899,15 +1899,15 @@ RULES:
         )}
       </AnimatePresence>
 
-      {/* Minimized floating icon - centered glassmorphic pill */}
+      {/* Minimized floating icon — mobile: small glass box, desktop: centered pill */}
       <AnimatePresence>
         {isMinimized && (
           <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            drag="x"
-            dragConstraints={{
+            drag={isMobile ? false : "x"}
+            dragConstraints={isMobile ? undefined : {
               left: -(window.innerWidth / 2 - 60),
               right: (window.innerWidth / 2 - 120),
             }}
@@ -1918,26 +1918,32 @@ RULES:
               bounceDamping: 20,
               bounceStiffness: 300,
             }}
-            whileDrag={{ scale: 1.08 }}
+            whileDrag={isMobile ? undefined : { scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
             onDragStart={() => { (window as any).__mallyDragged = true; }}
             onDragEnd={() => { setTimeout(() => { (window as any).__mallyDragged = false; }, 100); }}
             onClick={() => { if (!(window as any).__mallyDragged) setIsMinimized(false); }}
             className={cn(
-              "fixed left-1/2 -translate-x-1/2 z-50 px-8 py-3 rounded-full cursor-grab active:cursor-grabbing",
-              "backdrop-blur-2xl border",
-              "bg-purple-500/30 border-purple-400/40 dark:bg-white/10 dark:border-white/20",
-              "hover:bg-purple-500/40 dark:hover:bg-white/20 transition-colors flex items-center gap-2",
+              isMobile
+                ? "fixed left-4 z-50 h-10 w-10 rounded-xl flex items-center justify-center backdrop-blur-2xl border bg-purple-500/20 border-purple-400/30 dark:bg-white/10 dark:border-white/15 hover:bg-purple-500/30 dark:hover:bg-white/20 transition-colors"
+                : "fixed left-1/2 -translate-x-1/2 z-50 px-8 py-3 rounded-full cursor-grab active:cursor-grabbing backdrop-blur-2xl border bg-purple-500/30 border-purple-400/40 dark:bg-white/10 dark:border-white/20 hover:bg-purple-500/40 dark:hover:bg-white/20 transition-colors flex items-center gap-2",
             )}
             style={{
-              bottom: isMobile ? 'var(--mobile-nav-height)' : '1.5rem',
-              boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.15)',
+              bottom: isMobile ? 'calc(56px + env(safe-area-inset-bottom, 0px))' : '1.5rem',
+              boxShadow: isMobile
+                ? '0 4px 16px rgba(139, 92, 246, 0.25), inset 0 1px 1px rgba(255,255,255,0.2)'
+                : '0 8px 32px rgba(139, 92, 246, 0.3), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.15)',
               touchAction: 'none',
             }}
           >
-            <span
-              className="text-purple-700 dark:text-purple-400 font-extrabold text-xl tracking-wide select-none"
-              style={{ fontFamily: "'Courier New', Courier, monospace" }}
-            >Mally</span>
+            {isMobile ? (
+              <Sparkles size={18} className="text-purple-600 dark:text-purple-400" />
+            ) : (
+              <span
+                className="text-purple-700 dark:text-purple-400 font-extrabold text-xl tracking-wide select-none"
+                style={{ fontFamily: "'Courier New', Courier, monospace" }}
+              >Mally</span>
+            )}
           </motion.button>
         )}
       </AnimatePresence>
@@ -1955,7 +1961,7 @@ RULES:
               "left-0 right-0",
             )}
             style={{
-              bottom: isMobile ? 'var(--mobile-nav-height)' : 0,
+              bottom: isMobile ? 'env(safe-area-inset-bottom, 0px)' : 0,
               maxHeight: isMobile ? "80vh" : "70vh",
               /* Layered gradient: fully transparent at top fading into base */
               background: isDark

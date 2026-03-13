@@ -76,7 +76,15 @@ const normalizeActions = (rawActions) => rawActions.map(op => {
         return { type: 'update_event', data: { eventId: data.eventId, start: data.newStart || data.start, end: data.newEnd || data.end, title: data.title } };
     }
     else if (type === 'create_todo_list') {
-        return { type, data: { name: data.name } };
+        return {
+            type,
+            data: {
+                name: data.name,
+                color: data.color,
+                pageName: data.pageName || data.page || data.pageTitle || data.title,
+                pageId: data.pageId,
+            }
+        };
     }
     else if (type === 'create_todo' || type === 'add_todo_to_list') {
         return { type: 'create_todo', data: { text: data.text || data.content, listName: data.listName } };
@@ -98,6 +106,9 @@ const normalizeActions = (rawActions) => rawActions.map(op => {
     }
     else if (type === 'add_template_event') {
         return { type, data: { templateName: data.templateName || data.template || data.name, title: data.title || data.eventTitle, dayOfWeek: data.dayOfWeek ?? data.day, startTime: data.startTime || data.start, endTime: data.endTime || data.end, color: data.color, description: data.description } };
+    }
+    else if (type === 'update_template_event') {
+        return { type, data: { templateName: data.templateName || data.template, eventTitle: data.eventTitle || data.currentTitle || data.event, title: data.title, dayOfWeek: data.dayOfWeek ?? data.day, startTime: data.startTime || data.start, endTime: data.endTime || data.end, color: data.color, description: data.description } };
     }
     else if (type === 'remove_template_event' || type === 'apply_calendar_template' || type === 'update_calendar_template' || type === 'delete_calendar_template') {
         // Ensure data wrapper exists
@@ -214,9 +225,10 @@ CAPABILITIES:
 - Calendar Templates (weekly patterns) — ALWAYS include ALL events in create_calendar_template:
   Create full template: {"type":"create_calendar_template","data":{"name":"Work Week","description":"optional","groupName":"Work","events":[{"title":"Standup","dayOfWeek":1,"startTime":"09:00","endTime":"09:15","color":"#3b82f6"}]}}
   Add event to template: {"type":"add_template_event","data":{"templateName":"...","title":"...","dayOfWeek":0,"startTime":"HH:mm","endTime":"HH:mm"}}
+  Edit an existing event in a template: {"type":"update_template_event","data":{"templateName":"...","eventTitle":"existing event title","title":"new title","dayOfWeek":2,"startTime":"HH:mm","endTime":"HH:mm","color":"#hex"}}
   Remove event from template: {"type":"remove_template_event","data":{"templateName":"...","eventTitle":"..."}}
   Apply template to calendar: {"type":"apply_calendar_template","data":{"templateName":"..."}}
-  Update template: {"type":"update_calendar_template","data":{"templateName":"...","name":"new name"}}
+  Update template metadata: {"type":"update_calendar_template","data":{"templateName":"...","name":"new name"}}
   Delete template: {"type":"delete_calendar_template","data":{"templateName":"..."}}
 - Eisenhower: {"type":"create_eisenhower","data":{"text":"...","quadrant":"urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important"}}
 - Reminders: {"type":"create_reminder","data":{"title":"...","reminderTime":"ISO8601"}}
@@ -228,9 +240,11 @@ TEMPLATE RULES (CRITICAL — follow exactly):
 - When user asks to create a template, you MUST include ALL events in the "events" array of a single create_calendar_template action. The "events" array must NOT be empty.
 - Example: {"type":"create_calendar_template","data":{"name":"My Schedule","groupName":"School","events":[{"title":"Math","dayOfWeek":1,"startTime":"09:00","endTime":"10:00"},{"title":"English","dayOfWeek":2,"startTime":"11:00","endTime":"12:00"}]}}
 - ALWAYS set "groupName" to one of the names from CALENDAR_GROUPS above.
-- When user asks to add events to an EXISTING template (listed in CALENDAR_TEMPLATES above), use add_template_event with the template name.
-- When user asks to edit/update template events, use add_template_event or remove_template_event.
+- When user asks to add events to an EXISTING template (listed in CALENDAR_TEMPLATES above), use add_template_event with the exact templateName from CALENDAR_TEMPLATES.
+- When user asks to EDIT or CHANGE a specific event inside a template (e.g. change time, rename), use update_template_event with templateName and the eventTitle of the event to change.
+- When user asks to RENAME a template or change metadata, use update_calendar_template.
 - NEVER create an empty template with no events. If the user's request implies events, include them ALL.
+- Use the EXACT template name from CALENDAR_TEMPLATES when referencing existing templates — do not paraphrase or shorten the name.
 
 RULES:
 - "start pomodoro" = start timer NOW (no calendar event)

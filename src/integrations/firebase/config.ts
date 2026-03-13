@@ -1,9 +1,10 @@
 // Firebase configuration and initialization
 import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import { isNative } from '@/lib/platform';
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -46,7 +47,19 @@ export const app = initializeApp(firebaseConfig);
 console.log('[DEBUG-FIREBASE] Firebase initialized successfully');
 
 // Initialize Firebase services
-export const auth = getAuth(app);
+// On native (Capacitor), use explicit persistence to avoid indexedDB hanging in WebView
+let authInstance;
+try {
+  if (isNative) {
+    authInstance = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
+  } else {
+    authInstance = getAuth(app);
+  }
+} catch (e) {
+  // initializeAuth throws if auth was already initialized (e.g. HMR), fall back to getAuth
+  authInstance = getAuth(app);
+}
+export const auth = authInstance;
 export const db = getFirestore(app);
 export const functions = getFunctions(app, 'us-central1'); // Specify region explicitly
 export const storage = getStorage(app);

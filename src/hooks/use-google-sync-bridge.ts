@@ -31,6 +31,22 @@ import { toast } from 'sonner';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const GOOGLE_WRITE_RETRY_DELAYS_MS = [800, 1600];
 
+// Throttle token-expired toasts: max once per 5 minutes per account email
+const _lastExpiredToast: Record<string, number> = {};
+const EXPIRED_TOAST_THROTTLE_MS = 5 * 60 * 1000;
+
+function showTokenExpiredToast(accountEmail: string) {
+  const now = Date.now();
+  if (_lastExpiredToast[accountEmail] && now - _lastExpiredToast[accountEmail] < EXPIRED_TOAST_THROTTLE_MS) {
+    return; // Throttled — don't spam
+  }
+  _lastExpiredToast[accountEmail] = now;
+  toast.warning(`Google sync paused for ${accountEmail}`, {
+    description: 'Token expired. Open Calendar dropdown to reconnect.',
+    duration: 8000,
+  });
+}
+
 function isTransientGoogleWriteError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return [
@@ -166,6 +182,7 @@ export function useGoogleSyncBridge() {
         if (!ok) {
           logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; event not pushed.`);
           useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
+          showTokenExpiredToast(googleCal.accountEmail);
           return null;
         }
       }
@@ -214,6 +231,7 @@ export function useGoogleSyncBridge() {
         if (!ok) {
           logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; update not pushed.`);
           useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
+          showTokenExpiredToast(googleCal.accountEmail);
           return false;
         }
       }
@@ -248,6 +266,7 @@ export function useGoogleSyncBridge() {
         if (!ok) {
           logger.warn('GoogleSyncBridge', `Token expired for ${googleCal.accountEmail}; delete not pushed.`);
           useSyncStatusStore.getState().markExpired(googleCal.accountEmail);
+          showTokenExpiredToast(googleCal.accountEmail);
           return false;
         }
       }
@@ -316,6 +335,7 @@ export function useGoogleSyncBridge() {
           if (!ok) {
             logger.warn('GoogleSyncBridge', `Token expired for ${cal.accountEmail}. Marking for reconnect.`);
             useSyncStatusStore.getState().markExpired(cal.accountEmail);
+            showTokenExpiredToast(cal.accountEmail);
             continue;
           } else {
             // Silent refresh succeeded — clear any stale expired flag

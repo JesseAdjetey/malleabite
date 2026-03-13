@@ -17,6 +17,7 @@ import { GridBackground } from "@/components/ui/grid-background";
 import RippleBorder from "@/components/ui/RippleBorder";
 import { useCalendarFilterBridge } from "@/hooks/use-calendar-filter-bridge";
 import TemplateToolbar from "@/components/calendar/TemplateToolbar";
+import MobileModuleSheet from "@/components/mobile/MobileModuleSheet";
 
 const Mainview = () => {
   // Bridge calendar groups → legacy filter store so views auto-filter
@@ -33,6 +34,8 @@ const Mainview = () => {
   const isMobile = useIsMobile();
   const [isCrossingBoundary, setIsCrossingBoundary] = useState(false);
   const crossingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [calendarFraction, setCalendarFraction] = useState(0.965);
 
   const MIN_WIDTH = 280;
 
@@ -146,25 +149,7 @@ const Mainview = () => {
       <TemplateToolbar />
 
       <div className="flex h-screen overflow-hidden">
-        {/* Mobile Sidebar — iOS Sheet style */}
-        {isMobile && (
-          <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="fixed top-2 left-3 z-50 md:hidden h-9 w-9"
-              >
-                <Menu size={20} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[85vw] max-w-sm p-0">
-              <SideBar />
-            </SheetContent>
-          </Sheet>
-        )}
-
-        {/* Desktop Sidebar */}
+        {/* Desktop Sidebar — hidden on mobile */}
         {!isMobile && (
           <>
             <div
@@ -211,22 +196,50 @@ const Mainview = () => {
         {/* Main Content */}
         <div className="flex flex-col flex-1 h-screen w-full md:w-auto overflow-hidden">
           <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
-          <div className="overflow-y-auto flex-1 touch-pan-y pb-[var(--mobile-nav-height)] md:pb-0">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={selectedView}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="h-full"
-              >
-                {selectedView === "Month" && <MonthView />}
-                {selectedView === "Day" && <DayView />}
-                {selectedView === "Week" && <WeekView />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+
+          {isMobile ? (
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <div className="h-full overflow-y-auto touch-pan-y">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedView}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="h-full"
+                  >
+                    {selectedView === "Month" && <MonthView />}
+                    {selectedView === "Day" && <DayView />}
+                    {selectedView === "Week" && <WeekView />}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              <MobileModuleSheet
+                calendarFraction={calendarFraction}
+                onCalendarFractionChange={setCalendarFraction}
+              />
+            </div>
+          ) : (
+            /* ── Desktop: calendar fills remaining space ── */
+            <div className="overflow-y-auto flex-1 touch-pan-y">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={selectedView}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="h-full"
+                >
+                  {selectedView === "Month" && <MonthView />}
+                  {selectedView === "Day" && <DayView />}
+                  {selectedView === "Week" && <WeekView />}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       </div>
     </GridBackground>

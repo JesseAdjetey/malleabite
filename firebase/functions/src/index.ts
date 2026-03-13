@@ -745,6 +745,10 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
     - After creating a template, ASK the user if they want to apply it now. Do NOT auto-apply.
     - Applying a template (apply_calendar_template) creates recurring weekly events starting from the current week.
     - Check CALENDAR_TEMPLATES in context so you know what templates already exist.
+    - To ADD a new event to an existing template use add_template_event.
+    - To EDIT/CHANGE a specific event inside a template (time, title, day, color) use update_template_event with templateName and the eventTitle of the event.
+    - To RENAME a template or change its metadata use update_calendar_template.
+    - Use the EXACT template name from CALENDAR_TEMPLATES when referencing existing templates.
 
 12. RECURRING EVENTS (SCOPED):
     - Use update_recurring_event or delete_recurring_event with scope: "single", "all", or "thisAndFuture".
@@ -879,7 +883,7 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     { "type": "complete_todo", "data": { "todoId": "..." } },
     { "type": "delete_todo", "data": { "todoId": "..." } },
     { "type": "move_todo", "data": { "todoId": "...", "listName": "..." } },
-    { "type": "create_todo_list", "data": { "name": "...", "color": "#hex" } },
+    { "type": "create_todo_list", "data": { "name": "...", "color": "#hex", "pageName": "target page name, omit for active page" } },
     { "type": "delete_todo_list", "data": { "listName": "..." } },
     { "type": "set_active_todo_list", "data": { "listName": "..." } },
     // ── Eisenhower Matrix ──
@@ -911,6 +915,8 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     ] } },
     // Add a single event to an existing template (for incremental building):
     { "type": "add_template_event", "data": { "templateName": "...", "title": "...", "dayOfWeek": 0, "startTime": "HH:mm", "endTime": "HH:mm", "color": "#hex" } },
+    // Edit an existing event inside a template (change title, time, day, color):
+    { "type": "update_template_event", "data": { "templateName": "...", "eventTitle": "existing event title to find", "title": "new title (optional)", "dayOfWeek": 0, "startTime": "HH:mm", "endTime": "HH:mm", "color": "#hex" } },
     // Remove an event from a template by title:
     { "type": "remove_template_event", "data": { "templateName": "...", "eventTitle": "..." } },
     // Apply a template — creates recurring weekly events on the calendar:

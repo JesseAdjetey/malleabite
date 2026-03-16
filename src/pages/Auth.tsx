@@ -1,248 +1,111 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AnimatedLogo from '@/components/auth/AnimatedLogo';
-import { Check, ChevronRight, Star, Award, Gift, Trophy, Timer, Calendar, BrainCircuit, Compass, Mail } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { Network, MessageSquare, Feather, ChevronRight, Mail, Moon, Sun, Laptop } from 'lucide-react';
 import { authSchema, sanitizeInput } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { ZodError } from 'zod';
+import { useThemeStore } from '@/lib/stores/theme-store';
+import { GridBackground } from '@/components/ui/grid-background';
 
-const ACHIEVEMENTS = [
-  { id: 'first_visit', title: 'First Visit', icon: Star, description: 'Welcome to Malleabite!' },
-  { id: 'explorer', title: 'Explorer', icon: Compass, description: 'Clicked on all interactive elements' },
-  { id: 'curious', title: 'Curious Mind', icon: BrainCircuit, description: 'Read about our features' }
-];
+const TypewriterText = () => {
+  const [text, setText] = useState('');
+  const [phase, setPhase] = useState<'typing_short' | 'waiting' | 'scrambling' | 'typing_long'>('typing_short');
+
+  useEffect(() => {
+    const shortText = "Malleabite";
+    const longText = "Malleable Integrated Time-management Environment";
+    const scrambleChars = "!<>-_\\\\/[]{}—=+*^?#________";
+    let timeoutId: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout;
+
+    if (phase === 'typing_short') {
+      let index = 0;
+      intervalId = setInterval(() => {
+        index++;
+        setText(shortText.slice(0, index));
+        if (index >= shortText.length) {
+          clearInterval(intervalId);
+          timeoutId = setTimeout(() => setPhase('waiting'), 1500);
+        }
+      }, 120);
+    } else if (phase === 'waiting') {
+      timeoutId = setTimeout(() => setPhase('scrambling'), 100);
+    } else if (phase === 'scrambling') {
+      let iteration = 0;
+      intervalId = setInterval(() => {
+        setText(longText.split("").map((char, i) => {
+          if (i < iteration) return longText[i];
+          if (char === ' ') return ' ';
+          return scrambleChars[Math.floor(Math.random() * scrambleChars.length)];
+        }).join(""));
+
+        if (iteration >= longText.length) {
+          clearInterval(intervalId);
+          setText(longText);
+          setPhase('typing_long');
+        }
+
+        iteration += 0.5; // Controls the speed of decoding
+      }, 30);
+    } else if (phase === 'typing_long') {
+      timeoutId = setTimeout(() => {
+        setText('');
+        setPhase('typing_short');
+      }, 5000); // Loop after 5 seconds
+    }
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
+  }, [phase]);
+
+  return (
+    <div className="flex justify-center items-center min-h-[40px] md:min-h-[60px] lg:min-h-[80px]">
+      <h1 className="text-xl md:text-2xl lg:text-3xl font-mono font-bold tracking-tight text-foreground text-center flex items-center justify-center flex-wrap">
+        {text}
+        <span className="animate-pulse ml-1 text-purple-500">_</span>
+      </h1>
+    </div>
+  );
+};
+
+const ThemeToggle = () => {
+  const { theme, setTheme } = useThemeStore();
+
+  const toggleTheme = () => {
+    if (theme === 'light') setTheme('dark');
+    else if (theme === 'dark') setTheme('system');
+    else setTheme('light');
+  };
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className="p-2.5 rounded-full transition-all bg-muted hover:bg-muted/80 text-foreground border border-border flex items-center justify-center shadow-sm"
+      aria-label="Toggle theme"
+      title={`Current: ${theme} - Click to switch`}
+    >
+      {theme === 'light' && <Sun className="w-4 h-4" />}
+      {theme === 'dark' && <Moon className="w-4 h-4" />}
+      {theme === 'system' && <Laptop className="w-4 h-4" />}
+    </button>
+  );
+};
 
 const Auth = () => {
   const { user, signIn, signUp, signInWithGoogle, loading, error, clearError } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([]);
-  const [featuresExplored, setFeaturesExplored] = useState<Record<string, boolean>>({
-    productivity: false,
-    timeTracking: false,
-    taskManagement: false,
-    scheduling: false,
-  });
   const [emailSent, setEmailSent] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-
-  // References for interactive elements
-  const timeOrbsRef = useRef<HTMLDivElement>(null);
-  const productivityBoostRef = useRef<HTMLDivElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
-  const exploreCountRef = useRef(0);
-
-  // Custom cursor effect
-  useEffect(() => {
-    // Create custom cursor if it doesn't exist
-    if (!document.getElementById('custom-cursor')) {
-      const cursor = document.createElement('div');
-      cursor.id = 'custom-cursor';
-      document.body.appendChild(cursor);
-
-      const handleMouseMove = (e: MouseEvent) => {
-        cursor.style.left = `${e.clientX}px`;
-        cursor.style.top = `${e.clientY}px`;
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-
-      // Add hover effect listeners
-      document.querySelectorAll('.interactive-element').forEach(el => {
-        el.addEventListener('mouseenter', () => {
-          cursor.classList.add('expanded');
-        });
-
-        el.addEventListener('mouseleave', () => {
-          cursor.classList.remove('expanded');
-        });
-      });
-
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        if (document.body.contains(cursor)) {
-          document.body.removeChild(cursor);
-        }
-      };
-    }
-  }, []);
-
-  // Unlock first visit achievement on load
-  useEffect(() => {
-    if (!unlockedAchievements.includes('first_visit')) {
-      setTimeout(() => {
-        unlockAchievement('first_visit');
-      }, 2000);
-    }
-
-    // Setup interactive time orbs
-    if (timeOrbsRef.current) {
-      createInteractiveTimeOrbs();
-    }
-
-    // Track progress based on form completion
-    updateProgress();
-  }, [email, password, name, isSignUp, unlockedAchievements]);
-
-  // Create interactive floating time-related orbs
-  const createInteractiveTimeOrbs = () => {
-    if (!timeOrbsRef.current) return;
-
-    const container = timeOrbsRef.current;
-    const orbsCount = 5;
-
-    // Clear existing orbs
-    container.innerHTML = '';
-
-    // Add orbs
-    for (let i = 0; i < orbsCount; i++) {
-      const orb = document.createElement('div');
-      const size = Math.random() * 40 + 40;
-      const icons = [Timer, Calendar, Check, Star];
-      const IconComponent = icons[Math.floor(Math.random() * icons.length)];
-
-      orb.className = 'absolute rounded-full flex items-center justify-center draggable interactive-element';
-      orb.style.width = `${size}px`;
-      orb.style.height = `${size}px`;
-      orb.style.top = `${Math.random() * 80 + 10}%`;
-      orb.style.left = `${Math.random() * 80 + 10}%`;
-      orb.style.background = `rgba(${Math.random() * 100 + 100}, ${Math.random() * 50 + 50}, ${Math.random() * 200 + 50}, 0.3)`;
-      orb.style.backdropFilter = 'blur(8px)';
-      orb.style.transform = 'translate(-50%, -50%)';
-      orb.style.transition = 'transform 0.1s, filter 0.3s';
-      orb.style.animation = `float-${i} ${Math.random() * 5 + 10}s infinite alternate ease-in-out`;
-
-      // Add icon
-      const iconElement = document.createElement('div');
-      iconElement.className = 'text-white/70';
-      // Use SVG instead of component
-      iconElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-      orb.appendChild(iconElement);
-
-      // Make it draggable
-      orb.addEventListener('mousedown', (e: MouseEvent) => {
-        const rect = orb.getBoundingClientRect();
-        const offsetX = e.clientX - rect.left;
-        const offsetY = e.clientY - rect.top;
-
-        orb.style.cursor = 'grabbing';
-        orb.classList.add('highlight');
-
-        // Track element for explorer achievement
-        trackElementExplored(i);
-
-        const moveHandler = (moveEvent: MouseEvent) => {
-          orb.style.left = `${moveEvent.clientX - offsetX}px`;
-          orb.style.top = `${moveEvent.clientY - offsetY}px`;
-          orb.style.animation = 'none';
-        };
-
-        const upHandler = () => {
-          orb.style.cursor = 'grab';
-          orb.classList.remove('highlight');
-
-          window.removeEventListener('mousemove', moveHandler);
-          window.removeEventListener('mouseup', upHandler);
-
-          // Reset to float animation
-          setTimeout(() => {
-            orb.style.animation = `float-${i} ${Math.random() * 5 + 10}s infinite alternate ease-in-out`;
-          }, 100);
-        };
-
-        window.addEventListener('mousemove', moveHandler);
-        window.addEventListener('mouseup', upHandler);
-      });
-
-      // Create keyframe animation for this specific orb
-      const style = document.createElement('style');
-      style.textContent = `
-        @keyframes float-${i} {
-          0% { transform: translate(-50%, -50%) translateX(0) translateY(0); }
-          100% { transform: translate(-50%, -50%) translateX(${Math.random() * 100 - 50}px) translateY(${Math.random() * 100 - 50}px); }
-        }
-      `;
-      document.head.appendChild(style);
-
-      container.appendChild(orb);
-    }
-  };
-
-  // Track which elements have been explored
-  const trackElementExplored = (index: number) => {
-    exploreCountRef.current += 1;
-
-    // If all interactive elements have been explored
-    if (exploreCountRef.current >= 7 && !unlockedAchievements.includes('explorer')) {
-      unlockAchievement('explorer');
-    }
-  };
-
-  // Track feature exploration
-  const exploreFeature = (feature: string) => {
-    if (!featuresExplored[feature]) {
-      setFeaturesExplored(prev => ({ ...prev, [feature]: true }));
-
-      // Check if all features are explored
-      const updatedExplored = { ...featuresExplored, [feature]: true };
-      const allExplored = Object.values(updatedExplored).every(Boolean);
-
-      if (allExplored && !unlockedAchievements.includes('curious')) {
-        unlockAchievement('curious');
-      }
-    }
-  };
-
-  // Unlock achievement and show notification
-  const unlockAchievement = (id: string) => {
-    if (unlockedAchievements.includes(id)) return;
-
-    const achievement = ACHIEVEMENTS.find(a => a.id === id);
-    if (!achievement) return;
-
-    setUnlockedAchievements(prev => [...prev, id]);
-
-    // Show achievement notification
-    toast({
-      title: "Achievement Unlocked!",
-      description: achievement.title,
-      variant: "default"
-    });
-
-    // Increment progress
-    setProgress(prev => Math.min(prev + 20, 100));
-  };
-
-  // Update progress bar based on form completion
-  const updateProgress = () => {
-    let newProgress = 0;
-
-    // Email adds 20%
-    if (email) newProgress += 20;
-
-    // Password adds 20%
-    if (password) newProgress += 20;
-
-    // Name adds 20% if in signup mode
-    if (isSignUp && name) newProgress += 20;
-
-    // Achievements add the rest
-    newProgress += unlockedAchievements.length * 10;
-
-    // Cap at 100%
-    newProgress = Math.min(newProgress, 100);
-
-    setProgress(newProgress);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,18 +113,12 @@ const Auth = () => {
     setValidationErrors({});
 
     try {
-      // Sanitize inputs
       const sanitizedEmail = sanitizeInput(email);
       const sanitizedName = name ? sanitizeInput(name) : undefined;
 
       if (isSignUp) {
-        // Validate signup data (use authSchema since we don't have a confirmPassword field)
         try {
-          authSchema.parse({
-            email: sanitizedEmail,
-            password,
-          });
-          // Additional name validation
+          authSchema.parse({ email: sanitizedEmail, password });
           if (sanitizedName && (sanitizedName.length < 2 || sanitizedName.length > 50)) {
             setValidationErrors({ name: 'Name must be between 2 and 50 characters' });
             return;
@@ -274,7 +131,6 @@ const Auth = () => {
               errors[path] = err.message;
             });
             setValidationErrors(errors);
-            logger.warn('Auth', 'Sign up validation failed', { errors });
             return;
           }
           throw validationError;
@@ -282,26 +138,16 @@ const Auth = () => {
 
         const { success, isConfirmationEmailSent } = await signUp(sanitizedEmail, password, sanitizedName);
 
-        if (success) {
-          // If signup was successful
-          if (isConfirmationEmailSent) {
-            // Show email confirmation notification
-            setEmailSent(true);
-
-            // Reset form and switch to sign in
-            setTimeout(() => {
-              setIsSignUp(false);
-              setEmailSent(false);
-            }, 500);
-          }
+        if (success && isConfirmationEmailSent) {
+          setEmailSent(true);
+          setTimeout(() => {
+            setIsSignUp(false);
+            setEmailSent(false);
+          }, 3000);
         }
       } else {
-        // Validate signin data
         try {
-          authSchema.parse({
-            email: sanitizedEmail,
-            password
-          });
+          authSchema.parse({ email: sanitizedEmail, password });
         } catch (validationError) {
           if (validationError instanceof ZodError) {
             const errors: Record<string, string> = {};
@@ -310,7 +156,6 @@ const Auth = () => {
               errors[path] = err.message;
             });
             setValidationErrors(errors);
-            logger.warn('Auth', 'Sign in validation failed', { errors });
             return;
           }
           throw validationError;
@@ -323,11 +168,6 @@ const Auth = () => {
     }
   };
 
-  const switchMode = () => {
-    setIsSignUp(!isSignUp);
-    clearError();
-  };
-
   const handleGoogleSignIn = async () => {
     try {
       await signInWithGoogle();
@@ -336,317 +176,209 @@ const Auth = () => {
     }
   };
 
-  // If user is already logged in, redirect to home page
   if (user) {
     return <Navigate to="/" />;
   }
 
   return (
-    <div
-      ref={mainContainerRef}
-      className="min-h-screen flex flex-col relative overflow-x-hidden bg-gradient-to-br from-purple-50 via-white to-purple-100 text-gray-900 dark:from-black dark:via-purple-950/40 dark:to-black dark:text-white"
-    >
-      {/* Animated background overlay */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_10%_10%,rgba(138,43,226,0.07),transparent_50%)] dark:bg-[radial-gradient(circle_at_10%_10%,rgba(138,43,226,0.15),transparent_50%)]"></div>
-        <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(circle_at_80%_80%,rgba(138,43,226,0.05),transparent_50%)] dark:bg-[radial-gradient(circle_at_80%_80%,rgba(138,43,226,0.1),transparent_50%)]"></div>
+    <GridBackground className="bg-background text-foreground font-mono overflow-x-hidden selection:bg-purple-500/30">
+      <div className="flex flex-col items-center w-full min-h-screen pt-4 pb-12 px-4 md:px-8">
 
-        {/* Animated grid */}
-        <div
-          className="absolute inset-0 opacity-5 dark:opacity-10"
-          style={{
-            backgroundImage: `linear-gradient(rgba(138, 43, 226, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(138, 43, 226, 0.3) 1px, transparent 1px)`,
-            backgroundSize: '40px 40px',
-            backgroundPosition: '-1px -1px',
-            animation: 'gradient-shift 20s ease infinite'
-          }}
-        ></div>
-      </div>
+        {/* Top Navbar Pill */}
+        <header className="w-full max-w-2xl flex items-center justify-between bg-card/50 backdrop-blur-md border border-border shadow-sm rounded-2xl px-3 py-1.5 md:px-5 md:py-2 z-50">
 
-      {/* Interactive time orbs */}
-      <div ref={timeOrbsRef} className="absolute inset-0 pointer-events-auto z-10"></div>
-
-      <div className="container mx-auto px-4 py-4 md:py-6 flex flex-col relative z-20">
-        {/* Progress bar */}
-        <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 dark:bg-black/50 z-50">
-          <div
-            className="h-full bg-gradient-to-r from-purple-500 to-violet-500"
-            style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}
-          ></div>
-        </div>
-
-        {/* Achievements display - Hidden on mobile for cleaner UI */}
-        <div className="fixed top-4 right-4 flex-col gap-2 z-50 hidden md:flex">
-          {ACHIEVEMENTS.map(achievement => (
-            <div
-              key={achievement.id}
-              className={`rounded-full w-10 h-10 flex items-center justify-center transition-all ${unlockedAchievements.includes(achievement.id)
-                ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white achievement'
-                : 'bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50'
-                }`}
-              title={achievement.title}
-            >
-              <achievement.icon size={18} />
-            </div>
-          ))}
-        </div>
-
-        <div className="flex flex-col xl:flex-row items-center justify-center gap-4 md:gap-6 xl:gap-8 py-4 md:py-6 max-w-6xl mx-auto w-full my-auto">
-          {/* Logo and branding */}
-          <div className="xl:w-1/2 flex flex-col items-center xl:items-start max-w-lg w-full">
-            <div className="mb-3 md:mb-4 interactive-element">
-              <AnimatedLogo className="w-32 h-32 md:w-40 md:h-40 xl:w-48 xl:h-48" />
-            </div>
-
-            <h1 className="text-xl md:text-3xl xl:text-4xl font-bold mb-2 md:mb-3 text-transparent bg-clip-text bg-gradient-to-r from-purple-900 to-purple-600 dark:from-white dark:to-purple-300 text-center xl:text-left">
-              Malleabite
-            </h1>
-
-            <p className="text-sm md:text-base xl:text-lg mb-3 md:mb-4 text-purple-600/70 dark:text-purple-200/70 max-w-lg text-center xl:text-left">
-              Your malleable Integrated Time-management Environment
-            </p>
-
-            {/* Interactive feature highlights */}
-            <div className="grid grid-cols-2 gap-2 md:gap-3 w-full max-w-sm md:max-w-md mb-4">
-              <div
-                ref={productivityBoostRef}
-                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
-                onClick={() => exploreFeature('productivity')}
-              >
-                <BrainCircuit className="mb-2 text-purple-400" size={24} />
-                <h3 className="font-semibold text-gray-800 dark:text-white text-xs md:text-sm">Productivity</h3>
-                <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-300 mt-1">Optimize workflow</p>
-              </div>
-
-              <div
-                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
-                onClick={() => exploreFeature('timeTracking')}
-              >
-                <Timer className="mb-2 text-purple-400" size={24} />
-                <h3 className="font-semibold text-gray-800 dark:text-white text-xs md:text-sm">Time Tracking</h3>
-                <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-300 mt-1">Monitor time</p>
-              </div>
-
-              <div
-                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
-                onClick={() => exploreFeature('taskManagement')}
-              >
-                <Check className="mb-2 text-purple-400" size={24} />
-                <h3 className="font-semibold text-gray-800 dark:text-white text-xs md:text-sm">Tasks</h3>
-                <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-300 mt-1">Never miss deadlines</p>
-              </div>
-
-              <div
-                className="glass rounded-xl p-3 md:p-4 flex flex-col items-center text-center hover:scale-105 transition-transform cursor-pointer interactive-element touch-manipulation min-h-[100px]"
-                onClick={() => exploreFeature('scheduling')}
-              >
-                <Calendar className="mb-2 text-purple-400" size={24} />
-                <h3 className="font-semibold text-gray-800 dark:text-white text-xs md:text-sm">Scheduling</h3>
-                <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-300 mt-1">Smart calendar</p>
-              </div>
-            </div>
+          {/* Left: Theme Switcher */}
+          <div className="flex-1 flex justify-start">
+            <ThemeToggle />
           </div>
 
-          {/* Auth form */}
-          <div className="xl:w-1/2 max-w-md w-full">
-            <div className="glass p-4 md:p-5 xl:p-6 rounded-2xl border border-purple-200 dark:border-purple-500/20 shadow-lg dark:shadow-[0_0_30px_rgba(138,43,226,0.2)]">
-              <h2 className="text-base md:text-lg xl:text-xl font-bold mb-3 md:mb-4 text-center">
-                {isSignUp ? 'Create Your Account' : 'Welcome Back'}
-              </h2>
+          {/* Center: Logo */}
+          <div className="flex-1 flex justify-center">
+            <img src="/logo-quadrant.svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
+          </div>
 
-              {emailSent && (
-                <div className="bg-green-500/20 border border-green-500/30 text-white p-4 rounded-lg mb-4 flex items-start gap-3">
-                  <Mail className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">Confirmation email sent!</p>
-                    <p className="text-sm opacity-80">Please check your inbox and confirm your email before signing in.</p>
+          {/* Right: Sign in Pill */}
+          <div className="flex-1 flex justify-end">
+            <Button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="h-9 md:h-10 bg-purple-600 hover:bg-purple-700 text-white font-mono text-xs md:text-sm rounded-full transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex items-center gap-2 md:gap-3 px-3 md:px-4 shrink-0 whitespace-nowrap border-none"
+            >
+              <svg className="w-4 h-4 md:w-5 md:h-5 bg-white rounded-full p-[1px]" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              </svg>
+              <span className="hidden sm:inline">Sign in</span>
+            </Button>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="w-full max-w-5xl flex flex-col items-center mt-16 md:mt-24 space-y-16 md:space-y-24">
+
+          {/* Title Section */}
+          <div className="w-full px-4 text-center">
+            <TypewriterText />
+          </div>
+
+          {/* Features Spread */}
+          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 px-4 lg:px-8">
+
+            <div className="flex flex-col items-center text-center space-y-4 group">
+              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
+                <Network className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="text-foreground font-semibold text-lg mb-2">Everything in One Place</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">Connect your calendars and to-dos into a single, flowing system.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center text-center space-y-4 group">
+              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
+                <MessageSquare className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="text-foreground font-semibold text-lg mb-2">Just Talk to It</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">Add events instantly by using your voice or messaging via WhatsApp.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center text-center space-y-4 group">
+              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
+                <Feather className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h3 className="text-foreground font-semibold text-lg mb-2">Simple & Calm</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">A beautiful, minimalist design that adapts to your needs.</p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Email Auth Fallback */}
+          <div className="w-full max-w-sm flex flex-col items-center pt-8">
+            <button
+              type="button"
+              onClick={() => setShowEmailAuth(!showEmailAuth)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors py-2 flex items-center justify-center gap-2"
+            >
+              <span>{showEmailAuth ? 'Hide email options' : 'Prefer to use email?'}</span>
+              <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${showEmailAuth ? 'rotate-90' : ''}`} />
+            </button>
+
+            <div className={`w-full transition-all duration-300 overflow-hidden ${showEmailAuth ? 'max-h-[600px] opacity-100 mt-6' : 'max-h-0 opacity-0 mt-0'}`}>
+              <div className="p-6 bg-card/30 border border-border shadow-sm rounded-2xl backdrop-blur-sm">
+
+                {/* Messages */}
+                {error && (
+                  <div className="mb-6 p-4 bg-destructive/10 text-destructive text-sm font-medium border-l-2 border-destructive">
+                    {error}
                   </div>
-                </div>
-              )}
-
-              {error && (
-                <div className="bg-red-500/20 border border-red-500/30 text-white p-3 rounded-lg mb-4 flex items-center gap-2">
-                  <div className="h-5 w-5 text-red-400 flex-shrink-0">⚠️</div>
-                  <p>{error}</p>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {isSignUp && (
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => {
-                        setName(e.target.value);
-                        // Clear validation error when user types
-                        if (validationErrors.name) {
-                          setValidationErrors(prev => {
-                            const newErrors = { ...prev };
-                            delete newErrors.name;
-                            return newErrors;
-                          });
-                        }
-                      }}
-                      className={`bg-gray-50 border-gray-300 text-gray-900 dark:bg-purple-950/30 dark:border-purple-500/30 dark:text-white ${validationErrors.name ? 'border-red-500' : ''
-                        }`}
-                      placeholder="John Doe"
-                      required={isSignUp}
-                    />
-                    {validationErrors.name && (
-                      <p className="text-red-400 text-sm">{validationErrors.name}</p>
-                    )}
+                )}
+                {emailSent && (
+                  <div className="mb-6 p-4 bg-green-500/10 text-green-600 dark:text-green-400 text-sm font-medium border-l-2 border-green-500 flex items-start gap-3">
+                    <Mail className="w-5 h-5 flex-shrink-0" />
+                    <span>Confirmation email sent! Please check your inbox.</span>
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      // Clear validation error when user types
-                      if (validationErrors.email) {
-                        setValidationErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.email;
-                          return newErrors;
-                        });
-                      }
-                    }}
-                    className={`bg-gray-50 border-gray-300 text-gray-900 dark:bg-purple-950/30 dark:border-purple-500/30 dark:text-white ${validationErrors.email ? 'border-red-500' : ''
-                      }`}
-                    placeholder="your@email.com"
-                    required
-                  />
-                  {validationErrors.email && (
-                    <p className="text-red-400 text-sm">{validationErrors.email}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      // Clear validation error when user types
-                      if (validationErrors.password) {
-                        setValidationErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.password;
-                          return newErrors;
-                        });
-                      }
-                    }}
-                    className={`bg-gray-50 border-gray-300 text-gray-900 dark:bg-purple-950/30 dark:border-purple-500/30 dark:text-white ${validationErrors.password ? 'border-red-500' : ''
-                      }`}
-                    required
-                  />
-                  {validationErrors.password && (
-                    <p className="text-red-400 text-sm">{validationErrors.password}</p>
-                  )}
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full py-4 md:py-5 bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white font-medium text-base md:text-lg interactive-button"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                      <span>Processing...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span>{isSignUp ? 'Sign Up' : 'Sign In'}</span>
-                      <ChevronRight size={18} />
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  {isSignUp && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="name" className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
+                      <Input
+                        id="name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => {
+                          setName(e.target.value);
+                          if (validationErrors.name) setValidationErrors(prev => ({ ...prev, name: '' }));
+                        }}
+                        className={`h-10 bg-transparent border-border focus-visible:ring-1 focus-visible:ring-purple-500 font-mono text-sm transition-colors ${validationErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                        placeholder="Jane Doe"
+                        required={isSignUp}
+                      />
+                      {validationErrors.name && <p className="text-destructive text-xs mt-1">{validationErrors.name}</p>}
                     </div>
                   )}
-                </Button>
-              </form>
 
-              <div className="relative my-4 md:my-5">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200 dark:border-purple-500/20"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white dark:bg-purple-950/90 text-gray-500 dark:text-gray-400">Or continue with</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                onClick={handleGoogleSignIn}
-                className="w-full py-4 md:py-5 bg-white hover:bg-gray-100 text-gray-900 font-medium text-base md:text-lg border border-gray-300 interactive-button"
-                disabled={loading}
-              >
-                <div className="flex items-center gap-3 justify-center">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                  <span>Sign in with Google</span>
-                </div>
-              </Button>
-
-              <div className="mt-6 text-center">
-                <button
-                  type="button"
-                  onClick={switchMode}
-                  className="text-purple-600 hover:text-purple-800 dark:text-purple-300 dark:hover:text-white transition-colors"
-                >
-                  {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-                </button>
-              </div>
-            </div>
-
-            {/* Show achievements progress */}
-            <div className="mt-6 p-4 glass rounded-xl">
-              <h3 className="text-sm font-medium flex items-center gap-2 mb-2">
-                <Trophy size={16} className="text-yellow-400" />
-                <span>Unlock Achievements</span>
-              </h3>
-
-              <div className="flex flex-wrap gap-2 text-xs">
-                {ACHIEVEMENTS.map(achievement => (
-                  <div
-                    key={achievement.id}
-                    className={`px-2 py-1 rounded-full flex items-center gap-1 ${unlockedAchievements.includes(achievement.id)
-                      ? 'bg-purple-500/20 text-purple-800 dark:bg-purple-500/30 dark:text-white'
-                      : 'bg-gray-200/50 text-gray-500 dark:bg-gray-800/30 dark:text-gray-400'
-                      }`}
-                  >
-                    <achievement.icon size={12} />
-                    <span>{achievement.title}</span>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (validationErrors.email) setValidationErrors(prev => ({ ...prev, email: '' }));
+                      }}
+                      className={`h-10 bg-transparent border-border focus-visible:ring-1 focus-visible:ring-purple-500 font-mono text-sm transition-colors ${validationErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                      placeholder="jane@example.com"
+                      required
+                    />
+                    {validationErrors.email && <p className="text-destructive text-xs mt-1">{validationErrors.email}</p>}
                   </div>
-                ))}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (validationErrors.password) setValidationErrors(prev => ({ ...prev, password: '' }));
+                      }}
+                      className={`h-10 bg-transparent border-border focus-visible:ring-1 focus-visible:ring-purple-500 font-mono text-sm transition-colors ${validationErrors.password ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                      placeholder="••••••••"
+                      required
+                    />
+                    {validationErrors.password && <p className="text-destructive text-xs mt-1">{validationErrors.password}</p>}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-10 mt-6 bg-muted hover:bg-muted/80 text-foreground font-mono text-xs shadow-sm transition-all flex items-center justify-center"
+                  >
+                    {loading ? (
+                      <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                    ) : (
+                      <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
+                    )}
+                  </Button>
+                </form>
+
+                <div className="mt-5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSignUp(!isSignUp);
+                      clearError();
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors border-b border-transparent hover:border-foreground pb-0.5"
+                  >
+                    {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                  </button>
+                </div>
+
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Legal footer - required by Google for OAuth verification */}
-        <div className="mt-auto pt-6 pb-4 text-center text-xs text-gray-400 dark:text-gray-500">
-          <a href="/legal/privacy" className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
-            Privacy Policy
-          </a>
-          <span className="mx-2">·</span>
-          <a href="/legal/terms" className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
-            Terms of Service
-          </a>
-        </div>
+        </main>
+
+        {/* Minimal Footer */}
+        <footer className="mt-auto pt-16 w-full text-center flex items-center justify-center gap-6 text-xs text-muted-foreground">
+          <a href="/legal/privacy" className="hover:text-foreground transition-colors">Privacy</a>
+          <a href="/legal/terms" className="hover:text-foreground transition-colors">Terms</a>
+        </footer>
       </div>
-    </div>
+    </GridBackground>
   );
 };
 

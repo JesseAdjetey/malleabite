@@ -6,6 +6,7 @@ import SelectableCalendarEvent from "./calendar/SelectableCalendarEvent";
 import { CalendarEventType } from "@/lib/store";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
+import { calculateEventPositions } from "@/lib/utils/event-overlap";
 
 interface MonthViewBoxProps {
   day: dayjs.Dayjs | null;
@@ -34,35 +35,35 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   showTodoCalendarDialog,
   isBulkMode = false,
   isSelected = () => false,
-  onToggleSelection = () => {},
+  onToggleSelection = () => { },
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  
+
   useEffect(() => {
     const boxElement = boxRef.current;
     if (!boxElement) return;
-    
+
     // Handle touch drag start
     const handleTouchDragStart = (e: Event) => {
       const customEvent = e as CustomEvent;
       const { dragData, element } = customEvent.detail;
-      
+
       // Mark the element as being dragged
       if (element) {
         element.classList.add('touch-dragging');
       }
     };
-    
+
     // Handle touch drag end
     const handleTouchDragEnd = (e: Event) => {
       const customEvent = e as CustomEvent;
       const { dragData, clientX, clientY } = customEvent.detail;
-      
+
       // Find the element at the drop position
       const elementAtPoint = document.elementFromPoint(clientX, clientY);
       const dropTarget = elementAtPoint?.closest('.month-view-box');
-      
+
       if (dropTarget && dropTarget !== boxElement && day) {
         // Get the day from the drop target's dataset
         const dropDay = (dropTarget as HTMLElement).dataset.day;
@@ -71,16 +72,16 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
           toast.success(`Event moved to ${dayjs(dropDay).format("MMM D")}`);
         }
       }
-      
+
       // Remove touch-dragging class from all elements
       document.querySelectorAll('.touch-dragging').forEach(el => {
         el.classList.remove('touch-dragging');
       });
     };
-    
+
     boxElement.addEventListener('touchdragstart', handleTouchDragStart);
     boxElement.addEventListener('touchdragend', handleTouchDragEnd);
-    
+
     return () => {
       boxElement.removeEventListener('touchdragstart', handleTouchDragStart);
       boxElement.removeEventListener('touchdragend', handleTouchDragEnd);
@@ -93,7 +94,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
 
   const isFirstDayOfMonth = day.date() === 1;
   const isToday = day.format("DD-MM-YY") === dayjs().format("DD-MM-YY");
-  
+
   // Separate all-day and timed events, all-day shown first
   const allDayEvents = events.filter(e => e.isAllDay);
   const timedEvents = events.filter(e => !e.isAllDay);
@@ -102,12 +103,12 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   // Show max 3 events on month view
   const visibleEvents = sortedEvents.slice(0, 3);
   const hasMoreEvents = sortedEvents.length > 3;
-  
+
   // Handle dropping an event onto this day
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
+
     try {
       // Parse the drag data
       const dataString = e.dataTransfer.getData('application/json');
@@ -115,10 +116,10 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         console.error("No data found in drag event");
         return;
       }
-      
+
       const data = JSON.parse(dataString);
       console.log("Month view received drop data:", data);
-      
+
       // Handle todo item or Eisenhower item drag
       if (data.source === 'todo-module' || data.source === 'eisenhower') {
         // Use TodoCalendarDialog for consistency with week/day views
@@ -127,19 +128,19 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
           showTodoCalendarDialog(data, day.toDate(), '09:00');
           return;
         }
-        
+
         if (openEventForm && day) {
           // Open event form with todo/eisenhower data
           openEventForm(data, day);
           return;
         }
-        
+
         if (addEvent && day) {
           // Create a new calendar event from the todo/eisenhower item
           const eventDate = day.format('YYYY-MM-DD');
           const startDateTime = day.hour(9); // 9:00 AM
           const endDateTime = day.hour(10); // 10:00 AM
-      
+
           const newEvent: CalendarEventType = {
             id: nanoid(),
             title: data.text,
@@ -151,23 +152,23 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
             startsAt: startDateTime.toISOString(),
             endsAt: endDateTime.toISOString()
           };
-          
+
           console.log("Month view adding new event from todo:", newEvent);
-          
+
           // Add the event to the store
           addEvent(newEvent);
-          
+
           toast.success(`Todo "${data.text}" added to calendar on ${day.format("MMM D")}`);
         }
         return;
       }
-      
+
       // Don't process if the event is locked
       if (data.isLocked) return;
-      
+
       // Only update if the date actually changed
       if (data.date === day.format('YYYY-MM-DD')) return;
-      
+
       // Update the event with the new date
       if (onEventDrop) {
         onEventDrop(data, day.format('YYYY-MM-DD'));
@@ -178,7 +179,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       toast.error("Failed to move event");
     }
   };
-  
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -192,9 +193,9 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
       setIsDragOver(false);
     }
   };
-  
+
   return (
-    <div 
+    <div
       ref={boxRef}
       className={cn(
         "group relative flex flex-col border-r border-t border-gray-200 dark:border-white/10 gradient-border cursor-glow month-view-box min-h-[90px] md:min-h-[110px]",
@@ -218,71 +219,81 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
         {rowIndex === 0 && (
           <h4 className="text-[10px] md:text-xs text-gray-500 dark:text-muted-foreground hidden sm:block">{day.format("ddd").toUpperCase()}</h4>
         )}
-        <h4 
+        <h4
           className={cn(
-            "text-center text-xs md:text-sm text-gray-700 dark:text-gray-200", 
+            "text-center text-xs md:text-sm text-gray-700 dark:text-gray-200",
             isToday ? "h-6 w-6 md:h-7 md:w-7 flex items-center justify-center rounded-full bg-primary text-white font-medium" : ""
           )}
         >
           {isFirstDayOfMonth ? day.format("MMM D") : day.format("D")}
         </h4>
       </div>
-      
+
       {/* Events */}
       <div className="flex-1 px-0.5 md:px-1 pb-1 overflow-hidden space-y-1">
-        {visibleEvents.map(event => (
-          <div 
-            key={event.id}
-            data-event-id={event.id}
-            className={cn(
-              "gradient-border calendar-event-wrapper overflow-hidden",
-              event.isAllDay ? "rounded-[3px]" : "rounded-sm"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isBulkMode) {
-                onEventClick && onEventClick(event);
-              }
-            }}
-          >
-            {isBulkMode ? (
-              <SelectableCalendarEvent
-                event={event}
-                isBulkMode={isBulkMode}
-                isSelected={isSelected(event.id)}
-                onToggleSelection={onToggleSelection}
-                compact={true}
-              />
-            ) : event.isAllDay ? (
-              /* All-day events render as a full-width colored bar */
+        {(() => {
+          const positions = calculateEventPositions(visibleEvents);
+          return visibleEvents.map(event => {
+            const isOverlapping = positions.get(event.id)?.isOverlapping;
+            return (
               <div
+                key={event.id}
+                data-event-id={event.id}
                 className={cn(
-                  "w-full px-1.5 py-[2px] text-[10px] md:text-[11px] font-medium text-white truncate",
-                  event.color || "bg-primary/80"
+                  "gradient-border calendar-event-wrapper overflow-hidden relative",
+                  event.isAllDay ? "rounded-[3px]" : "rounded-sm"
                 )}
-                style={
-                  (event.color?.startsWith('#') || event.color?.startsWith('rgb'))
-                    ? { backgroundColor: event.color }
-                    : undefined
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isBulkMode) {
+                    onEventClick && onEventClick(event);
+                  }
+                }}
               >
-                {event.title}
+                {/* Visual collision indicator for all-day events */}
+                {event.isAllDay && isOverlapping && (
+                  <div className="absolute inset-0 event-collision-glow rounded-[3px] pointer-events-none" />
+                )}
+                {isBulkMode ? (
+                  <SelectableCalendarEvent
+                    event={event}
+                    isBulkMode={isBulkMode}
+                    isSelected={isSelected(event.id)}
+                    onToggleSelection={onToggleSelection}
+                  />
+                ) : event.isAllDay ? (
+                  /* All-day events render as a full-width colored bar */
+                  <div
+                    className={cn(
+                      "w-full px-1.5 py-[2px] text-[10px] md:text-[11px] font-medium text-white truncate",
+                      event.color || "bg-primary/80"
+                    )}
+                    style={
+                      (event.color?.startsWith('#') || event.color?.startsWith('rgb'))
+                        ? { backgroundColor: event.color }
+                        : undefined
+                    }
+                  >
+                    {event.title}
+                  </div>
+                ) : (
+                  <CalendarEvent
+                    event={event}
+                    color={event.color}
+                    isLocked={event.isLocked}
+                    hasAlarm={event.hasAlarm}
+                    hasReminder={event.hasReminder}
+                    hasTodo={event.isTodo}
+                    participants={event.participants}
+                    compact={true}
+                    isOverlapping={isOverlapping}
+                  />
+                )}
               </div>
-            ) : (
-              <CalendarEvent
-                event={event}
-                color={event.color}
-                isLocked={event.isLocked}
-                hasAlarm={event.hasAlarm}
-                hasReminder={event.hasReminder}
-                hasTodo={event.isTodo}
-                participants={event.participants}
-                compact={true}
-              />
-            )}
-          </div>
-        ))}
-        
+            );
+          });
+        })()}
+
         {hasMoreEvents && (
           <div className="text-[10px] md:text-xs text-center bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded py-0.5 px-1 touch-manipulation">
             +{sortedEvents.length - 3} more

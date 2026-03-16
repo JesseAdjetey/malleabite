@@ -31,9 +31,18 @@ const EventForm: React.FC<EventFormProps> = ({
 }) => {
   const { addEvent } = useEventCRUD();
   const [initialEvent, setInitialEvent] = useState<CalendarEventType | undefined>(undefined);
+  const hasInitialized = React.useRef(false);
 
   // Use onCancel or onClose, whichever is provided
   const handleClose = onCancel || onClose;
+
+  // Reset initialization flag when dialog closes
+  useEffect(() => {
+    if (!open) {
+      hasInitialized.current = false;
+      setInitialEvent(undefined);
+    }
+  }, [open]);
 
   // Log initialTime for debugging
   useEffect(() => {
@@ -42,9 +51,10 @@ const EventForm: React.FC<EventFormProps> = ({
     }
   }, [initialTime]);
 
-  // Prepare initial event data when props change
+  // Prepare initial event data when props change - only on first open
   useEffect(() => {
-    if (initialTime) {
+    if (initialTime && !hasInitialized.current && open) {
+      hasInitialized.current = true;
       // Start with time data - make sure we have the current initialTime
       console.log("Setting initialEvent with time:", initialTime.startTime);
 
@@ -91,10 +101,8 @@ const EventForm: React.FC<EventFormProps> = ({
           variant: "destructive"
         });
       }
-    } else {
-      setInitialEvent(undefined);
     }
-  }, [initialTime, todoData]);
+  }, [initialTime, todoData, open]);
 
   const handleSave = (event: CalendarEventType) => {
     // Generate a unique ID for the new event if it doesn't have one

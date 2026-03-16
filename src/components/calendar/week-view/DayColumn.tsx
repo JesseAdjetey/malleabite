@@ -80,8 +80,8 @@ const DayColumn: React.FC<DayColumnProps> = ({
         <div
           key={i}
           className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${dragOverHour === i
-              ? 'bg-primary/30 dark:bg-white/20 ring-2 ring-inset ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.5)] scale-[1.02]'
-              : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
+            ? 'bg-primary/30 dark:bg-white/20 ring-2 ring-inset ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.5)] scale-[1.02]'
+            : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
             }`}
           onClick={() => onTimeSlotClick(currentDate, hour)}
           onDragOver={(e) => {
@@ -98,7 +98,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
         const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
         const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
         const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
-        
+
         // Get overlap position for side-by-side display
         const position = eventPositions.get(event.id);
         const overlapStyle = getEventStyle(position);
@@ -148,6 +148,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
                     hasReminder={event.hasReminder}
                     hasTodo={event.isTodo}
                     participants={event.participants}
+                    isOverlapping={position?.isOverlapping}
                     onClick={() => openEventSummary(event)}
                     onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
                   />

@@ -61,14 +61,14 @@ const TemplateToolbar: React.FC = () => {
         const hasRecurrence = evt.isRecurring && evt.recurrenceRule;
         const recurrenceRule = hasRecurrence
           ? {
-              frequency: evt.recurrenceRule!.frequency,
-              interval: evt.recurrenceRule!.interval || 1,
-              ...(evt.recurrenceRule!.daysOfWeek ? { daysOfWeek: evt.recurrenceRule!.daysOfWeek } : {}),
-              ...(evt.recurrenceRule!.dayOfMonth ? { dayOfMonth: evt.recurrenceRule!.dayOfMonth } : {}),
-              ...(evt.recurrenceRule!.monthOfYear !== undefined ? { monthOfYear: evt.recurrenceRule!.monthOfYear } : {}),
-              ...(evt.recurrenceRule!.endDate ? { endDate: evt.recurrenceRule!.endDate } : {}),
-              ...(evt.recurrenceRule!.count ? { count: evt.recurrenceRule!.count } : {}),
-            }
+            frequency: evt.recurrenceRule!.frequency,
+            interval: evt.recurrenceRule!.interval || 1,
+            ...(evt.recurrenceRule!.daysOfWeek ? { daysOfWeek: evt.recurrenceRule!.daysOfWeek } : {}),
+            ...(evt.recurrenceRule!.dayOfMonth ? { dayOfMonth: evt.recurrenceRule!.dayOfMonth } : {}),
+            ...(evt.recurrenceRule!.monthOfYear !== undefined ? { monthOfYear: evt.recurrenceRule!.monthOfYear } : {}),
+            ...(evt.recurrenceRule!.endDate ? { endDate: evt.recurrenceRule!.endDate } : {}),
+            ...(evt.recurrenceRule!.count ? { count: evt.recurrenceRule!.count } : {}),
+          }
           : defaultRule;
 
         const te: CalendarTemplateEvent = {
@@ -146,7 +146,7 @@ const TemplateToolbar: React.FC = () => {
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
             placeholder="Template name..."
-            className="h-8 text-sm bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2 flex-1 min-w-[120px]"
+            className="h-8 text-sm bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 px-2 flex-1 min-w-[120px] text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
             autoFocus
           />
 
@@ -177,7 +177,7 @@ const TemplateToolbar: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={handleCancel}
-              className="h-8 text-xs"
+              className="h-8 text-xs text-gray-900 dark:text-gray-100"
             >
               <X size={14} className="mr-1" />
               Cancel

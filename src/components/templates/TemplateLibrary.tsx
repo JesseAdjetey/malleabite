@@ -253,7 +253,7 @@ export function TemplateLibrary({ onApplyTemplate }: TemplateLibraryProps) {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background text-foreground">
           <TemplateForm
             template={editingTemplate}
             onSubmit={handleCreateOrUpdate}

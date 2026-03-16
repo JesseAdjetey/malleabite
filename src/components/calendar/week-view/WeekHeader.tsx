@@ -30,7 +30,7 @@ const DragHandle: React.FC<{
       "hover:bg-purple-500 dark:hover:bg-purple-300/90 hover:scale-[1.15]",
       "shadow-md hover:shadow-lg transition-all duration-150",
       active && "bg-purple-600 dark:bg-purple-300 scale-[1.15] shadow-lg",
-      side === "left" ? "-left-[7px]" : "-right-[7px]"
+      side === "left" ? "-left-[14px]" : "-right-[14px]"
     )}
     onPointerDown={onPointerDown}
     onDoubleClick={onDoubleClick}
@@ -154,9 +154,8 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
                     if (viewStr === "Week") resetRange();
                     handleViewChange(viewStr);
                   }}
-                  className={`rounded-lg cursor-pointer ${
-                    selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
-                  }`}
+                  className={`rounded-lg cursor-pointer ${selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
+                    }`}
                 >
                   {viewStr}
                 </DropdownMenuItem>
@@ -234,8 +233,8 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
           gridRow: 1,
           alignSelf: "stretch",
           justifySelf: "stretch",
-          marginLeft: 20,
-          marginRight: 20,
+          marginLeft: 26,
+          marginRight: 26,
           zIndex: 0,
         }}
       />
@@ -258,9 +257,8 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
                   if (viewStr === "Week") resetRange();
                   handleViewChange(viewStr);
                 }}
-                className={`rounded-lg cursor-pointer ${
-                  selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
-                }`}
+                className={`rounded-lg cursor-pointer ${selectedView === viewStr ? "bg-accent text-accent-foreground" : ""
+                  }`}
               >
                 {viewStr}
               </DropdownMenuItem>

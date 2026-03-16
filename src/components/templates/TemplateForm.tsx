@@ -85,10 +85,10 @@ export function TemplateForm({ template, onSubmit, onCancel }: TemplateFormProps
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 text-foreground">
       {/* Header */}
       <div>
-        <h3 className="text-title3 font-semibold">
+        <h3 className="text-title3 font-semibold text-gray-900 dark:text-gray-100">
           {template ? 'Edit Template' : 'Create Template'}
         </h3>
       </div>
@@ -288,7 +288,7 @@ export function TemplateForm({ template, onSubmit, onCancel }: TemplateFormProps
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel} className="text-gray-900 dark:text-gray-100">
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting}>

@@ -12,7 +12,7 @@ import EnhancedEventForm from './EnhancedEventForm';
 import { CalendarEventType } from '@/lib/stores/types';
 import { useTodos } from '@/hooks/use-todos';
 import { useMirrorSync } from '@/hooks/use-mirror-sync';
-import { Calendar, Clock, CheckCircle, Lock, Users, Repeat, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, Lock, Unlock, Users, Repeat, AlertTriangle } from 'lucide-react';
 import { RecurringEventEditDialog } from './RecurringEventEditDialog';
 import { EditScope } from '@/hooks/use-recurring-events';
 
@@ -390,12 +390,21 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
                     </div>
                   )}
 
-                  {selectedEvent.isLocked && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-500/20 text-xs">
-                      <Lock size={14} />
-                      <span>Locked</span>
-                    </div>
-                  )}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const updated = { ...selectedEvent, isLocked: !selectedEvent.isLocked };
+                      await updateEvent(updated);
+                      toast.success(updated.isLocked ? 'Event locked' : 'Event unlocked');
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs cursor-pointer transition-colors ${selectedEvent.isLocked
+                        ? 'bg-yellow-500/20 hover:bg-yellow-500/30'
+                        : 'bg-muted hover:bg-muted/80'
+                      }`}
+                  >
+                    {selectedEvent.isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                    <span>{selectedEvent.isLocked ? 'Locked' : 'Unlocked'}</span>
+                  </button>
 
                   {selectedEvent.hasAlarm && (
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/20 text-xs">

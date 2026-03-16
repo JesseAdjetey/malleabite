@@ -284,7 +284,7 @@ export default function Templates() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto bg-background text-foreground">
           <TemplateForm
             template={editingTemplate}
             onSubmit={handleCreateOrUpdate}

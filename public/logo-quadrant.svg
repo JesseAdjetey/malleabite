@@ -1,0 +1,13 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Top Left Solid -->
+  <path d="M124 56L56 124H124V56Z" fill="#8B5CF6"/>
+  
+  <!-- Bottom Left Solid -->
+  <path d="M124 200L56 132H124V200Z" fill="#8B5CF6"/>
+  
+  <!-- Bottom Right Solid -->
+  <path d="M132 200L200 132H132V200Z" fill="#8B5CF6"/>
+  
+  <!-- Top Right Dashed Outline -->
+  <path d="M132 124H200L132 56V124Z" stroke="#8B5CF6" stroke-width="6" stroke-dasharray="8 8" fill="transparent"/>
+</svg>

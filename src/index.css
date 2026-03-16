@@ -4,3 +4,21 @@
 @import './styles/components.css';
 @import './styles/utilities.css';
 @import './styles/animations.css';
+
+/* Collision Glow Styles */
+.event-collision-glow {
+  box-shadow: 0 0 0 1.5px rgba(239, 68, 68, 0.5), 0 0 8px rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  z-index: 10;
+}
+
+.dark .event-collision-glow {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.6), 0 0 10px rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.event-collision-glow:hover {
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.8), 0 0 12px rgba(239, 68, 68, 0.3) !important;
+  border-color: rgba(239, 68, 68, 0.8) !important;
+  z-index: 20;
+}

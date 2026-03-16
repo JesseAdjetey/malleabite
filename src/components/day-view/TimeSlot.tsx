@@ -10,6 +10,7 @@ import { getTimeInfo } from "../calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
 import { CalendarEventType } from "@/lib/stores/types";
 import { useEventCRUD } from "@/hooks/use-event-crud";
+import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overlap";
 
 interface TimeSlotProps {
   hour: dayjs.Dayjs;
@@ -304,41 +305,55 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
       )}
 
       {/* Events for this hour */}
-      {hourEvents.map(event => (
-        <div
-          key={event.id}
-          data-event-id={event.id}
-          className="absolute inset-x-2 z-10"
-          style={{ top: '2px' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!isBulkMode) {
-              openEventSummary(event);
-            }
-          }}
-        >
-          {isBulkMode ? (
-            <SelectableCalendarEvent
-              event={event}
-              isBulkMode={isBulkMode}
-              isSelected={isSelected(event.id)}
-              onToggleSelection={onToggleSelection}
-            />
-          ) : (
-            <CalendarEvent
-              event={event}
-              color={event.color}
-              isLocked={event.isLocked}
-              hasAlarm={event.hasAlarm}
-              hasReminder={event.hasReminder}
-              hasTodo={event.isTodo}
-              participants={event.participants}
-              onClick={() => openEventSummary(event)}
-              onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
-            />
-          )}
-        </div>
-      ))}
+      {(() => {
+        if (hourEvents.length === 0) return null;
+        const positions = calculateEventPositions(hourEvents);
+
+        return hourEvents.map(event => {
+          const position = positions.get(event.id);
+          const style = getEventStyle(position);
+
+          return (
+            <div
+              key={event.id}
+              data-event-id={event.id}
+              className="absolute inset-y-0.5 z-10 transition-all duration-300"
+              style={{
+                left: style.left,
+                width: `calc(${style.width} - 4px)`,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isBulkMode) {
+                  openEventSummary(event);
+                }
+              }}
+            >
+              {isBulkMode ? (
+                <SelectableCalendarEvent
+                  event={event}
+                  isBulkMode={isBulkMode}
+                  isSelected={isSelected(event.id)}
+                  onToggleSelection={onToggleSelection}
+                />
+              ) : (
+                <CalendarEvent
+                  event={event}
+                  color={event.color}
+                  isLocked={event.isLocked}
+                  hasAlarm={event.hasAlarm}
+                  hasReminder={event.hasReminder}
+                  hasTodo={event.isTodo}
+                  participants={event.participants}
+                  isOverlapping={position?.isOverlapping}
+                  onClick={() => openEventSummary(event)}
+                  onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
+                />
+              )}
+            </div>
+          );
+        });
+      })()}
     </div>
   );
 };

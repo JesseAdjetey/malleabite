@@ -11,6 +11,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Geist Mono"', 'monospace'],
+        mono: ['"Geist Mono"', 'monospace'],
+      },
       fontSize: {
         'large-title': ['var(--font-large-title)', { lineHeight: '1.2', fontWeight: '700' }],
         'title1': ['var(--font-title1)', { lineHeight: '1.25', fontWeight: '700' }],

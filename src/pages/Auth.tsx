@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext.unified';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Network, MessageSquare, Feather, ChevronRight, Mail, Moon, Sun, Laptop } from 'lucide-react';
+import { ChevronRight, Mail, Moon, Sun, Laptop, CalendarDays, CheckSquare, Bell, Sparkles, MessageCircle, RefreshCw, ArrowRight, Blocks } from 'lucide-react';
 import { authSchema, sanitizeInput } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { ZodError } from 'zod';
@@ -185,7 +185,7 @@ const Auth = () => {
       <div className="flex flex-col items-center w-full min-h-screen pt-4 pb-12 px-4 md:px-8">
 
         {/* Top Navbar Pill */}
-        <header className="w-full max-w-2xl flex items-center justify-between bg-card/50 backdrop-blur-md border border-border shadow-sm rounded-2xl px-3 py-1.5 md:px-5 md:py-2 z-50">
+        <header className="fixed top-4 w-[calc(100%-2rem)] md:w-[calc(100%-4rem)] max-w-2xl flex items-center justify-between bg-card/60 backdrop-blur-md border border-border shadow-sm rounded-2xl px-3 py-1.5 md:px-5 md:py-2 z-[100]">
 
           {/* Left: Theme Switcher */}
           <div className="flex-1 flex justify-start">
@@ -217,46 +217,108 @@ const Auth = () => {
         </header>
 
         {/* Main Content Area */}
-        <main className="w-full max-w-5xl flex flex-col items-center mt-16 md:mt-24 space-y-16 md:space-y-24">
+        <main className="w-full max-w-7xl flex flex-col items-center mt-24 md:mt-32 space-y-16 md:space-y-24">
 
           {/* Title Section */}
           <div className="w-full px-4 text-center">
             <TypewriterText />
-            <p className="mt-6 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed font-sans">
-              Malleabite is a smart calendar and task management application designed to organize your schedule. By connecting your Google Calendar, Malleabite allows you to view, create, and manage your Google Calendar events alongside your local tasks in a single unified interface.
-            </p>
           </div>
 
           {/* Features Spread */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 px-4 lg:px-8">
+          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-16 xl:gap-20 px-4 lg:px-8">
 
-            <div className="flex flex-col items-center text-center space-y-4 group">
-              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
-                <Network className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+            {/* Feature 1: Modular Ecosystem */}
+            <div className="flex flex-col group p-6 rounded-3xl border border-transparent hover:border-border hover:bg-card/40 hover:shadow-sm transition-all duration-500 relative overflow-hidden">
+              <div className="w-full h-48 mb-8 rounded-2xl bg-muted/20 border border-border/50 relative flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+                {/* Center Element: Calendar */}
+                <div className="absolute z-10 w-12 h-12 bg-background border border-border rounded-xl shadow-sm flex items-center justify-center transition-transform duration-500 group-hover:scale-110">
+                  <CalendarDays className="w-5 h-5 text-purple-500" />
+                </div>
+
+                {/* Left Element: Task (slides in) */}
+                <div className="absolute z-0 w-10 h-10 bg-background border border-border rounded-lg shadow-sm flex items-center justify-center -translate-x-4 opacity-0 group-hover:-translate-x-16 group-hover:opacity-100 transition-all duration-500 ease-out">
+                  <CheckSquare className="w-4 h-4 text-emerald-500" />
+                </div>
+                <ArrowRight className="absolute z-0 w-4 h-4 text-border -translate-x-4 opacity-0 group-hover:-translate-x-8 group-hover:opacity-100 transition-all duration-500 delay-100" />
+
+                {/* Right Element: Reminder (slides out) */}
+                <div className="absolute z-0 w-10 h-10 bg-background border border-border rounded-lg shadow-sm flex items-center justify-center translate-x-4 opacity-0 group-hover:translate-x-16 group-hover:opacity-100 transition-all duration-500 ease-out">
+                  <Bell className="w-4 h-4 text-amber-500" />
+                </div>
+                <ArrowRight className="absolute z-0 w-4 h-4 text-border translate-x-4 opacity-0 group-hover:translate-x-8 group-hover:opacity-100 transition-all duration-500 delay-100" />
               </div>
-              <div>
-                <h3 className="text-foreground font-semibold text-lg mb-2">Everything in One Place</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">Connect your calendars and to-dos into a single, flowing system.</p>
+
+              <div className="text-center md:text-left">
+                <h3 className="text-foreground font-semibold text-xl mb-3 flex items-center justify-center md:justify-start gap-2">
+                  <Blocks className="w-5 h-5 text-purple-500" />
+                  Modular Ecosystem
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Time management tools compacted into distinct modules that deeply integrate. Watch a simple to-do list item seamlessly transform into a scheduled calendar event, which instantly spawns an automated reminder.
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-col items-center text-center space-y-4 group">
-              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
-                <MessageSquare className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+            {/* Feature 2: Natural Language */}
+            <div className="flex flex-col group p-6 rounded-3xl border border-transparent hover:border-border hover:bg-card/40 hover:shadow-sm transition-all duration-500 relative overflow-hidden">
+              <div className="w-full h-48 mb-8 rounded-2xl bg-muted/20 border border-border/50 relative flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+                {/* Base Chat Bubble */}
+                <div className="w-14 h-14 bg-background border border-border rounded-2xl shadow-sm flex items-center justify-center transition-all duration-500 group-hover:-translate-x-8 group-hover:border-blue-500/30">
+                  <MessageCircle className="w-6 h-6 text-blue-500 transition-transform duration-500 group-hover:scale-110" />
+                </div>
+
+
+                {/* Resulting Calendar Block */}
+                <div className="absolute w-24 h-10 bg-background border border-border rounded-lg shadow-sm flex items-center px-3 gap-2 translate-x-10 opacity-0 group-hover:translate-x-6 group-hover:opacity-100 transition-all duration-500 delay-200">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <div className="h-2 w-12 bg-muted rounded-full" />
+                </div>
               </div>
-              <div>
-                <h3 className="text-foreground font-semibold text-lg mb-2">Just Talk to It</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">Add events instantly by using your voice or messaging via WhatsApp.</p>
+
+              <div className="text-center md:text-left">
+                <h3 className="text-foreground font-semibold text-xl mb-3 flex items-center justify-center md:justify-start gap-2">
+                  <MessageCircle className="w-5 h-5 text-blue-500" />
+                  Conversational Control
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Communicate with your time management tools using natural language, exactly like messaging a friend. Use your voice or WhatsApp to intuitively manage your schedule, book meetings, and organize tasks.
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-col items-center text-center space-y-4 group">
-              <div className="w-12 h-12 rounded-full border border-border flex items-center justify-center bg-card transition-colors group-hover:border-purple-500/50">
-                <Feather className="w-5 h-5 text-foreground group-hover:text-purple-500 transition-colors" strokeWidth={1.5} />
+            {/* Feature 3: Google Integration */}
+            <div className="flex flex-col group p-6 rounded-3xl border border-transparent hover:border-border hover:bg-card/40 hover:shadow-sm transition-all duration-500 relative overflow-hidden">
+              <div className="w-full h-48 mb-8 rounded-2xl bg-muted/20 border border-border/50 relative flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+                {/* Left: Google Calendar style icon */}
+                <div className="absolute z-10 w-12 h-12 bg-background border border-border rounded-xl shadow-sm flex items-center justify-center translate-x-0 group-hover:-translate-x-12 transition-all duration-500">
+                  <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-6 h-6 object-contain drop-shadow-sm" />
+                </div>
+
+                {/* Middle: Sync Arrows */}
+                <div className="absolute z-0 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100">
+                  <RefreshCw className="w-5 h-5 text-emerald-500 transition-transform duration-700 group-hover:rotate-180" />
+                </div>
+
+                {/* Right: Malleabite icon */}
+                <div className="absolute z-10 w-12 h-12 bg-background border border-border rounded-xl shadow-sm flex items-center justify-center translate-x-0 group-hover:translate-x-12 transition-all duration-500">
+                  <CalendarDays className="w-5 h-5 text-purple-500" />
+                </div>
               </div>
-              <div>
-                <h3 className="text-foreground font-semibold text-lg mb-2">Simple & Calm</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mx-auto">A beautiful, minimalist design that adapts to your needs.</p>
+
+              <div className="text-center md:text-left">
+                <h3 className="text-foreground font-semibold text-xl mb-3 flex items-center justify-center md:justify-start gap-2">
+                  <RefreshCw className="w-5 h-5 text-emerald-500" />
+                  Google Calendar Sync
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Connect your favorite Google Calendars to directly view, safely create, edit, and delete events. Maintain total two-way control of your external schedule right from your unified Malleabite command center.
+                </p>
               </div>
             </div>
 

@@ -1,5 +1,43 @@
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites' | 'booking';
+
+// ─── Group Meet Types ──────────────────────────────────────────────────────────
+
+export interface GroupMeetSlot {
+  start: string; // ISO string
+  end: string;   // ISO string
+}
+
+export interface GroupMeetParticipant {
+  id: string;
+  email: string;
+  name: string;
+  isAppUser: boolean;
+  userId?: string;
+  responded: boolean;
+  availableSlots: GroupMeetSlot[];
+  respondedAt?: string;
+}
+
+export interface GroupMeetSession {
+  id: string;
+  organizerId: string;
+  organizerName: string;
+  title: string;
+  duration: number; // minutes
+  window: { start: string; end: string };
+  locationType: 'video' | 'in_person' | 'phone';
+  organizerFreeSlots: GroupMeetSlot[];
+  participants: GroupMeetParticipant[];
+  proposedSlots: (GroupMeetSlot & { votes: number })[];
+  confirmedSlot: GroupMeetSlot | null;
+  status: 'collecting' | 'confirmed' | 'expired' | 'cancelled';
+  autoConfirm: boolean;
+  moduleInstanceIds: string[]; // which Booking module instances show this
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface ModuleInstance {
   id: string; // Unique identifier for this module instance — stable across reorders

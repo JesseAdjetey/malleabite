@@ -1,9 +1,11 @@
 
-import React from "react";
+import React, { useMemo } from "react";
 import { getHours, isCurrentHour } from "@/lib/getTime";
 import TimeSlot from "./TimeSlot";
 import dayjs from "dayjs";
 import { CalendarEventType } from "@/lib/stores/types";
+import { getTimeInfo } from "../calendar/event-utils/touch-handlers";
+import { logCalendarPerf } from "@/lib/perf/calendar-perf";
 
 interface TimeSlotsGridProps {
   userSelectedDate: dayjs.Dayjs;
@@ -30,6 +32,36 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
   isSelected = () => false,
   onToggleSelection = () => {},
 }) => {
+  const eventsByHour = useMemo(() => {
+    const startedAt = performance.now();
+    const grouped = new Map<number, CalendarEventType[]>();
+
+    events.forEach((event) => {
+      const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
+      const hour = parseInt(timeInfo.start.split(':')[0], 10);
+      if (Number.isNaN(hour)) return;
+
+      const existing = grouped.get(hour);
+      if (existing) {
+        existing.push(event);
+      } else {
+        grouped.set(hour, [event]);
+      }
+    });
+
+    logCalendarPerf(
+      'day-view-events-by-hour',
+      'DayView eventsByHour build',
+      performance.now() - startedAt,
+      {
+        timedEvents: events.length,
+        hourBuckets: grouped.size,
+      }
+    );
+
+    return grouped;
+  }, [events]);
+
   return (
     <div className="grid grid-cols-[auto_1fr] px-4 py-2">
       {/* Time labels */}
@@ -54,7 +86,7 @@ const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
             key={index}
             hour={hour}
             selectedDate={userSelectedDate}
-            events={events}
+            hourEvents={eventsByHour.get(hour.hour()) || []}
             onTimeSlotClick={onTimeSlotClick}
             addEvent={addEvent}
             openEventForm={openEventForm}

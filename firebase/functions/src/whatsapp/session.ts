@@ -26,7 +26,12 @@ export interface PendingAction {
     | 'create_alarm'
     | 'delete_alarm'
     | 'create_eisenhower'
-    | 'create_goal';
+    | 'create_goal'
+    | 'create_group_meet';
+  // Group meet fields
+  participantEmails?: string[];
+  meetWindow?: 'today' | '3days' | 'week' | '2weeks';
+  duration?: number; // minutes
   // Event fields
   title?: string;
   start?: string;   // ISO string
@@ -60,7 +65,7 @@ interface SessionData {
   pendingAction?: PendingAction | null;
   chatHistory?: ChatMessage[] | null;
   lastCreatedId?: string | null;       // Firestore doc ID of last created item
-  lastCreatedType?: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal' | null;
+  lastCreatedType?: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal' | 'group_meet' | null;
   lastCreatedCollection?: string | null;
   updatedAt: number;
 }
@@ -150,7 +155,7 @@ export async function clearChatHistory(phone: string): Promise<void> {
 export async function setLastCreated(
   phone: string,
   docId: string,
-  type: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal',
+  type: 'event' | 'todo' | 'alarm' | 'eisenhower' | 'goal' | 'group_meet',
   collection: string
 ): Promise<void> {
   await db().collection(SESSIONS).doc(phone).set(

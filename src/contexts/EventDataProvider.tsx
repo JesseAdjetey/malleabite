@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events.unified';
 import { useSyncedEventsLoader } from '@/hooks/use-synced-events-loader';
 import { useTemplateEventsLoader } from '@/hooks/use-template-events-loader';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { errorHandler } from '@/lib/error-handler';
 import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
+import { logCalendarPerf } from '@/lib/perf/calendar-perf';
 
 interface EventDataProviderProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
   const { templateEvents, loading: templateLoading } = useTemplateEventsLoader();
   const { setEvents, setIsInitialized, isInitialized } = useEventStore();
   const { user } = useAuth();
+  const lastMergedKeysRef = useRef<string[]>([]);
 
   // Merge user-created events with synced external events and template events
   const mergedEvents = useMemo(() => {
@@ -67,7 +69,45 @@ const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
   // Update the store when events change (own + synced)
   useEffect(() => {
     if (!loading && !error) {
-      setEvents(mergedEvents);
+      const signatureStartedAt = performance.now();
+      const currentKeys = mergedEvents.map(
+        (event) => `${event.id}:${event.startsAt || ''}:${event.endsAt || ''}:${event.calendarId || ''}`
+      );
+      const signatureDuration = performance.now() - signatureStartedAt;
+
+      logCalendarPerf(
+        'event-data-provider-signature',
+        'EventDataProvider signature build',
+        signatureDuration,
+        {
+          mergedEvents: mergedEvents.length,
+        }
+      );
+
+      let changed = currentKeys.length !== lastMergedKeysRef.current.length;
+      if (!changed) {
+        for (let index = 0; index < currentKeys.length; index += 1) {
+          if (currentKeys[index] !== lastMergedKeysRef.current[index]) {
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      if (changed) {
+        const setStartedAt = performance.now();
+        setEvents(mergedEvents);
+        lastMergedKeysRef.current = currentKeys;
+        logCalendarPerf(
+          'event-data-provider-set-events',
+          'EventDataProvider setEvents',
+          performance.now() - setStartedAt,
+          {
+            mergedEvents: mergedEvents.length,
+          }
+        );
+      }
+
       if (!isInitialized) {
         setIsInitialized(true);
       }

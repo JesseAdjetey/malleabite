@@ -346,6 +346,86 @@ async function executePendingAction(send, phone, userId, action) {
         await (0, session_1.setLastCreated)(phone, goalRef.id, 'goal', 'goals');
         await (0, meta_api_1.sendButtonMessage)(send, `🎯 Goal created: *${action.title}* (${action.frequency || 'daily'})`, [{ id: 'action_undo', title: 'Undo' }]);
     }
+    else if (action.type === 'create_group_meet') {
+        const title = action.title || 'Group Meeting';
+        const duration = action.duration || 30;
+        const participants = (action.participantEmails || []).map((email) => ({
+            id: crypto.randomUUID(),
+            email: email.toLowerCase().trim(),
+            name: email.split('@')[0],
+            isAppUser: false,
+            responded: false,
+            availableSlots: [],
+        }));
+        // Compute organizer's free slots from their events
+        const windowDays = action.meetWindow === '3days' ? 3 : action.meetWindow === '2weeks' ? 14 : 7;
+        const windowStart = new Date();
+        const windowEnd = new Date(windowStart.getTime() + windowDays * 24 * 60 * 60 * 1000);
+        const eventsSnap = await db().collection('calendar_events')
+            .where('userId', '==', userId)
+            .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(windowStart))
+            .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(windowEnd))
+            .get();
+        const busySlots = eventsSnap.docs.map(d => {
+            const data = d.data();
+            return {
+                start: data.startsAt?.toDate?.()?.toISOString() ?? data.startsAt,
+                end: data.endsAt?.toDate?.()?.toISOString() ?? data.endsAt,
+            };
+        }).sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        const freeSlots = [];
+        let day = new Date(windowStart);
+        day.setHours(0, 0, 0, 0);
+        while (day < windowEnd) {
+            let cursor = new Date(day);
+            cursor.setHours(8, 0, 0, 0);
+            const dayEnd = new Date(day);
+            dayEnd.setHours(20, 0, 0, 0);
+            while (cursor.getTime() + duration * 60000 <= dayEnd.getTime()) {
+                const slotEnd = new Date(cursor.getTime() + duration * 60000);
+                const conflict = busySlots.some((b) => cursor < new Date(b.end) && slotEnd > new Date(b.start));
+                if (!conflict) {
+                    freeSlots.push({ start: cursor.toISOString(), end: slotEnd.toISOString() });
+                }
+                cursor = new Date(cursor.getTime() + 30 * 60000);
+            }
+            day.setDate(day.getDate() + 1);
+        }
+        // Find first Booking module instanceId for this user
+        let moduleInstanceId = null;
+        const pagesSnap = await db().collection('sidebar_pages').where('userId', '==', userId).get();
+        for (const pageDoc of pagesSnap.docs) {
+            const modules = pageDoc.data().modules || [];
+            const bookingMod = modules.find((m) => m.type === 'booking' && m.instanceId);
+            if (bookingMod) {
+                moduleInstanceId = bookingMod.instanceId;
+                break;
+            }
+        }
+        const sessionData = {
+            organizerId: userId,
+            organizerName: 'You',
+            title,
+            duration,
+            window: { start: windowStart.toISOString(), end: windowEnd.toISOString() },
+            locationType: 'video',
+            organizerFreeSlots: freeSlots,
+            participants,
+            proposedSlots: [],
+            confirmedSlot: null,
+            status: 'collecting',
+            autoConfirm: false,
+            moduleInstanceIds: moduleInstanceId ? [moduleInstanceId] : [],
+            expiresAt: new Date(windowEnd.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        const sessionRef = await db().collection('group_meets').add(sessionData);
+        const link = `https://malleabite.app/meet/${sessionRef.id}`;
+        const participantList = participants.map((p) => p.email).join(', ');
+        await (0, meta_api_1.sendButtonMessage)(send, `✅ Group meeting created!\n\n*${title}* · ${duration} min\nWith: ${participantList}\n\nShare this link with everyone:\n${link}`, [{ id: 'action_undo', title: 'Undo' }]);
+        await (0, session_1.setLastCreated)(phone, sessionRef.id, 'group_meet', 'group_meets');
+    }
     else {
         await (0, meta_api_1.sendTextMessage)(send, 'Done! Open the app to see the changes.');
     }

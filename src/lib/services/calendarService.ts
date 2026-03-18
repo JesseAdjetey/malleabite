@@ -11,6 +11,7 @@ import {
   deleteDoc,
   query,
   orderBy,
+  where,
   writeBatch,
   serverTimestamp,
   Timestamp,
@@ -632,23 +633,29 @@ export async function upsertSyncedEvents(
   events: SyncedCalendarEvent[]
 ): Promise<number> {
   try {
-    const batch = writeBatch(db);
+    const batchSize = 400;
     let count = 0;
 
-    for (const event of events) {
-      // Use externalId + calendarId as composite key
-      const docId = `${event.calendarId}_${event.externalId}`;
-      const ref = doc(db, syncedEventsPath(userId), docId);
-      // Strip undefined values — Firestore rejects them
-      const cleanEvent = JSON.parse(JSON.stringify({
-        ...event,
-        syncedAt: new Date().toISOString(),
-      }));
-      batch.set(ref, cleanEvent, { merge: true });
-      count++;
+    for (let index = 0; index < events.length; index += batchSize) {
+      const batch = writeBatch(db);
+      const chunk = events.slice(index, index + batchSize);
+
+      for (const event of chunk) {
+        // Use externalId + calendarId as composite key
+        const docId = `${event.calendarId}_${event.externalId}`;
+        const ref = doc(db, syncedEventsPath(userId), docId);
+        // Strip undefined values — Firestore rejects them
+        const cleanEvent = JSON.parse(JSON.stringify({
+          ...event,
+          syncedAt: new Date().toISOString(),
+        }));
+        batch.set(ref, cleanEvent, { merge: true });
+        count++;
+      }
+
+      await batch.commit();
     }
 
-    await batch.commit();
     logger.info('CalendarService', `Upserted ${count} synced events`);
     return count;
   } catch (error) {
@@ -669,8 +676,9 @@ export async function replaceSyncedEventsForCalendar(
 ): Promise<number> {
   try {
     const eventsRef = collection(db, syncedEventsPath(userId));
-    const snapshot = await getDocs(eventsRef);
-    const existingDocs = snapshot.docs.filter((docSnap) => docSnap.data().calendarId === calendarId);
+    const existingEventsQuery = query(eventsRef, where('calendarId', '==', calendarId));
+    const snapshot = await getDocs(existingEventsQuery);
+    const existingDocs = snapshot.docs;
     const nextExternalIds = new Set(events.map((event) => event.externalId));
 
     const deleteRefs = existingDocs.filter((docSnap) => {
@@ -678,6 +686,23 @@ export async function replaceSyncedEventsForCalendar(
       return !nextExternalIds.has(data.externalId);
     });
 
+    if (events.length === 0) {
+      for (let index = 0; index < deleteRefs.length; index += 400) {
+        const batch = writeBatch(db);
+        for (const docSnap of deleteRefs.slice(index, index + 400)) {
+          batch.delete(docSnap.ref);
+        }
+        await batch.commit();
+      }
+      logger.info('CalendarService', `Replaced synced events for ${calendarId} with empty set`);
+      return 0;
+    }
+
+    // Write fresh events first. This prevents accidental wipe-outs if a large
+    // upsert fails partway (e.g. batch limits/network issues).
+    const count = await upsertSyncedEvents(userId, events);
+
+    // Remove stale events after successful upsert.
     for (let index = 0; index < deleteRefs.length; index += 400) {
       const batch = writeBatch(db);
       for (const docSnap of deleteRefs.slice(index, index + 400)) {
@@ -686,12 +711,6 @@ export async function replaceSyncedEventsForCalendar(
       await batch.commit();
     }
 
-    if (events.length === 0) {
-      logger.info('CalendarService', `Replaced synced events for ${calendarId} with empty set`);
-      return 0;
-    }
-
-    const count = await upsertSyncedEvents(userId, events);
     logger.info('CalendarService', `Replaced synced events for ${calendarId} with ${count} event(s)`);
     return count;
   } catch (error) {
@@ -713,22 +732,37 @@ export async function getSyncedEvents(
   endDate?: string
 ): Promise<SyncedCalendarEvent[]> {
   try {
+    if (calendarIds.length === 0) {
+      return [];
+    }
+
     const ref = collection(db, syncedEventsPath(userId));
-    const snapshot = await getDocs(ref);
+    const uniqueCalendarIds = Array.from(new Set(calendarIds));
+    const chunkSize = 10; // Firestore 'in' supports up to 10 values
+    const allEvents: SyncedCalendarEvent[] = [];
 
-    let events = snapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() } as SyncedCalendarEvent))
-      .filter(e => calendarIds.includes(e.calendarId));
+    for (let index = 0; index < uniqueCalendarIds.length; index += chunkSize) {
+      const idChunk = uniqueCalendarIds.slice(index, index + chunkSize);
+      const constraints: ReturnType<typeof where>[] = [where('calendarId', 'in', idChunk)];
 
-    // Filter by date range if provided
-    if (startDate) {
-      events = events.filter(e => e.startTime >= startDate);
+      if (startDate) {
+        constraints.push(where('startTime', '>=', startDate));
+      }
+      if (endDate) {
+        constraints.push(where('startTime', '<=', endDate));
+      }
+
+      const snapshot = await getDocs(query(ref, ...constraints));
+      allEvents.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SyncedCalendarEvent)));
     }
-    if (endDate) {
-      events = events.filter(e => e.startTime <= endDate);
+
+    // Deduplicate in case overlapping queries ever occur
+    const uniqueById = new Map<string, SyncedCalendarEvent>();
+    for (const event of allEvents) {
+      uniqueById.set(event.id, event);
     }
 
-    return events;
+    return Array.from(uniqueById.values());
   } catch (error) {
     logger.error('CalendarService', 'Failed to fetch synced events', { error });
     return [];

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.listGoogleCalendarsForAccount = exports.refreshGoogleCalendarAccessToken = exports.googleCalendarOAuthCallback = exports.getGoogleCalendarAuthUrl = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.listGoogleCalendarsForAccount = exports.refreshGoogleCalendarAccessToken = exports.googleCalendarOAuthCallback = exports.getGoogleCalendarAuthUrl = exports.confirmGroupMeetSlot = exports.onGroupMeetUpdated = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -53,6 +53,10 @@ Object.defineProperty(exports, "processSchedulingStream", { enumerable: true, ge
 var whatsapp_webhook_1 = require("./whatsapp-webhook");
 Object.defineProperty(exports, "whatsappWebhook", { enumerable: true, get: function () { return whatsapp_webhook_1.whatsappWebhook; } });
 Object.defineProperty(exports, "generateWhatsAppLinkCode", { enumerable: true, get: function () { return whatsapp_webhook_1.generateWhatsAppLinkCode; } });
+// Export Group Meets handlers
+var group_meets_1 = require("./group-meets");
+Object.defineProperty(exports, "onGroupMeetUpdated", { enumerable: true, get: function () { return group_meets_1.onGroupMeetUpdated; } });
+Object.defineProperty(exports, "confirmGroupMeetSlot", { enumerable: true, get: function () { return group_meets_1.confirmGroupMeetSlot; } });
 // Export Google Calendar OAuth handlers
 var google_calendar_oauth_1 = require("./google-calendar-oauth");
 Object.defineProperty(exports, "getGoogleCalendarAuthUrl", { enumerable: true, get: function () { return google_calendar_oauth_1.getGoogleCalendarAuthUrl; } });
@@ -632,12 +636,13 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
    - recurrenceRule: { "frequency": "weekly", "byDay": ["MO"] }
 
 5. MODULE & PAGE MANAGEMENT:
-   - Add/remove/minimize/maximize modules. Create/delete/switch pages.
+  - Add/remove/minimize/maximize/move modules. Create/delete/switch pages.
    - Each module has a unique moduleId. ALWAYS use moduleId when targeting a specific module instance.
    - Check SIDEBAR_PAGES to avoid duplicates. Valid types: "todo", "pomodoro", "alarms", "reminders", "eisenhower", "invites", "archives", "templates", "calendars"
    - CRITICAL: When the user specifies a page name (e.g. "add a todo module to my Work page"), you MUST include "pageName" in the add_module data. Check SIDEBAR_PAGES for the exact page title.
    - If no page is mentioned, omit pageName so it defaults to the active page.
-   - To create a new page, use create_page with a title. You can combine create_page + add_module in one actions array to create a page and immediately add modules to it (use the same pageName/title).
+  - To create a new page, use create_page with a title. You can combine create_page + add_module in one actions array to create a page and immediately add modules to it (use the same pageName/title).
+  - To move a module to a different page, use move_module with targetPageName and moduleId (preferred) or moduleType/title fallback.
 
 6. TODO LIST & POMODORO: Use listName for targeting. Use start/pause/reset/set_pomodoro_settings.
 
@@ -857,6 +862,7 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     { "type": "change_view", "data": { "view": "Day|Week|Month" } },
     // ── Module Control ──
     { "type": "add_module", "data": { "moduleType": "...", "title": "...", "pageName": "REQUIRED if user specifies a page, omit for active page" } },
+    { "type": "move_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "title": "optional", "sourcePageName": "optional", "targetPageName": "required" } },
     { "type": "remove_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "title": "optional", "pageName": "optional" } },
     { "type": "minimize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },
     { "type": "maximize_module", "data": { "moduleId": "preferred", "moduleType": "fallback", "pageName": "optional" } },

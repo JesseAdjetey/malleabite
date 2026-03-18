@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, Plus, Clock, Loader2, Link2, Power, Trash2 } from 'lucide-react';
+import {
+  Copy, Plus, Clock, Loader2, Link2, Power, Trash2, Users,
+  Calendar, ChevronRight, Share2, MessageCircle, Mail, X, Check,
+} from 'lucide-react';
 import { useAppointmentScheduling, BookingPageFormData } from '@/hooks/use-appointment-scheduling';
+import { useGroupMeets, CreateGroupMeetData } from '@/hooks/use-group-meets';
+import { GroupMeetSession, GroupMeetSlot } from '@/lib/stores/types';
+import { useAuth } from '@/contexts/AuthContext.firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
 import { toast } from 'sonner';
+import dayjs from 'dayjs';
+
+interface ConnectedCalendarBasic {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+}
 
 interface BookingModuleProps {
   title?: string;
@@ -25,57 +41,477 @@ interface BookingModuleProps {
   instanceId?: string;
 }
 
+// ─── Share Sheet ──────────────────────────────────────────────────────────────
+
+const ShareSheet: React.FC<{ sessionId: string; title: string; organizerName: string; onClose: () => void }> = ({
+  sessionId, title, organizerName, onClose,
+}) => {
+  const url = `${window.location.origin}/meet/${sessionId}`;
+  const message = `Hey! ${organizerName} is trying to schedule "${title}". Takes 10 seconds to fill in your availability: ${url}`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(url);
+    toast.success('Link copied!');
+  };
+
+  const whatsapp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  const email = () => {
+    window.open(
+      `mailto:?subject=${encodeURIComponent(`Scheduling: ${title}`)}&body=${encodeURIComponent(message)}`,
+      '_blank'
+    );
+  };
+
+  return (
+    <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border/50">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Share link</p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 bg-background rounded-md px-2 py-1.5 border border-border/50">
+        <span className="text-xs text-muted-foreground truncate flex-1">{url}</span>
+        <button onClick={copy} className="text-muted-foreground hover:text-foreground shrink-0">
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={whatsapp}>
+          <MessageCircle className="h-3.5 w-3.5 text-green-500" />
+          WhatsApp
+        </Button>
+        <Button size="sm" variant="outline" className="flex-1 gap-1.5" onClick={email}>
+          <Mail className="h-3.5 w-3.5" />
+          Email
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Group Meet Item ──────────────────────────────────────────────────────────
+
+const GroupMeetItem: React.FC<{
+  session: GroupMeetSession;
+  isOrganizer: boolean;
+  onConfirm: (slot: GroupMeetSlot) => void;
+  onShare: () => void;
+  onAddParticipant: (name: string, email: string) => void;
+}> = ({ session, isOrganizer, onConfirm, onShare, onAddParticipant }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+
+  const respondedCount = session.participants.filter(p => p.responded).length;
+  const totalCount = session.participants.length;
+
+  const statusColor = {
+    collecting: 'text-yellow-500',
+    confirmed: 'text-green-500',
+    expired: 'text-muted-foreground',
+    cancelled: 'text-red-500',
+  }[session.status];
+
+  const handleInvite = () => {
+    if (!inviteEmail.includes('@')) return;
+    onAddParticipant(inviteName, inviteEmail);
+    setInviteName('');
+    setInviteEmail('');
+    setShowInvite(false);
+  };
+
+  return (
+    <div className="rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center gap-2 p-2 text-left"
+      >
+        <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{session.title}</p>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            {session.duration}min
+            {session.status === 'confirmed' && session.confirmedSlot ? (
+              <span className="text-green-500 font-medium">
+                · {dayjs(session.confirmedSlot.start).format('ddd D MMM, h:mma')}
+              </span>
+            ) : (
+              <span className={statusColor}>
+                · {totalCount > 0 ? `${respondedCount}/${totalCount} responded` : 'No invitees yet'}
+              </span>
+            )}
+          </div>
+        </div>
+        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="px-2 pb-2 space-y-2">
+          {/* Participants */}
+          {session.participants.length > 0 && (
+            <div className="space-y-1">
+              {session.participants.map(p => (
+                <div key={p.id} className="flex items-center gap-2 text-xs">
+                  <div className={`h-1.5 w-1.5 rounded-full ${p.responded ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
+                  <span className="truncate text-muted-foreground">{p.name || p.email}</span>
+                  {p.responded && <Check className="h-3 w-3 text-green-500 ml-auto shrink-0" />}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Invite more inline form */}
+          {showInvite && session.status === 'collecting' && (
+            <div className="space-y-1.5">
+              <div className="flex gap-1.5">
+                <Input
+                  value={inviteName}
+                  onChange={e => setInviteName(e.target.value)}
+                  placeholder="Name"
+                  className="h-7 text-xs flex-1"
+                />
+                <Input
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="Email"
+                  className="h-7 text-xs flex-1"
+                  type="email"
+                  onKeyDown={e => e.key === 'Enter' && handleInvite()}
+                />
+              </div>
+              <div className="flex gap-1.5">
+                <Button size="sm" variant="ghost" className="h-7 flex-1 text-xs" onClick={() => setShowInvite(false)}>Cancel</Button>
+                <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleInvite} disabled={!inviteEmail.includes('@')}>Add</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          {session.status === 'collecting' && (
+            <div className="flex flex-wrap gap-1.5">
+              {isOrganizer && !showInvite && (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => setShowInvite(true)}>
+                  <Plus className="h-3 w-3" /> Invite
+                </Button>
+              )}
+              {isOrganizer && (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={onShare}>
+                  <Share2 className="h-3 w-3" /> Share link
+                </Button>
+              )}
+              {isOrganizer && session.proposedSlots.length > 0 && (
+                <Button size="sm" className="h-7 px-2 text-xs" onClick={() => onConfirm(session.proposedSlots[0])}>
+                  Confirm best slot
+                </Button>
+              )}
+            </div>
+          )}
+
+          {session.status === 'confirmed' && session.confirmedSlot && (
+            <div className="flex items-center gap-1.5 text-xs text-green-500 font-medium">
+              <Check className="h-3.5 w-3.5" />
+              Confirmed · {dayjs(session.confirmedSlot.start).format('ddd MMM D, h:mma')}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── New Group Meet Form ──────────────────────────────────────────────────────
+
+interface NewGroupMeetFormProps {
+  instanceId: string;
+  organizerName: string;
+  onDone: (sessionId: string, title: string) => void;
+  onCancel: () => void;
+}
+
+const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, organizerName, onDone, onCancel }) => {
+  const { createGroupMeet } = useGroupMeets(instanceId);
+  const { user } = useAuth();
+  const [title, setTitle] = useState('');
+  const [duration, setDuration] = useState('30');
+  const [window, setWindow] = useState('week');
+  const [locationType, setLocationType] = useState<'video' | 'in_person' | 'phone'>('video');
+  const [autoConfirm, setAutoConfirm] = useState(false);
+  const [participants, setParticipants] = useState<{ name: string; email: string }[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [calendars, setCalendars] = useState<ConnectedCalendarBasic[]>([]);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]); // empty = all
+
+  // Fetch user's connected calendars
+  useEffect(() => {
+    if (!user?.uid) return;
+    getDocs(query(
+      collection(db, `users/${user.uid}/connectedCalendars`),
+    )).then(snap => {
+      const cals = snap.docs.map(d => ({ id: d.id, ...d.data() } as ConnectedCalendarBasic));
+      setCalendars(cals);
+      // Default: all active calendars selected
+      setSelectedCalendarIds(cals.filter(c => c.isActive).map(c => c.id));
+    }).catch(() => {});
+  }, [user?.uid]);
+
+  const toggleCalendar = (id: string) => {
+    setSelectedCalendarIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const addParticipant = () => setParticipants(p => [...p, { name: '', email: '' }]);
+  const removeParticipant = (i: number) => setParticipants(p => p.filter((_, idx) => idx !== i));
+  const updateParticipant = (i: number, field: 'name' | 'email', value: string) => {
+    setParticipants(p => p.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+  };
+
+  const getWindow = () => {
+    const start = dayjs().toISOString();
+    const end = window === '3days'
+      ? dayjs().add(3, 'day').endOf('day').toISOString()
+      : window === 'week'
+      ? dayjs().add(7, 'day').endOf('day').toISOString()
+      : dayjs().add(14, 'day').endOf('day').toISOString();
+    return { start, end };
+  };
+
+  const handleCreate = async () => {
+    if (!title.trim()) return;
+    const validParticipants = participants.filter(p => p.email.includes('@'));
+    setCreating(true);
+    try {
+      const data: CreateGroupMeetData = {
+        title: title.trim(),
+        duration: parseInt(duration),
+        window: getWindow(),
+        locationType,
+        participants: validParticipants,
+        autoConfirm,
+        moduleInstanceId: instanceId,
+        calendarIds: selectedCalendarIds.length > 0 ? selectedCalendarIds : undefined,
+      };
+      const session = await createGroupMeet(data);
+      if (session) {
+        onDone(session.id, session.title);
+        toast.success('Group meeting created');
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border/50">
+      <div>
+        <Label className="text-xs">Meeting title</Label>
+        <Input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="e.g. Team catch-up"
+          className="h-8 mt-1 text-sm"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Label className="text-xs">Duration</Label>
+          <Select value={duration} onValueChange={setDuration}>
+            <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {['15', '30', '45', '60', '90'].map(d => (
+                <SelectItem key={d} value={d}>{d} min</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1">
+          <Label className="text-xs">Window</Label>
+          <Select value={window} onValueChange={setWindow}>
+            <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3days">Next 3 days</SelectItem>
+              <SelectItem value="week">This week</SelectItem>
+              <SelectItem value="2weeks">Next 2 weeks</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Label className="text-xs">Location</Label>
+          <Select value={locationType} onValueChange={v => setLocationType(v as any)}>
+            <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="video">Video</SelectItem>
+              <SelectItem value="in_person">In person</SelectItem>
+              <SelectItem value="phone">Phone</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 flex flex-col justify-end">
+          <button
+            onClick={() => setAutoConfirm(a => !a)}
+            className={`h-8 text-xs rounded-md border px-2 flex items-center gap-1.5 transition-colors ${
+              autoConfirm ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border/50 text-muted-foreground'
+            }`}
+          >
+            <div className={`h-2 w-2 rounded-full ${autoConfirm ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+            Auto-confirm
+          </button>
+        </div>
+      </div>
+
+      {/* ── Calendar picker ── */}
+      {calendars.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Check availability from</Label>
+          <div className="space-y-1">
+            {calendars.map(cal => {
+              const checked = selectedCalendarIds.includes(cal.id);
+              return (
+                <button
+                  key={cal.id}
+                  type="button"
+                  onClick={() => toggleCalendar(cal.id)}
+                  className={`w-full flex items-center gap-2 text-xs px-2 py-1.5 rounded-md border transition-colors ${
+                    checked ? 'border-primary/40 bg-primary/5' : 'border-border/30 text-muted-foreground'
+                  }`}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ background: cal.color || '#6366f1' }}
+                  />
+                  <span className="flex-1 text-left truncate">{cal.name}</span>
+                  <div className={`h-3.5 w-3.5 rounded border flex items-center justify-center ${
+                    checked ? 'bg-primary border-primary' : 'border-border/60'
+                  }`}>
+                    {checked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs">Participants <span className="text-muted-foreground font-normal">(optional)</span></Label>
+          <button onClick={addParticipant} className="text-xs text-primary hover:underline flex items-center gap-0.5">
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        </div>
+        {participants.map((p, i) => (
+          <div key={i} className="flex gap-1.5">
+            <Input
+              value={p.name}
+              onChange={e => updateParticipant(i, 'name', e.target.value)}
+              placeholder="Name"
+              className="h-7 text-xs flex-1"
+            />
+            <Input
+              value={p.email}
+              onChange={e => updateParticipant(i, 'email', e.target.value)}
+              placeholder="Email"
+              className="h-7 text-xs flex-1"
+              type="email"
+            />
+            {participants.length > 1 && (
+              <button onClick={() => removeParticipant(i)} className="text-muted-foreground hover:text-destructive">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" className="flex-1" onClick={onCancel}>Cancel</Button>
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={handleCreate}
+          disabled={!title.trim() || creating}
+        >
+          {creating && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+          Create
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Module ──────────────────────────────────────────────────────────────
+
+type CreateMode = 'page' | 'group_meet' | null;
+
 const BookingModule: React.FC<BookingModuleProps> = ({
-  title = 'Booking Pages',
+  title = 'Booking',
   onRemove,
   onTitleChange,
   onMinimize,
   isMinimized = false,
   isDragging = false,
+  instanceId,
 }) => {
   const {
     bookingPages,
-    loading,
+    loading: pagesLoading,
     createBookingPage,
     deleteBookingPage,
     togglePageActive,
     copyBookingUrl,
   } = useAppointmentScheduling();
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const { sessions, loading: meetsLoading, confirmSlot, addParticipantToSession } = useGroupMeets(instanceId);
+
+  const [createMode, setCreateMode] = useState<CreateMode>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newDuration, setNewDuration] = useState('30');
   const [newLocationType, setNewLocationType] = useState<'video' | 'in_person' | 'phone' | 'custom'>('video');
+  const [creatingPage, setCreatingPage] = useState(false);
+  const [shareSessionId, setShareSessionId] = useState<string | null>(null);
+  const [shareTitle, setShareTitle] = useState('');
 
-  const handleCreate = async () => {
+  // Derive organizer name from auth — we pass this into the share sheet
+  // We can't use useAuth here without prop drilling, so we read from the first session if available
+  const organizerName = sessions.find(s => true)?.organizerName ?? 'Someone';
+
+  const handleCreatePage = async () => {
     if (!newTitle.trim()) return;
-    setCreating(true);
+    setCreatingPage(true);
     try {
-      const data: BookingPageFormData = {
+      await createBookingPage({
         title: newTitle.trim(),
         duration: parseInt(newDuration),
         locationType: newLocationType,
-      };
-      await createBookingPage(data);
+      } as BookingPageFormData);
       setNewTitle('');
-      setShowCreate(false);
-      toast.success('Booking page created');
+      setCreateMode(null);
     } catch {
       toast.error('Failed to create booking page');
     } finally {
-      setCreating(false);
+      setCreatingPage(false);
     }
   };
 
-  const handleDelete = async (pageId: string) => {
-    try {
-      await deleteBookingPage(pageId);
-      toast.success('Booking page deleted');
-    } catch {
-      toast.error('Failed to delete booking page');
-    }
+  const handleGroupMeetDone = (sessionId: string, title: string) => {
+    setCreateMode(null);
+    setShareSessionId(sessionId);
+    setShareTitle(title);
   };
+
+  // Only block on booking pages loading — group meets load independently
+  const loading = pagesLoading;
+  const hasContent = bookingPages.length > 0 || sessions.length > 0;
 
   return (
     <ModuleContainer
@@ -91,18 +527,23 @@ const BookingModule: React.FC<BookingModuleProps> = ({
           <div className="flex justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : bookingPages.length === 0 && !showCreate ? (
+        ) : !hasContent && !createMode ? (
           <div className="text-center py-4">
-            <Link2 className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-3">No booking pages yet</p>
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Create One
-            </Button>
+            <Calendar className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground mb-3">No bookings yet</p>
+            <div className="flex gap-2 justify-center">
+              <Button size="sm" variant="outline" onClick={() => setCreateMode('page')}>
+                <Link2 className="h-3.5 w-3.5 mr-1" /> Booking page
+              </Button>
+              <Button size="sm" onClick={() => setCreateMode('group_meet')}>
+                <Users className="h-3.5 w-3.5 mr-1" /> Group meet
+              </Button>
+            </div>
           </div>
         ) : (
           <>
-            {bookingPages.map((page) => (
+            {/* ── Booking Pages ── */}
+            {bookingPages.map(page => (
               <div
                 key={page.id}
                 className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
@@ -121,58 +562,63 @@ const BookingModule: React.FC<BookingModuleProps> = ({
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => copyBookingUrl(page)}
-                    title="Copy link"
-                  >
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyBookingUrl(page)} title="Copy link">
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => togglePageActive(page.id)}
-                    title={page.isActive ? 'Deactivate' : 'Activate'}
-                  >
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => togglePageActive(page.id)} title={page.isActive ? 'Deactivate' : 'Activate'}>
                     <Power className={`h-3.5 w-3.5 ${page.isActive ? 'text-green-500' : 'text-muted-foreground'}`} />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(page.id)}
-                    title="Delete"
-                  >
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteBookingPage(page.id)} title="Delete">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
             ))}
 
-            {!showCreate && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => setShowCreate(true)}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                New Booking Page
-              </Button>
+            {/* ── Group Meets ── */}
+            {sessions.map(session => (
+              <GroupMeetItem
+                key={session.id}
+                session={session}
+                isOrganizer={true}
+                onConfirm={slot => confirmSlot(session.id, slot)}
+                onShare={() => { setShareSessionId(session.id); setShareTitle(session.title); }}
+                onAddParticipant={(name, email) => addParticipantToSession(session.id, { name, email })}
+              />
+            ))}
+
+            {/* ── Add buttons ── */}
+            {!createMode && !shareSessionId && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setCreateMode('page')}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Page
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setCreateMode('group_meet')}>
+                  <Users className="h-3.5 w-3.5 mr-1" /> Group meet
+                </Button>
+              </div>
             )}
           </>
         )}
 
-        {showCreate && (
+        {/* ── Share sheet (shown after creating a group meet) ── */}
+        {shareSessionId && (
+          <ShareSheet
+            sessionId={shareSessionId}
+            title={shareTitle}
+            organizerName={organizerName}
+            onClose={() => setShareSessionId(null)}
+          />
+        )}
+
+        {/* ── Create booking page form ── */}
+        {createMode === 'page' && (
           <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border/50">
             <div>
               <Label className="text-xs">Title</Label>
               <Input
                 value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
+                onChange={e => setNewTitle(e.target.value)}
                 placeholder="e.g. 30-Min Meeting"
                 className="h-8 mt-1 text-sm"
               />
@@ -181,23 +627,18 @@ const BookingModule: React.FC<BookingModuleProps> = ({
               <div className="flex-1">
                 <Label className="text-xs">Duration</Label>
                 <Select value={newDuration} onValueChange={setNewDuration}>
-                  <SelectTrigger className="h-8 mt-1 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="45">45 min</SelectItem>
-                    <SelectItem value="60">60 min</SelectItem>
+                    {['15', '30', '45', '60'].map(d => (
+                      <SelectItem key={d} value={d}>{d} min</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex-1">
                 <Label className="text-xs">Type</Label>
-                <Select value={newLocationType} onValueChange={(v) => setNewLocationType(v as any)}>
-                  <SelectTrigger className="h-8 mt-1 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={newLocationType} onValueChange={v => setNewLocationType(v as any)}>
+                  <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="video">Video</SelectItem>
                     <SelectItem value="in_person">In Person</SelectItem>
@@ -207,15 +648,28 @@ const BookingModule: React.FC<BookingModuleProps> = ({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="flex-1" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" className="flex-1" onClick={handleCreate} disabled={!newTitle.trim() || creating}>
-                {creating && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => setCreateMode(null)}>Cancel</Button>
+              <Button size="sm" className="flex-1" onClick={handleCreatePage} disabled={!newTitle.trim() || creatingPage}>
+                {creatingPage && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
                 Create
               </Button>
             </div>
           </div>
+        )}
+
+        {/* ── Create group meet form ── */}
+        {createMode === 'group_meet' && instanceId && (
+          <NewGroupMeetForm
+            instanceId={instanceId}
+            organizerName={organizerName}
+            onDone={handleGroupMeetDone}
+            onCancel={() => setCreateMode(null)}
+          />
+        )}
+        {createMode === 'group_meet' && !instanceId && (
+          <p className="text-xs text-muted-foreground text-center py-2">
+            Module needs to be saved first before creating group meets.
+          </p>
         )}
       </div>
     </ModuleContainer>

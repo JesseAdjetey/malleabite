@@ -13,7 +13,8 @@ import { ChevronDown } from "lucide-react";
 import AddEventButton from "@/components/calendar/AddEventButton";
 import EventForm from "@/components/calendar/EventForm";
 import EventDetails from "@/components/calendar/EventDetails";
-import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
+import TodoDropDialog from "@/components/calendar/integration/TodoDropDialog";
+import TodoLinkedWarningDialog from "@/components/calendar/integration/TodoLinkedWarningDialog";
 import dayjs from "dayjs";
 import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -24,6 +25,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
+import { logCalendarPerf } from "@/lib/perf/calendar-perf";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
@@ -53,10 +55,15 @@ const MonthView = () => {
   const {
     isTodoCalendarDialogOpen,
     currentTodoData,
+    currentDateTimeData,
     showTodoCalendarDialog,
     hideTodoCalendarDialog,
-    handleCreateBoth,
-    handleCreateCalendarOnly,
+    handleTodoDropConfirm,
+    isLinkedWarningOpen,
+    linkedEventRefs,
+    hideLinkedWarning,
+    scheduleAnywayFromWarning,
+    navigateToLinkedEvent,
   } = useTodoCalendarIntegration();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
@@ -138,19 +145,34 @@ const MonthView = () => {
     return allInstances;
   }, [events, twoDMonthArray, isCalendarVisible, hiddenCalendarIds]);
 
-  const getEventsForDay = (day: any) => {
-    if (!day) return [];
+  const eventsByDay = useMemo(() => {
+    const startedAt = performance.now();
+    const grouped = new Map<string, CalendarEventType[]>();
 
-    const dayStr = day.format("YYYY-MM-DD");
-    return expandedEvents.filter((event) => {
-      if (event.date === dayStr) return true;
-      if (event.startsAt) {
-        const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
-        return eventDate === dayStr;
+    expandedEvents.forEach((event) => {
+      const dayKey = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
+      if (!dayKey) return;
+
+      const list = grouped.get(dayKey);
+      if (list) {
+        list.push(event);
+      } else {
+        grouped.set(dayKey, [event]);
       }
-      return false;
     });
-  };
+
+    logCalendarPerf(
+      'month-view-events-by-day',
+      'MonthView eventsByDay build',
+      performance.now() - startedAt,
+      {
+        expandedEvents: expandedEvents.length,
+        dayBuckets: grouped.size,
+      }
+    );
+
+    return grouped;
+  }, [expandedEvents]);
 
   const handleDayClick = (day: any) => {
     if (!day) return;
@@ -260,7 +282,7 @@ const MonthView = () => {
                 key={index}
                 day={day}
                 rowIndex={i}
-                events={getEventsForDay(day)}
+                events={day ? eventsByDay.get(day.format("YYYY-MM-DD")) || [] : []}
                 onEventClick={openEventSummary}
                 onDayClick={handleDayClick}
                 onEventDrop={handleEventDrop}
@@ -303,12 +325,22 @@ const MonthView = () => {
 
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
 
-      <TodoCalendarDialog
-        open={isTodoCalendarDialogOpen && !!currentTodoData}
+      <TodoDropDialog
+        open={isTodoCalendarDialogOpen}
         onClose={hideTodoCalendarDialog}
         todoTitle={currentTodoData?.text || ''}
-        onCreateBoth={handleCreateBoth}
-        onCreateCalendarOnly={handleCreateCalendarOnly}
+        date={currentDateTimeData?.date || null}
+        startTime={currentDateTimeData?.startTime || null}
+        onConfirm={handleTodoDropConfirm}
+      />
+
+      <TodoLinkedWarningDialog
+        open={isLinkedWarningOpen}
+        onClose={hideLinkedWarning}
+        todoTitle={currentTodoData?.text || ''}
+        linkedEventRefs={linkedEventRefs}
+        onNavigateToEvent={navigateToLinkedEvent}
+        onScheduleAnyway={scheduleAnywayFromWarning}
       />
     </>
   );

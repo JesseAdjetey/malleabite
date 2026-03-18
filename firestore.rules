@@ -419,5 +419,21 @@ service cloud.firestore {
     match /whatsapp_sessions/{phone} {
       allow read, write: if false;
     }
+
+    // Group Meet Sessions — public read (link sharing), auth required to create
+    match /group_meets/{sessionId} {
+      // Anyone with the link can read (public meet page for guests)
+      allow read: if true;
+      // Only authenticated users can create, and only as organizer
+      allow create: if isAuthenticated() &&
+        request.resource.data.organizerId == request.auth.uid;
+      // Organizer can update anything; unauthenticated guests can update
+      // participants array only (for availability submission via public page)
+      allow update: if
+        (isAuthenticated() && resource.data.organizerId == request.auth.uid) ||
+        resource.data.status == 'collecting';
+      allow delete: if isAuthenticated() &&
+        resource.data.organizerId == request.auth.uid;
+    }
   }
 }

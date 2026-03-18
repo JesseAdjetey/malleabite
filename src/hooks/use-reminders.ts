@@ -20,6 +20,9 @@ import { CalendarEventType } from '@/lib/stores/types';
 import { REMINDER_SOUNDS } from './use-notification-manager';
 import { scheduleReminderNotification, cancelReminderNotification } from '@/lib/native-notification-scheduler';
 
+export type ReminderStatus = 'pending' | 'completed';
+export type ReminderRecurrence = 'none' | 'daily' | 'weekly' | 'weekdays' | 'custom';
+
 export interface Reminder {
   id: string;
   title: string;
@@ -30,6 +33,9 @@ export interface Reminder {
   timeAfterMinutes: number | null;
   soundId: string | null;
   isActive: boolean;
+  status?: ReminderStatus;
+  recurrence?: ReminderRecurrence;
+  customDays?: number[]; // 0=Sun, 1=Mon ... 6=Sat
   createdAt: string | Timestamp;
   userId?: string;
   event?: CalendarEventType;
@@ -43,6 +49,8 @@ export interface ReminderFormData {
   timeBeforeMinutes?: number;
   timeAfterMinutes?: number;
   soundId?: string;
+  recurrence?: ReminderRecurrence;
+  customDays?: number[];
 }
 
 
@@ -92,6 +100,9 @@ export function useReminders(instanceId?: string) {
               timeAfterMinutes: data.timeAfterMinutes,
               soundId: data.soundId,
               isActive: data.isActive,
+              status: data.status || 'pending',
+              recurrence: data.recurrence || 'none',
+              customDays: data.customDays || [],
               createdAt: data.createdAt,
               userId: data.userId
             });
@@ -136,6 +147,9 @@ export function useReminders(instanceId?: string) {
         timeAfterMinutes: data.timeAfterMinutes || null,
         soundId: data.soundId || 'default',
         isActive: true,
+        status: 'pending',
+        recurrence: data.recurrence || 'none',
+        customDays: data.customDays || [],
         createdAt: serverTimestamp()
       };
       if (instanceId) {
@@ -181,6 +195,8 @@ export function useReminders(instanceId?: string) {
       if (data.timeBeforeMinutes !== undefined) updateData.timeBeforeMinutes = data.timeBeforeMinutes;
       if (data.timeAfterMinutes !== undefined) updateData.timeAfterMinutes = data.timeAfterMinutes;
       if (data.soundId !== undefined) updateData.soundId = data.soundId;
+      if (data.recurrence !== undefined) updateData.recurrence = data.recurrence;
+      if (data.customDays !== undefined) updateData.customDays = data.customDays;
 
       await updateDoc(doc(db, 'reminders', id), updateData);
       // Re-schedule native notification
@@ -257,6 +273,70 @@ export function useReminders(instanceId?: string) {
     }
   };
 
+  // Complete a reminder (marks done, reschedules if recurring)
+  const completeReminder = async (id: string): Promise<{ success: boolean, error?: any }> => {
+    if (!user) return { success: false };
+    try {
+      await updateDoc(doc(db, 'reminders', id), {
+        isActive: false,
+        status: 'completed',
+      });
+      cancelReminderNotification(id).catch(() => {});
+
+      const reminder = reminders.find(r => r.id === id);
+      if (reminder && reminder.recurrence && reminder.recurrence !== 'none') {
+        const resolvedTime = reminder.reminderTime instanceof Timestamp
+          ? reminder.reminderTime.toDate()
+          : new Date(reminder.reminderTime as string);
+        const base = new Date(resolvedTime);
+        let nextTime: Date | null = null;
+
+        if (reminder.recurrence === 'daily') {
+          nextTime = new Date(base);
+          nextTime.setDate(nextTime.getDate() + 1);
+        } else if (reminder.recurrence === 'weekly') {
+          nextTime = new Date(base);
+          nextTime.setDate(nextTime.getDate() + 7);
+        } else if (reminder.recurrence === 'weekdays') {
+          nextTime = new Date(base);
+          nextTime.setDate(nextTime.getDate() + 1);
+          while (nextTime.getDay() === 0 || nextTime.getDay() === 6) {
+            nextTime.setDate(nextTime.getDate() + 1);
+          }
+        } else if (reminder.recurrence === 'custom' && reminder.customDays && reminder.customDays.length > 0) {
+          nextTime = new Date(base);
+          nextTime.setDate(nextTime.getDate() + 1);
+          let safety = 0;
+          while (!reminder.customDays.includes(nextTime.getDay()) && safety < 7) {
+            nextTime.setDate(nextTime.getDate() + 1);
+            safety++;
+          }
+        }
+
+        if (nextTime) {
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const formatted = `${nextTime.getFullYear()}-${pad(nextTime.getMonth() + 1)}-${pad(nextTime.getDate())}T${pad(nextTime.getHours())}:${pad(nextTime.getMinutes())}`;
+          await addReminder({
+            title: reminder.title,
+            description: reminder.description || undefined,
+            reminderTime: formatted,
+            soundId: reminder.soundId || 'default',
+            recurrence: reminder.recurrence,
+            customDays: reminder.customDays,
+            eventId: reminder.eventId || undefined,
+          });
+        }
+      }
+
+      toast.success('Reminder completed');
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error completing reminder:', error);
+      toast.error('Failed to complete reminder');
+      return { success: false, error };
+    }
+  };
+
   // Play a reminder sound for testing
   const playSound = (soundId: string = 'default') => {
     const sound = REMINDER_SOUNDS.find(s => s.id === soundId) || REMINDER_SOUNDS[0];
@@ -299,6 +379,7 @@ export function useReminders(instanceId?: string) {
     addReminder,
     updateReminder,
     toggleReminderActive,
+    completeReminder,
     deleteReminder,
     playSound,
     getSounds,

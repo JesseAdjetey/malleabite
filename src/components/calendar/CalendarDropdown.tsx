@@ -239,6 +239,12 @@ const CalendarDropdown: React.FC = () => {
       googleAccountId?: string;
     }) => {
       const addedCalendars: ConnectedCalendar[] = [];
+      const nextVisible = new Set(
+        visibleCalendars.length > 0
+          ? visibleCalendars
+          : useCalendarFilterStore.getState().accounts.map((a) => a.id)
+      );
+
       for (const cal of result.selectedCalendars) {
         const data = createConnectedCalendar({
           source: result.source,
@@ -253,12 +259,14 @@ const CalendarDropdown: React.FC = () => {
         if (saved) {
           addedCalendars.push(saved);
           // Auto-add to visible calendars so events show immediately
-          const currentVisible = visibleCalendars ?? [];
-          if (!currentVisible.includes(saved.id)) {
-            await toggleCalendarVisibility(saved.id);
-          }
+          nextVisible.add(saved.id);
+          useCalendarFilterStore.getState().setCalendarVisible(saved.id, true);
         }
       }
+
+      // Persist explicit visibility set once to avoid toggle races
+      await setVisibleCalendars(Array.from(nextVisible));
+
       toast.success(
         `Added ${result.selectedCalendars.length} calendar${result.selectedCalendars.length > 1 ? 's' : ''}`
       );
@@ -273,7 +281,7 @@ const CalendarDropdown: React.FC = () => {
         }
       }
     },
-    [user, addCalendar, syncCalendar, visibleCalendars, toggleCalendarVisibility]
+    [user, addCalendar, syncCalendar, visibleCalendars, setVisibleCalendars]
   );
 
   const handleToggleCalendar = useCallback(
@@ -287,9 +295,12 @@ const CalendarDropdown: React.FC = () => {
       // Using an explicit set (not toggle) prevents desync when the preference
       // list doesn't match ConnectedCalendar.isActive (which caused Personal
       // calendar to have inverse toggle behavior).
-      let currentVisible = visibleCalendars.length > 0
-        ? [...visibleCalendars]
-        : useCalendarFilterStore.getState().accounts.map(a => a.id);
+      const storeState = useCalendarFilterStore.getState();
+      let currentVisible = storeState.getVisibleCalendarIds();
+
+      if (currentVisible.length === 0) {
+        currentVisible = storeState.accounts.map((a) => a.id);
+      }
       
       const updated = isActive
         ? currentVisible.includes(calendarId)
@@ -316,8 +327,19 @@ const CalendarDropdown: React.FC = () => {
       // Fire-and-forget Firestore update (the listener may trigger the bridge,
       // but setCalendarVisible in the bridge is idempotent so it's safe).
       toggleCalendar(calendarId, isActive);
+
+      // If turning ON and we already have this calendar connected, trigger a
+      // background sync so events show without requiring manual refresh.
+      if (isActive) {
+        const selected = calendars.find((c) => c.id === calendarId);
+        if (selected) {
+          syncCalendar(selected).catch((err) => {
+            console.warn('Calendar auto-sync on toggle failed:', selected.name, err);
+          });
+        }
+      }
     },
-    [toggleCalendar, visibleCalendars, setVisibleCalendars, user?.uid]
+    [toggleCalendar, setVisibleCalendars, user?.uid, calendars, syncCalendar]
   );
 
   const handleSync = useCallback(async () => {

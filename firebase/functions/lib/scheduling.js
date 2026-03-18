@@ -86,6 +86,42 @@ const normalizeActions = (rawActions) => rawActions.map(op => {
             }
         };
     }
+    else if (type === 'add_module') {
+        return {
+            type,
+            data: {
+                moduleType: data.moduleType || data.type,
+                title: data.title,
+                pageName: data.pageName || data.page || data.pageTitle,
+                pageId: data.pageId,
+                listId: data.listId,
+            }
+        };
+    }
+    else if (type === 'move_module') {
+        return {
+            type,
+            data: {
+                moduleId: data.moduleId,
+                moduleType: data.moduleType || data.type,
+                title: data.title,
+                sourcePageName: data.sourcePageName || data.fromPageName || data.currentPageName,
+                sourcePageId: data.sourcePageId || data.fromPageId,
+                targetPageName: data.targetPageName || data.toPageName || data.destinationPage,
+                targetPageId: data.targetPageId || data.toPageId,
+            }
+        };
+    }
+    else if (type === 'create_page' || type === 'delete_page' || type === 'switch_page') {
+        return {
+            type,
+            data: {
+                title: data.title || data.pageName || data.page,
+                pageId: data.pageId,
+                icon: data.icon,
+            }
+        };
+    }
     else if (type === 'create_todo' || type === 'add_todo_to_list') {
         return { type: 'create_todo', data: { text: data.text || data.content, listName: data.listName } };
     }
@@ -192,6 +228,18 @@ exports.processSchedulingStream = (0, https_1.onRequest)({
         const templatesContext = (clientContext.calendarTemplates || []).length > 0
             ? clientContext.calendarTemplates.map((t) => `- "${t.name}" (${t.eventCount} events${t.isActive ? ', active' : ''}${t.targetGroupId ? `, group: ${t.targetGroupId}` : ''})`).join('\n')
             : 'No templates yet.';
+        // Build sidebar pages context
+        const sidebarPages = (clientContext.sidebarPages || []);
+        const sidebarContext = sidebarPages.length > 0
+            ? sidebarPages.map((p) => {
+                const active = p.isActive ? ' [ACTIVE]' : '';
+                const modules = (p.modules || []).map((m) => `    - ${m.title} (type: ${m.type}, moduleId: ${m.id}${m.listId ? `, listId: ${m.listId}` : ''})`).join('\n') || '    - (no modules)';
+                return `- Page: "${p.title}" (id: ${p.id})${active}\n${modules}`;
+            }).join('\n')
+            : 'No sidebar pages loaded.';
+        const todoListsContext = (clientContext.todoLists || []).length > 0
+            ? clientContext.todoLists.map((l) => `- "${l.name}" (id: ${l.id})${l.isActive ? ' [ACTIVE]' : ''}`).join('\n')
+            : 'No todo lists loaded.';
         const genAI = new generative_ai_1.GoogleGenerativeAI(geminiApiKey.value());
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const systemPrompt = `You are Mally, a warm and intelligent scheduling assistant.
@@ -207,6 +255,12 @@ ${groupsContext}
 CALENDAR_TEMPLATES (existing templates):
 ${templatesContext}
 
+SIDEBAR_PAGES (target these exact page names when user specifies a page):
+${sidebarContext}
+
+TODO_LISTS:
+${todoListsContext}
+
 OUTPUT FORMAT — follow this EXACTLY, no deviations:
 
 SPEECH: [Your conversational spoken response — friendly, natural, 1-3 sentences, no markdown, no asterisks]
@@ -220,7 +274,10 @@ CAPABILITIES:
 - Update event: {"type":"update_event","data":{"eventId":"...","start":"ISO8601","end":"ISO8601"}}
 - Delete event: {"type":"delete_event","data":{"eventId":"..."}}
 - Todos: {"type":"create_todo","data":{"text":"...","listName":"..."}}
-- Todo lists: {"type":"create_todo_list","data":{"name":"..."}}
+- Todo lists: {"type":"create_todo_list","data":{"name":"...","pageName":"optional target page name"}}
+- Modules: {"type":"add_module","data":{"moduleType":"todo|pomodoro|alarms|reminders|eisenhower|invites","title":"optional","pageName":"optional target page"}}
+- Move modules: {"type":"move_module","data":{"moduleId":"preferred","moduleType":"fallback","title":"optional","targetPageName":"required"}}
+- Pages: {"type":"create_page","data":{"title":"..."}}, {"type":"switch_page","data":{"title":"..."}}, {"type":"delete_page","data":{"title":"..."}}
 - Alarms: {"type":"create_alarm","data":{"title":"...","time":"HH:mm"}}
 - Calendar Templates (weekly patterns) — ALWAYS include ALL events in create_calendar_template:
   Create full template: {"type":"create_calendar_template","data":{"name":"Work Week","description":"optional","groupName":"Work","events":[{"title":"Standup","dayOfWeek":1,"startTime":"09:00","endTime":"09:15","color":"#3b82f6"}]}}
@@ -251,6 +308,9 @@ RULES:
 - Resolve pronouns (it/this/that) from conversation history
 - Check for conflicts in existing events; suggest alternatives
 - Default event duration: 1 hour
+- Never claim you "don't have the ability" for page/module operations — you DO support page-specific module/list actions.
+- If user specifies a page, include pageName/targetPageName in action data.
+- If user asks to move a module to another page, use move_module.
 - ALWAYS include both SPEECH: and --- and JSON`;
         const formattedHistory = history.map(h => ({
             role: h.role === 'user' ? 'user' : 'model',

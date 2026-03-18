@@ -1,5 +1,5 @@
 // Hook for managing sidebar pages (polymorphic page containers)
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   collection,
   query,
@@ -11,7 +11,9 @@ import {
   doc,
   orderBy,
   serverTimestamp,
-  getDocs
+  getDocs,
+  getDoc,
+  setDoc,
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
@@ -19,13 +21,103 @@ import { toast } from 'sonner';
 import { SidebarPage, ModuleInstance, ensureModuleId, generateModuleId } from '@/lib/stores/types';
 import { useTodoLists } from './use-todo-lists';
 
+const sanitizeModuleForFirestore = (module: ModuleInstance): ModuleInstance => {
+  return Object.fromEntries(
+    Object.entries(module).filter(([, value]) => value !== undefined)
+  ) as ModuleInstance;
+};
+
 export function useSidebarPages() {
   const [pages, setPages] = useState<SidebarPage[]>([]);
-  const [activePageId, setActivePageId] = useState<string | null>(null);
+  const [activePageId, setActivePageIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const { createList } = useTodoLists();
+  const shouldPersistActivePageRef = useRef(false);
+
+  const getActivePageStorageKey = useCallback((uid: string) => `sidebar_active_page:${uid}`, []);
+  const getSidebarPreferencesRef = useCallback((uid: string) => doc(db, `users/${uid}/sidebarPreferences`, 'settings'), []);
+
+  const setActivePageIdSilent = useCallback((pageId: string | null) => {
+    shouldPersistActivePageRef.current = false;
+    setActivePageIdState(pageId);
+  }, []);
+
+  const setActivePageId = useCallback((pageId: string | null) => {
+    shouldPersistActivePageRef.current = true;
+    setActivePageIdState(pageId);
+  }, []);
+
+  // Restore last active page when user changes / logs in
+  useEffect(() => {
+    if (!user?.uid) {
+      setActivePageIdSilent(null);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(getActivePageStorageKey(user.uid));
+      setActivePageIdSilent(stored || null);
+    } catch {
+      setActivePageIdSilent(null);
+    }
+  }, [user?.uid, getActivePageStorageKey, setActivePageIdSilent]);
+
+  // Restore cross-device active page preference from Firestore (authoritative when available)
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let cancelled = false;
+
+    const loadRemoteActivePage = async () => {
+      try {
+        const prefSnap = await getDoc(getSidebarPreferencesRef(user.uid));
+        if (cancelled || !prefSnap.exists()) return;
+        const data = prefSnap.data() as { activePageId?: string | null };
+        if (data.activePageId) {
+          setActivePageIdSilent(data.activePageId);
+        }
+      } catch {
+        // Ignore remote preference failures silently and fall back to local behavior
+      }
+    };
+
+    loadRemoteActivePage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, getSidebarPreferencesRef, setActivePageIdSilent]);
+
+  // Persist active page locally + across devices (only for explicit/user-driven changes)
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (!shouldPersistActivePageRef.current) return;
+
+    try {
+      const key = getActivePageStorageKey(user.uid);
+      if (activePageId) localStorage.setItem(key, activePageId);
+      else localStorage.removeItem(key);
+    } catch {
+      // Ignore storage failures silently
+    }
+
+    const persistRemoteActivePage = async () => {
+      try {
+        await setDoc(getSidebarPreferencesRef(user.uid), {
+          activePageId: activePageId || null,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch {
+        // Ignore persistence failures silently; local persistence still works
+      }
+    };
+
+    persistRemoteActivePage();
+
+    shouldPersistActivePageRef.current = false;
+  }, [user?.uid, activePageId, getSidebarPreferencesRef, getActivePageStorageKey]);
 
   // Ensure default page exists
   const ensureDefaultPage = useCallback(async () => {
@@ -88,7 +180,7 @@ export function useSidebarPages() {
       // ── Migrate: write module IDs back to Firestore for any modules that were missing them ──
       for (const page of pagesData) {
         const rawModules = snapshot.docs.find(d => d.id === page.id)?.data()?.modules || [];
-        const needsMigration = rawModules.some((m: any) => !m.id);
+        const needsMigration = rawModules.some((m: { id?: string }) => !m.id);
         if (needsMigration) {
           try {
             await updateDoc(doc(db, 'sidebar_pages', page.id), {
@@ -110,11 +202,23 @@ export function useSidebarPages() {
 
       setPages(pagesData);
 
-      // Set active page to default or first page if not set
-      if (!activePageId) {
-        const defaultPage = pagesData.find(p => p.isDefault) || pagesData[0];
-        if (defaultPage) {
-          setActivePageId(defaultPage.id);
+      // Keep current active page when valid; otherwise restore persisted/default
+      const activeStillExists = !!activePageId && pagesData.some(p => p.id === activePageId);
+      if (!activeStillExists) {
+        let persistedPageId: string | null = null;
+        try {
+          persistedPageId = user?.uid ? localStorage.getItem(getActivePageStorageKey(user.uid)) : null;
+        } catch {
+          persistedPageId = null;
+        }
+
+        const persistedExists = !!persistedPageId && pagesData.some(p => p.id === persistedPageId);
+        const fallbackPageId = (persistedExists
+          ? persistedPageId
+          : (pagesData.find(p => p.isDefault) || pagesData[0])?.id) || null;
+
+        if (fallbackPageId) {
+          setActivePageIdSilent(fallbackPageId);
         }
       }
 
@@ -126,7 +230,7 @@ export function useSidebarPages() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid, ensureDefaultPage, activePageId]);
+  }, [user?.uid, ensureDefaultPage, activePageId, getActivePageStorageKey, setActivePageId, setActivePageIdSilent]);
 
   // Create a new page
   const createPage = async (title: string, icon?: string): Promise<{ success: boolean; pageId?: string }> => {
@@ -221,7 +325,7 @@ export function useSidebarPages() {
       if (!page) return { success: false };
 
       // Always assign a unique module ID
-      let moduleToAdd: ModuleInstance = {
+      const moduleToAdd: ModuleInstance = {
         ...module,
         id: module.id || generateModuleId(),
         pageId,
@@ -233,12 +337,12 @@ export function useSidebarPages() {
         }
       }
 
-      // For pomodoro modules, assign a unique instance ID
-      if (['pomodoro', 'eisenhower', 'alarms'].includes(module.type) && !module.instanceId) {
+      // For stateful modules, assign a unique instance ID
+      if (['pomodoro', 'eisenhower', 'alarms', 'booking'].includes(module.type) && !module.instanceId) {
         moduleToAdd.instanceId = crypto.randomUUID();
       }
 
-      const updatedModules = [...page.modules, moduleToAdd];
+      const updatedModules = [...page.modules, sanitizeModuleForFirestore(moduleToAdd)];
 
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
@@ -285,7 +389,10 @@ export function useSidebarPages() {
       if (!page) return { success: false };
 
       const updatedModules = [...page.modules];
-      updatedModules[moduleIndex] = { ...updatedModules[moduleIndex], ...updates };
+      updatedModules[moduleIndex] = sanitizeModuleForFirestore({
+        ...updatedModules[moduleIndex],
+        ...updates,
+      });
 
       await updateDoc(doc(db, 'sidebar_pages', pageId), {
         modules: updatedModules,
@@ -373,12 +480,58 @@ export function useSidebarPages() {
     return removeModule(found.page.id, found.index);
   };
 
+  /** Move a module from one page to another by index */
+  const moveModule = async (fromPageId: string, moduleIndex: number, toPageId: string) => {
+    if (!user?.uid) return { success: false };
+    if (fromPageId === toPageId) return { success: true };
+
+    try {
+      const fromPage = pages.find(p => p.id === fromPageId);
+      const toPage = pages.find(p => p.id === toPageId);
+      if (!fromPage || !toPage) return { success: false };
+      const moduleToMove = fromPage.modules[moduleIndex];
+      if (!moduleToMove) return { success: false };
+
+      const updatedFromModules = fromPage.modules.filter((_, idx) => idx !== moduleIndex);
+      const movedModule: ModuleInstance = {
+        ...moduleToMove,
+        pageId: toPageId,
+      };
+      const updatedToModules = [...toPage.modules, sanitizeModuleForFirestore(movedModule)];
+
+      await Promise.all([
+        updateDoc(doc(db, 'sidebar_pages', fromPageId), {
+          modules: updatedFromModules,
+          updatedAt: serverTimestamp(),
+        }),
+        updateDoc(doc(db, 'sidebar_pages', toPageId), {
+          modules: updatedToModules,
+          updatedAt: serverTimestamp(),
+        }),
+      ]);
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error moving module between pages:', err);
+      toast.error('Failed to move module');
+      return { success: false };
+    }
+  };
+
   /** Update a module by its unique ID */
   const updateModuleById = async (moduleId: string, updates: Partial<ModuleInstance>) => {
     if (!user?.uid) return { success: false };
     const found = findModuleById(moduleId);
     if (!found) return { success: false };
     return updateModule(found.page.id, found.index, updates);
+  };
+
+  /** Move a module by its unique ID to a target page */
+  const moveModuleById = async (moduleId: string, toPageId: string) => {
+    if (!user?.uid) return { success: false };
+    const found = findModuleById(moduleId);
+    if (!found) return { success: false };
+    return moveModule(found.page.id, found.index, toPageId);
   };
 
   /** Toggle minimize state by module ID */
@@ -404,10 +557,12 @@ export function useSidebarPages() {
     updateModule,
     reorderModules,
     toggleModuleMinimized,
+    moveModule,
     // ID-based operations
     findModuleById,
     removeModuleById,
     updateModuleById,
     toggleModuleMinimizedById,
+    moveModuleById,
   };
 }

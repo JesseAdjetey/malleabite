@@ -3,13 +3,17 @@
 // SyncedCalendarEvent[] → CalendarEventType[] so they appear in calendar views.
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { SyncedCalendarEvent } from '@/types/calendar';
 import { CalendarEventType } from '@/lib/stores/types';
 import dayjs from 'dayjs';
 import { logger } from '@/lib/logger';
+import { logCalendarPerf } from '@/lib/perf/calendar-perf';
+
+const SYNCED_EVENTS_DAYS_BACK = 90;
+const SYNCED_EVENTS_DAYS_FORWARD = 365;
 
 /**
  * Convert a SyncedCalendarEvent (from external source) into a CalendarEventType
@@ -66,9 +70,27 @@ export function useSyncedEventsLoader(): {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const syncedEventsMapRef = useRef<Map<string, CalendarEventType>>(new Map());
+  const frameRef = useRef<number | null>(null);
+
+  const flushSyncedEvents = () => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+    }
+
+    frameRef.current = requestAnimationFrame(() => {
+      const nextEvents = Array.from(syncedEventsMapRef.current.values()).sort((a, b) =>
+        (a.startsAt || '').localeCompare(b.startsAt || '')
+      );
+      setSyncedEvents(nextEvents);
+      setLoading(false);
+      frameRef.current = null;
+    });
+  };
 
   useEffect(() => {
     if (!user?.uid) {
+      syncedEventsMapRef.current.clear();
       setSyncedEvents([]);
       setLoading(false);
       return;
@@ -81,31 +103,67 @@ export function useSyncedEventsLoader(): {
 
     const syncedRef = collection(db, `users/${user.uid}/syncedEvents`);
 
-    const unsubscribe = onSnapshot(
-      syncedRef,
-      (snapshot) => {
-        console.log(`[SyncedEventsLoader] Firestore snapshot: ${snapshot.docs.length} docs`);
-        const events = snapshot.docs
-          .map((doc) => {
-            const data = doc.data() as SyncedCalendarEvent;
-            return syncedToCalendarEvent({ ...data, id: doc.id });
-          })
-          .filter((e) => e.status !== 'cancelled'); // Skip cancelled events
+    const windowStart = dayjs()
+      .subtract(SYNCED_EVENTS_DAYS_BACK, 'day')
+      .format('YYYY-MM-DD');
+    const windowEnd = `${dayjs()
+      .add(SYNCED_EVENTS_DAYS_FORWARD, 'day')
+      .format('YYYY-MM-DD')}z`;
 
-        logger.info(
-          'SyncedEventsLoader',
-          `Loaded ${events.length} synced events from Firestore`
-        );
-        if (events.length > 0) {
-          console.log('[SyncedEventsLoader] Sample event:', {
-            id: events[0].id,
-            title: events[0].title,
-            date: events[0].date,
-            calendarId: events[0].calendarId,
-          });
+    const syncedQuery = query(
+      syncedRef,
+      where('startTime', '>=', windowStart),
+      where('startTime', '<=', windowEnd),
+      orderBy('startTime', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(
+      syncedQuery,
+      (snapshot) => {
+        const startedAt = performance.now();
+        const changes = snapshot.docChanges();
+        let added = 0;
+        let modified = 0;
+        let removed = 0;
+
+        for (const change of changes) {
+          const docId = change.doc.id;
+
+          if (change.type === 'added') added += 1;
+          if (change.type === 'modified') modified += 1;
+          if (change.type === 'removed') removed += 1;
+
+          if (change.type === 'removed') {
+            syncedEventsMapRef.current.delete(docId);
+            continue;
+          }
+
+          const data = change.doc.data() as SyncedCalendarEvent;
+          const converted = syncedToCalendarEvent({ ...data, id: docId });
+
+          if (converted.status === 'cancelled') {
+            syncedEventsMapRef.current.delete(docId);
+            continue;
+          }
+
+          syncedEventsMapRef.current.set(docId, converted);
         }
-        setSyncedEvents(events);
-        setLoading(false);
+
+        logger.info('SyncedEventsLoader', `Synced events in memory: ${syncedEventsMapRef.current.size}`);
+        logCalendarPerf(
+          'synced-events-snapshot',
+          'SyncedEventsLoader snapshot processing',
+          performance.now() - startedAt,
+          {
+            docsInSnapshot: snapshot.size,
+            docChanges: changes.length,
+            added,
+            modified,
+            removed,
+            inMemoryEvents: syncedEventsMapRef.current.size,
+          }
+        );
+        flushSyncedEvents();
       },
       (error) => {
         logger.error('SyncedEventsLoader', 'Failed to load synced events', {
@@ -118,6 +176,10 @@ export function useSyncedEventsLoader(): {
     unsubscribeRef.current = unsubscribe;
 
     return () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;

@@ -67,6 +67,7 @@ export function useMallyActions() {
     setActivePageId,
     addModule,
     removeModule,
+    moveModule,
     toggleModuleMinimized,
     createPage,
     deletePage,
@@ -74,6 +75,7 @@ export function useMallyActions() {
     removeModuleById,
     updateModuleById,
     toggleModuleMinimizedById,
+    moveModuleById,
   } = useSidebarPages();
 
   // Eisenhower
@@ -1190,11 +1192,19 @@ export function useMallyActions() {
             todo: 'Tasks', pomodoro: 'Focus Timer', alarms: 'Alarms',
             reminders: 'Reminders', eisenhower: 'Priorities', invites: 'Invites',
           };
-          const result = await addModule(pid, {
+          const modulePayload: {
+            type: string;
+            title: string;
+            minimized: boolean;
+            listId?: string;
+          } = {
             type: data.moduleType,
             title: data.title || defaultTitles[data.moduleType] || data.moduleType,
             minimized: false,
-            listId: data.listId,
+          };
+          if (data.listId) modulePayload.listId = data.listId;
+          const result = await addModule(pid, {
+            ...modulePayload,
           });
           if (result?.success) {
             runtimeActivePageIdRef.current = pid;
@@ -1223,6 +1233,60 @@ export function useMallyActions() {
           }
           const result = await removeModule(pid, ref.index);
           if (result?.success) { toast.success(`Removed ${ref.module.title} module`); return true; }
+          return false;
+        }
+
+        case 'move_module': {
+          const targetRef = resolvePageRef({
+            pageId: data.targetPageId || data.toPageId,
+            pageName: data.targetPageName || data.toPageName || data.destinationPage || data.pageName,
+          });
+
+          if (!targetRef.pageId || !targetRef.page) {
+            toast.error(`Target page "${data.targetPageName || data.toPageName || data.destinationPage || data.pageName || data.targetPageId || data.toPageId || ''}" not found`);
+            return false;
+          }
+
+          if (data.moduleId) {
+            const found = findModuleById(data.moduleId);
+            if (!found) { toast.error('Module not found'); return false; }
+            if (found.page.id === targetRef.pageId) { toast.info(`${found.module.title} is already on ${targetRef.page.title}`); return true; }
+            const result = await moveModuleById(data.moduleId, targetRef.pageId);
+            if (result?.success) {
+              runtimeActivePageIdRef.current = targetRef.pageId;
+              toast.success(`Moved ${found.module.title} to ${targetRef.page.title}`);
+              return true;
+            }
+            return false;
+          }
+
+          const sourceRef = resolvePageRef({
+            pageId: data.sourcePageId || data.fromPageId,
+            pageName: data.sourcePageName || data.fromPageName || data.currentPageName,
+          });
+
+          if (!sourceRef.pageId || !sourceRef.page) {
+            toast.error('Source page not found');
+            return false;
+          }
+
+          const moduleRef = resolveModuleRef(sourceRef.page, data);
+          if (!moduleRef) {
+            toast.error(`Module "${data.title || data.moduleType || ''}" not found on ${sourceRef.page.title}`);
+            return false;
+          }
+
+          if (sourceRef.pageId === targetRef.pageId) {
+            toast.info(`${moduleRef.module.title} is already on ${targetRef.page.title}`);
+            return true;
+          }
+
+          const result = await moveModule(sourceRef.pageId, moduleRef.index, targetRef.pageId);
+          if (result?.success) {
+            runtimeActivePageIdRef.current = targetRef.pageId;
+            toast.success(`Moved ${moduleRef.module.title} to ${targetRef.page.title}`);
+            return true;
+          }
           return false;
         }
 
@@ -1887,8 +1951,8 @@ export function useMallyActions() {
     addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder,
     createList, deleteList, lists, activeListId, setActiveListId, todos, addTodo, toggleTodo, deleteTodo, moveTodo,
     pages, activePage, activePageId, setActivePageId,
-    addModule, removeModule, toggleModuleMinimized, createPage, deletePage,
-    findModuleById, removeModuleById, updateModuleById, toggleModuleMinimizedById,
+    addModule, removeModule, moveModule, toggleModuleMinimized, createPage, deletePage,
+    findModuleById, removeModuleById, updateModuleById, toggleModuleMinimizedById, moveModuleById,
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
     addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
     addReminder, updateReminder, deleteReminder, toggleReminderActive,
@@ -1896,7 +1960,8 @@ export function useMallyActions() {
     templates, applyTemplate, useTemplate, createTemplate, deleteTemplate,
     sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,
-    resolvePageRef, resolveModuleIndex, ensureModuleVisible,
+    resolvePageRef, resolveModuleRef, resolveModuleIndex, ensureModuleVisible,
+    resolveTargetCalendar, resolveTargetList,
     syncEnabled, pushEventToGoogle,
     // New deps
     bulkDelete, bulkUpdateColor, bulkReschedule, bulkDuplicate,

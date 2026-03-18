@@ -824,6 +824,7 @@ CAPABILITIES — you can:
 - Create, complete, or delete todos
 - Create or delete alarms, start/stop Pomodoro timer
 - Add items to the Eisenhower priority matrix
+- Add modules to specific pages, create/switch pages, and move modules between pages
 - Create goals with category and frequency
 - Search the web, check weather, stock prices, flight status
 

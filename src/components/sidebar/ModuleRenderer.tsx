@@ -6,6 +6,7 @@ import InvitesModule from '../modules/InvitesModule';
 import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
+import BookingModule from '../modules/BookingModule';
 
 interface ModuleRendererProps {
   module: ModuleInstance;
@@ -59,6 +60,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
         </div>
       );
     case 'alarms': // Updated to use the new RemindersModule
+    case 'reminders':
       return (
         <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <RemindersModule {...moduleProps} instanceId={module.instanceId} />
@@ -74,6 +76,12 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
       return (
         <div key={module.id} style={moduleStyle} className={moduleClassName}>
           <InvitesModule {...moduleProps} />
+        </div>
+      );
+    case 'booking':
+      return (
+        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+          <BookingModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     default:

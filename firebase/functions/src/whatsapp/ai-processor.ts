@@ -30,7 +30,11 @@ export interface ProposedAction {
     | 'create_todo' | 'complete_todo' | 'delete_todo'
     | 'create_alarm' | 'delete_alarm'
     | 'create_eisenhower'
-    | 'create_goal';
+    | 'create_goal'
+    | 'create_group_meet';
+  // Group meet fields
+  participantEmails?: string[];
+  meetWindow?: 'today' | '3days' | 'week' | '2weeks';
   // Event fields
   title?: string;
   start?: string;

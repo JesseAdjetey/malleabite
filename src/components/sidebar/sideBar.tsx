@@ -18,6 +18,7 @@ const SideBar = () => {
     deletePage,
     addModule,
     removeModule,
+    moveModule,
     updateModule,
     reorderModules,
     loading
@@ -68,6 +69,11 @@ const SideBar = () => {
   const handleReorderModules = (fromIndex: number, toIndex: number) => {
     if (!activePageId) return;
     reorderModules(activePageId, fromIndex, toIndex);
+  };
+
+  const handleMoveModule = async (moduleIndex: number, targetPageId: string) => {
+    if (!activePageId) return;
+    await moveModule(activePageId, moduleIndex, targetPageId);
   };
 
   const handleCreateNewPage = async () => {
@@ -123,6 +129,10 @@ const SideBar = () => {
           onRemoveModule={handleRemoveModule}
           onUpdateModuleTitle={handleUpdateModuleTitle}
           onReorderModules={handleReorderModules}
+          onMoveModule={handleMoveModule}
+          moveTargets={pages
+            .filter(p => p.id !== activePageId)
+            .map(p => ({ id: p.id, title: p.title }))}
           pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
         />
       </div>

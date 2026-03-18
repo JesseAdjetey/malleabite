@@ -121,12 +121,18 @@ export function useCalendarFilterBridge() {
 
     const { accounts, setCalendarVisible } = filterStore.getState();
     const visibleSet = new Set(visibleCalendars);
+    const hadVisibilityPrefsBefore = prevVisibleRef.current.length > 0;
 
-    // If visibleCalendars is empty (no preferences set yet), default all to visible.
-    const hasPreferences = visibleCalendars.length > 0;
+    // Keep legacy behavior on first load (empty => all visible), but if the user
+    // had visibility prefs in this session and now visibleCalendars is empty,
+    // treat that as an explicit "hide all" preference.
+    const hasPreferences = visibleCalendars.length > 0 || hadVisibilityPrefsBefore;
 
     accounts.forEach(account => {
-      const shouldBeVisible = hasPreferences ? visibleSet.has(account.id) : true;
+      const shouldBeVisible = hasPreferences
+        ? visibleSet.has(account.id)
+        : true;
+
       // setCalendarVisible is idempotent — safe to call even if already correct.
       setCalendarVisible(account.id, shouldBeVisible);
     });

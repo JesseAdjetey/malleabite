@@ -20,6 +20,7 @@ import { isNative, isAndroid, isIOS } from '@/lib/platform';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
 import MobileNavigation from '@/components/MobileNavigation';
+import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
 import '@/styles/ai-animations.css';
 
 // Lazy load pages for better performance
@@ -35,6 +36,7 @@ const TermsOfService = lazy(() => import('@/pages/legal/TermsOfService'));
 const Pricing = lazy(() => import('@/pages/Pricing'));
 const Billing = lazy(() => import('@/pages/Billing'));
 const BookingPage = lazy(() => import('@/pages/BookingPage'));
+const MeetPage = lazy(() => import('@/pages/MeetPage'));
 const AdvancedAnalytics = lazy(() => import('@/pages/AdvancedAnalytics'));
 
 // Loading fallback component
@@ -69,10 +71,12 @@ const AppRoutes = () => {
           <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
 <Route path="/analytics/advanced" element={<ProtectedRoute><AdvancedAnalytics /></ProtectedRoute>} />
           <Route path="/book/:bookingPageId" element={<BookingPage />} />
+          <Route path="/meet/:sessionId" element={<MeetPage />} />
           <Route path="/legal/privacy" element={<PrivacyPolicy />} />
           <Route path="/legal/terms" element={<TermsOfService />} />
         </Routes>
       </Suspense>
+      {!isAuthPage && <PendingMeetHandler />}
       {!isAuthPage && <BottomMallyAI />}
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}

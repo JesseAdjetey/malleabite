@@ -15,7 +15,8 @@ import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
-import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
+import TodoDropDialog from "@/components/calendar/integration/TodoDropDialog";
+import TodoLinkedWarningDialog from "@/components/calendar/integration/TodoLinkedWarningDialog";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -43,10 +44,15 @@ const DayView = () => {
   const {
     isTodoCalendarDialogOpen,
     currentTodoData,
+    currentDateTimeData,
     showTodoCalendarDialog,
     hideTodoCalendarDialog,
-    handleCreateBoth,
-    handleCreateCalendarOnly,
+    handleTodoDropConfirm,
+    isLinkedWarningOpen,
+    linkedEventRefs,
+    hideLinkedWarning,
+    scheduleAnywayFromWarning,
+    navigateToLinkedEvent,
   } = useTodoCalendarIntegration();
   const [formOpen, setFormOpen] = useState(false);
   const [selectedTime, setSelectedTime] = useState<
@@ -270,14 +276,22 @@ const DayView = () => {
       {/* Event Details Dialog */}
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
 
-      {/* Todo Calendar Integration Dialog */}
-      {console.log("🔔 Day View render - isTodoCalendarDialogOpen:", isTodoCalendarDialogOpen, "currentTodoData:", currentTodoData)}
-      <TodoCalendarDialog
-        open={isTodoCalendarDialogOpen && !!currentTodoData}
+      <TodoDropDialog
+        open={isTodoCalendarDialogOpen}
         onClose={hideTodoCalendarDialog}
-        todoTitle={currentTodoData?.text || ""}
-        onCreateBoth={handleCreateBoth}
-        onCreateCalendarOnly={handleCreateCalendarOnly}
+        todoTitle={currentTodoData?.text || ''}
+        date={currentDateTimeData?.date || null}
+        startTime={currentDateTimeData?.startTime || null}
+        onConfirm={handleTodoDropConfirm}
+      />
+
+      <TodoLinkedWarningDialog
+        open={isLinkedWarningOpen}
+        onClose={hideLinkedWarning}
+        todoTitle={currentTodoData?.text || ''}
+        linkedEventRefs={linkedEventRefs}
+        onNavigateToEvent={navigateToLinkedEvent}
+        onScheduleAnyway={scheduleAnywayFromWarning}
       />
     </>
   );

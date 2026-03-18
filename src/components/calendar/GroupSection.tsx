@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { springs } from '@/lib/animations';
+import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 
 // Icon mapping
 const GROUP_ICONS: Record<GroupIcon, React.ElementType> = {
@@ -75,7 +76,8 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   isDropTarget = false,
 }) => {
   const IconComponent = GROUP_ICONS[group.icon] || Folder;
-  const activeCount = calendars.filter(c => c.isActive).length;
+  const hiddenCalendarIds = useCalendarFilterStore((state) => state.hiddenCalendarIds);
+  const activeCount = calendars.filter(c => !hiddenCalendarIds.has(c.id)).length;
 
   return (
     <motion.div

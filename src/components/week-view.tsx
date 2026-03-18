@@ -21,7 +21,8 @@ import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
 import { toast } from "sonner";
 import { useTodos } from "@/hooks/use-todos";
-import TodoCalendarDialog from "@/components/calendar/integration/TodoCalendarDialog";
+import TodoDropDialog from "@/components/calendar/integration/TodoDropDialog";
+import TodoLinkedWarningDialog from "@/components/calendar/integration/TodoLinkedWarningDialog";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
 import { BulkActionToolbar } from "@/components/calendar";
@@ -34,6 +35,7 @@ import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { WeekAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { logCalendarPerf } from "@/lib/perf/calendar-perf";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -108,11 +110,16 @@ const WeekView = () => {
   const {
     isTodoCalendarDialogOpen,
     currentTodoData,
+    currentDateTimeData,
     showTodoCalendarDialog,
     hideTodoCalendarDialog,
-    handleCreateBoth,
-    handleCreateCalendarOnly,
-    handleCreateTodoFromEvent
+    handleTodoDropConfirm,
+    handleCreateTodoFromEvent,
+    isLinkedWarningOpen,
+    linkedEventRefs,
+    hideLinkedWarning,
+    scheduleAnywayFromWarning,
+    navigateToLinkedEvent,
   } = useTodoCalendarIntegration();
 
   // Handler for when a recurring event is dropped
@@ -266,18 +273,34 @@ const WeekView = () => {
     [displayEvents]
   );
 
-  const getEventsForDay = (day: dayjs.Dayjs) => {
-    const dayStr = day.format("YYYY-MM-DD");
-    return timedDisplayEvents.filter((event) => {
-      // Check both date field and startsAt
-      if (event.date === dayStr) return true;
-      if (event.startsAt) {
-        const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
-        return eventDate === dayStr;
+  const timedEventsByDay = useMemo(() => {
+    const startedAt = performance.now();
+    const grouped = new Map<string, CalendarEventType[]>();
+
+    timedDisplayEvents.forEach((event) => {
+      const dayKey = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
+      if (!dayKey) return;
+
+      const list = grouped.get(dayKey);
+      if (list) {
+        list.push(event);
+      } else {
+        grouped.set(dayKey, [event]);
       }
-      return false;
     });
-  };
+
+    logCalendarPerf(
+      'week-view-events-by-day',
+      'WeekView timedEventsByDay build',
+      performance.now() - startedAt,
+      {
+        timedEvents: timedDisplayEvents.length,
+        dayBuckets: grouped.size,
+      }
+    );
+
+    return grouped;
+  }, [timedDisplayEvents]);
 
   const handleTimeSlotClick = (day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
     setTodoData(null);
@@ -609,7 +632,7 @@ const WeekView = () => {
           <div className="px-4 py-2" style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}>
             <TimeColumn />
             {visibleWeekDays.map(({ currentDate }, index) => {
-              const dayEvents = getEventsForDay(currentDate);
+              const dayEvents = timedEventsByDay.get(currentDate.format("YYYY-MM-DD")) || [];
 
               return (
                 <DayColumn
@@ -664,15 +687,23 @@ const WeekView = () => {
 
       <EventDetails open={isEventSummaryOpen} onClose={closeEventSummary} />
 
-      {currentTodoData && (
-        <TodoCalendarDialog
-          open={isTodoCalendarDialogOpen}
-          onClose={hideTodoCalendarDialog}
-          todoTitle={currentTodoData.text}
-          onCreateBoth={handleCreateBoth}
-          onCreateCalendarOnly={handleCreateCalendarOnly}
-        />
-      )}
+      <TodoDropDialog
+        open={isTodoCalendarDialogOpen}
+        onClose={hideTodoCalendarDialog}
+        todoTitle={currentTodoData?.text || ''}
+        date={currentDateTimeData?.date || null}
+        startTime={currentDateTimeData?.startTime || null}
+        onConfirm={handleTodoDropConfirm}
+      />
+
+      <TodoLinkedWarningDialog
+        open={isLinkedWarningOpen}
+        onClose={hideLinkedWarning}
+        todoTitle={currentTodoData?.text || ''}
+        linkedEventRefs={linkedEventRefs}
+        onNavigateToEvent={navigateToLinkedEvent}
+        onScheduleAnyway={scheduleAnywayFromWarning}
+      />
 
       {/* Recurring Event Edit Dialog for drag-drop operations */}
       {recurringEventForDialog && (

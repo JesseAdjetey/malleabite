@@ -15,7 +15,7 @@ import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overla
 interface TimeSlotProps {
   hour: dayjs.Dayjs;
   selectedDate: dayjs.Dayjs;
-  events: any[];
+  hourEvents: CalendarEventType[];
   onTimeSlotClick: (hour: dayjs.Dayjs) => void;
   addEvent?: (event: CalendarEventType) => Promise<any>;
   openEventForm?: (todoData: any, hour: dayjs.Dayjs) => void;
@@ -28,7 +28,7 @@ interface TimeSlotProps {
 const TimeSlot: React.FC<TimeSlotProps> = ({
   hour,
   selectedDate,
-  events,
+  hourEvents,
   onTimeSlotClick,
   addEvent,
   openEventForm,
@@ -262,13 +262,6 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
     e.preventDefault();
     setIsDragOver(false);
   };
-
-  // Get events for this specific hour slot
-  const hourEvents = events.filter(event => {
-    const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
-    const eventHour = parseInt(timeInfo.start.split(':')[0], 10);
-    return eventHour === hour.hour();
-  });
 
   return (
     <div

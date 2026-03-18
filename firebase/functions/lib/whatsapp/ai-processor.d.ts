@@ -4,7 +4,9 @@ export interface AIResponse {
     error?: string;
 }
 export interface ProposedAction {
-    type: 'create_event' | 'update_event' | 'delete_event' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'create_alarm' | 'delete_alarm' | 'create_eisenhower' | 'create_goal';
+    type: 'create_event' | 'update_event' | 'delete_event' | 'create_todo' | 'complete_todo' | 'delete_todo' | 'create_alarm' | 'delete_alarm' | 'create_eisenhower' | 'create_goal' | 'create_group_meet';
+    participantEmails?: string[];
+    meetWindow?: 'today' | '3days' | 'week' | '2weeks';
     title?: string;
     start?: string;
     end?: string;

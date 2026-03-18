@@ -109,6 +109,93 @@ function buildMallyTools(): any[] {
     },
     {
       type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Adding that module for you.' },
+        { type: 'request-complete', content: 'Module added.' },
+      ],
+      function: {
+        name: 'add_module',
+        description: 'Add a module to a page. If pageName is omitted, adds to the current active page.',
+        parameters: {
+          type: 'object',
+          properties: {
+            moduleType: {
+              type: 'string',
+              enum: ['todo', 'pomodoro', 'alarms', 'reminders', 'eisenhower', 'invites'],
+              description: 'Type of module to add',
+            },
+            title: { type: 'string', description: 'Optional custom module title' },
+            pageName: { type: 'string', description: 'Target page title (optional)' },
+          },
+          required: ['moduleType'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Moving that module.' },
+        { type: 'request-complete', content: 'Module moved.' },
+      ],
+      function: {
+        name: 'move_module',
+        description: 'Move an existing module to a different page by moduleId or by module type/title.',
+        parameters: {
+          type: 'object',
+          properties: {
+            moduleId: { type: 'string', description: 'Preferred: unique module instance ID' },
+            moduleType: {
+              type: 'string',
+              enum: ['todo', 'pomodoro', 'alarms', 'reminders', 'eisenhower', 'invites'],
+              description: 'Fallback module type when moduleId is unknown',
+            },
+            title: { type: 'string', description: 'Optional module title for fallback matching' },
+            sourcePageName: { type: 'string', description: 'Optional source page title for fallback matching' },
+            targetPageName: { type: 'string', description: 'Target page title' },
+          },
+          required: ['targetPageName'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Creating that page.' },
+        { type: 'request-complete', content: 'Page created.' },
+      ],
+      function: {
+        name: 'create_page',
+        description: 'Create a new sidebar page.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Page title' },
+            icon: { type: 'string', description: 'Optional icon name' },
+          },
+          required: ['title'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      messages: [
+        { type: 'request-start', content: 'Switching pages.' },
+        { type: 'request-complete', content: 'Switched.' },
+      ],
+      function: {
+        name: 'switch_page',
+        description: 'Switch active sidebar page by title.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Page title to switch to' },
+          },
+          required: ['title'],
+        },
+      },
+    },
+    {
+      type: 'function',
       function: {
         name: 'create_alarm',
         description: 'Set an alarm at a specific time',

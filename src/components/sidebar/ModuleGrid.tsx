@@ -4,12 +4,27 @@ import { useSidebarStore } from '@/lib/store';
 import ModuleRenderer from './ModuleRenderer';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
 import { ModuleInstance } from '@/lib/stores/types';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+
+interface ModuleMoveTarget {
+  id: string;
+  title: string;
+}
 
 interface ModuleGridProps {
   modules: ModuleInstance[];
   onRemoveModule: (index: number) => void;
   onUpdateModuleTitle: (index: number, title: string) => void;
   onReorderModules: (fromIndex: number, toIndex: number) => void;
+  onMoveModule: (index: number, targetPageId: string) => void;
+  moveTargets: ModuleMoveTarget[];
   pageIndex: number;
 }
 
@@ -18,6 +33,8 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   onRemoveModule,
   onUpdateModuleTitle,
   onReorderModules,
+  onMoveModule,
+  moveTargets,
   pageIndex
 }) => {
   // Module dimensions - reduced width for better fit in sidebar
@@ -126,26 +143,45 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
         className={`${isTwoColumn ? 'grid grid-cols-2 gap-4 justify-items-center' : 'flex flex-col items-center'}`}
       >
         {modules.map((module, index) => (
-          <div
-            key={module.id}
-            draggable
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDrop={() => handleDrop(index)}
-            onDragEnd={handleDragEnd}
-            className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''} 
+          <ContextMenu key={module.id}>
+            <ContextMenuTrigger asChild>
+              <div
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={() => handleDrop(index)}
+                onDragEnd={handleDragEnd}
+                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''} 
                       ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
-          >
-            <ModuleRenderer
-              module={module}
-              index={index}
-              moduleWidth={MODULE_WIDTH}
-              onRemove={() => onRemoveModule(index)}
-              onTitleChange={(title) => onUpdateModuleTitle(index, title)}
-              onToggleMinimize={() => handleToggleMinimize(index)}
-              isDragging={draggedIndex === index}
-            />
-          </div>
+              >
+                <ModuleRenderer
+                  module={module}
+                  index={index}
+                  moduleWidth={MODULE_WIDTH}
+                  onRemove={() => onRemoveModule(index)}
+                  onTitleChange={(title) => onUpdateModuleTitle(index, title)}
+                  onToggleMinimize={() => handleToggleMinimize(index)}
+                  isDragging={draggedIndex === index}
+                />
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuLabel>{module.title}</ContextMenuLabel>
+              <ContextMenuSeparator />
+              {moveTargets.length > 0 ? (
+                moveTargets.map((target) => (
+                  <ContextMenuItem
+                    key={target.id}
+                    onSelect={() => onMoveModule(index, target.id)}
+                  >
+                    Move to {target.title}
+                  </ContextMenuItem>
+                ))
+              ) : (
+                <ContextMenuItem disabled>No other pages available</ContextMenuItem>
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
         ))}
       </div>
     </div>

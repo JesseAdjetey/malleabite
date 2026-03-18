@@ -2,6 +2,7 @@ export { stripeWebhook, createCheckoutSession, createPortalSession, } from './st
 export { synthesizeSpeech } from './tts';
 export { processSchedulingStream } from './scheduling';
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
+export { onGroupMeetUpdated, confirmGroupMeetSlot } from './group-meets';
 export { getGoogleCalendarAuthUrl, googleCalendarOAuthCallback, refreshGoogleCalendarAccessToken, listGoogleCalendarsForAccount, } from './google-calendar-oauth';
 /**
  * Process AI requests for intelligent scheduling with Gemini AI

@@ -64,14 +64,20 @@ export function useCalendarPreferences(): UseCalendarPreferencesReturn {
     const prefsRef = doc(db, `users/${user.uid}/calendarPreferences`, 'settings');
 
     const unsub = onSnapshot(prefsRef, (snapshot) => {
+      const pending = pendingUpdatesRef.current;
       if (snapshot.exists()) {
         setPreferences({
           userId: user.uid,
           ...snapshot.data(),
+          ...pending,
         } as CalendarPreferences);
       } else {
         // No preferences yet - will be created on first interaction
-        setPreferences(null);
+        if (Object.keys(pending).length > 0) {
+          setPreferences({ userId: user.uid, ...pending } as CalendarPreferences);
+        } else {
+          setPreferences(null);
+        }
       }
       setLoading(false);
     }, (err) => {
@@ -157,8 +163,19 @@ export function useCalendarPreferences(): UseCalendarPreferencesReturn {
   }, [preferences?.visibleCalendars, optimisticUpdate]);
 
   const setVisibleCalendars = useCallback(async (calendarIds: string[]) => {
-    optimisticUpdate({ visibleCalendars: calendarIds });
-  }, [optimisticUpdate]);
+    if (!user?.uid) return;
+
+    const updates = { visibleCalendars: calendarIds };
+    // Apply immediately for responsive UI.
+    setPreferences(prev =>
+      prev
+        ? { ...prev, ...updates }
+        : { userId: user.uid, ...updates } as CalendarPreferences
+    );
+
+    // Persist via debounced path to avoid out-of-order writes during rapid toggles.
+    debouncedSave(updates);
+  }, [user?.uid, debouncedSave]);
 
   // ─── Expanded Groups ───────────────────────────────────────────────────
 

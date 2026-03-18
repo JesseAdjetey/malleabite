@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { springs } from '@/lib/animations';
 import { useDraggable } from '@dnd-kit/core';
+import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 
 interface CalendarItemProps {
   calendar: ConnectedCalendar;
@@ -34,6 +35,7 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
     id: `calendar:${calendar.id}`,
     data: { type: 'calendar', calendar },
   });
+  const isVisible = useCalendarFilterStore((state) => state.isCalendarVisible(calendar.id));
 
   const sourceLabel = CALENDAR_SOURCES[calendar.source]?.label || calendar.source;
   const isPersonal = calendar.id === PERSONAL_CALENDAR_ID;
@@ -67,20 +69,20 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
 
       {/* Checkbox Toggle */}
       <button
-        onClick={() => onToggle(calendar.id, !calendar.isActive)}
+        onClick={() => onToggle(calendar.id, !isVisible)}
         className={cn(
           'w-4 h-4 rounded-[4px] border-2 flex items-center justify-center flex-shrink-0',
           'transition-all duration-200',
-          calendar.isActive
+          isVisible
             ? 'border-transparent'
             : 'border-muted-foreground/30 bg-transparent'
         )}
         style={{
-          backgroundColor: calendar.isActive ? calendar.color : undefined,
+          backgroundColor: isVisible ? calendar.color : undefined,
         }}
         aria-label={`Toggle ${calendar.name} visibility`}
       >
-        {calendar.isActive && (
+        {isVisible && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -95,7 +97,7 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
       <div className="flex-1 min-w-0">
         <div className={cn(
           'text-[13px] font-medium truncate',
-          calendar.isActive
+          isVisible
             ? 'text-foreground'
             : 'text-muted-foreground'
         )}>

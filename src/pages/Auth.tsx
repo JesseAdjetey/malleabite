@@ -222,6 +222,9 @@ const Auth = () => {
           {/* Title Section */}
           <div className="w-full px-4 text-center">
             <TypewriterText />
+            <p className="mt-6 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed font-sans">
+              Malleabite is a smart calendar and task management application designed to organize your schedule. By connecting your Google Calendar, Malleabite allows you to view, create, and manage your Google Calendar events alongside your local tasks in a single unified interface.
+            </p>
           </div>
 
           {/* Features Spread */}

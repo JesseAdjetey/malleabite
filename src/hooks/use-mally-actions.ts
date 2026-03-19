@@ -43,6 +43,7 @@ import { useVideoConferencing } from "@/hooks/use-video-conferencing";
 import { useEmailNotifications } from "@/hooks/use-email-notifications";
 import { useAuth } from "@/contexts/AuthContext.unified";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
+import { useGoogleSyncBridgeContext } from "@/contexts/GoogleSyncBridgeContext";
 import * as calendarService from "@/lib/services/calendarService";
 import { CalendarTemplate, CalendarTemplateEvent } from "@/types/calendar";
 
@@ -50,6 +51,7 @@ export function useMallyActions() {
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
   const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
+  const bridge = useGoogleSyncBridgeContext();
 
   // AI Memory
   const { memory: userMemory } = useUserMemory();
@@ -389,15 +391,26 @@ export function useMallyActions() {
           const result = await addEvent(formattedEvent as any);
           if (!result?.success) return false;
 
-          // Auto-sync to Google Calendar if enabled
-          if (syncEnabled && (formattedEvent as any).source !== 'google') {
+          // Sync to Google Calendar via the bridge (respects which specific Google calendar was chosen)
+          const eventWithId = { ...formattedEvent, id: result.data?.id || formattedEvent.id } as any;
+          if (bridge) {
             try {
-              const googleId = await pushEventToGoogle({ ...formattedEvent, id: result.data?.id || formattedEvent.id });
+              const googleId = await bridge.pushCreateToGoogle(eventWithId);
               if (googleId && result.data?.id) {
                 await updateEvent({ ...formattedEvent, id: result.data.id, googleEventId: googleId } as any);
               }
             } catch (err) {
               logger.warn('MallyActions', 'Google Calendar sync failed', { error: err });
+            }
+          } else if (syncEnabled && (formattedEvent as any).source !== 'google') {
+            // Fallback if bridge context is not mounted
+            try {
+              const googleId = await pushEventToGoogle(eventWithId);
+              if (googleId && result.data?.id) {
+                await updateEvent({ ...formattedEvent, id: result.data.id, googleEventId: googleId } as any);
+              }
+            } catch (err) {
+              logger.warn('MallyActions', 'Google Calendar sync failed (fallback)', { error: err });
             }
           }
 
@@ -1962,7 +1975,7 @@ export function useMallyActions() {
     calendarAccounts, toggleVisibility, setAllVisible,
     resolvePageRef, resolveModuleRef, resolveModuleIndex, ensureModuleVisible,
     resolveTargetCalendar, resolveTargetList,
-    syncEnabled, pushEventToGoogle,
+    syncEnabled, pushEventToGoogle, bridge,
     // New deps
     bulkDelete, bulkUpdateColor, bulkReschedule, bulkDuplicate,
     enableBulkMode, disableBulkMode, toggleSelection, selectAll, deselectAll,

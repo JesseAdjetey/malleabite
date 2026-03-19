@@ -194,8 +194,7 @@ const Auth = () => {
 
           {/* Center: Logo */}
           <div className="flex-1 flex justify-center">
-            <img src="/logo-
-            .svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
+            <img src="/logo-quadrant.svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
           </div>
 
           {/* Right: Sign in Pill */}
@@ -223,6 +222,24 @@ const Auth = () => {
           {/* Title Section */}
           <div className="w-full px-4 text-center">
             <TypewriterText />
+            
+            <p className="mt-6 text-base md:text-lg text-foreground/90 max-w-2xl mx-auto leading-relaxed font-sans tracking-tight">
+              Malleabite is a unified smart planner that combines your daily to-do lists, routines, and external schedules into a single customizable workspace.
+            </p>
+
+            <div className="mt-8 relative max-w-2xl mx-auto p-4 md:p-5 rounded-2xl bg-card border border-border/60 shadow-sm text-left flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-5">
+              <div className="p-2 md:p-3 bg-muted rounded-xl shrink-0">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-6 h-6 md:w-8 md:h-8 object-contain" />
+              </div>
+              <div className="text-center md:text-left">
+                <h4 className="font-semibold text-foreground text-sm md:text-base mb-1.5 flex items-center justify-center md:justify-start gap-2">
+                  Google Calendar Data Access
+                </h4>
+                <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                  <strong className="text-foreground font-medium">Why we request permissions:</strong> Malleabite requires read & write access to your Google Calendar. This allows the app to securely sync your external schedule so you can actively view, create, edit, and delete Google Calendar events seamlessly within your Malleabite workspace.
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Features Spread */}
@@ -440,8 +457,8 @@ const Auth = () => {
 
         {/* Minimal Footer */}
         <footer className="mt-auto pt-16 w-full text-center flex items-center justify-center gap-6 text-xs text-muted-foreground">
-          <a href="/legal/privacy" className="hover:text-foreground transition-colors">Privacy</a>
-          <a href="/legal/terms" className="hover:text-foreground transition-colors">Terms</a>
+          <a href="https://malleabite.com/legal/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+          <a href="https://malleabite.com/legal/terms" className="hover:text-foreground transition-colors">Terms of Service</a>
         </footer>
       </div>
     </GridBackground>

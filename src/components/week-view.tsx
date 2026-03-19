@@ -702,6 +702,31 @@ const WeekView = () => {
                   onAddAlarm={handleAddAlarmToEvent}
                   onAddTodo={handleAddTodoFromEvent}
                   onEventResize={async (event, newStartsAt, newEndsAt) => {
+                    const isRecurringInstance =
+                      event.isRecurring ||
+                      event.recurrenceParentId ||
+                      (event.id && !event.id.startsWith('synced_') && event.id.includes('_'));
+
+                    if (isRecurringInstance) {
+                      const parentId = event.recurrenceParentId ||
+                        (event.id.includes('_') ? event.id.split('_')[0] : event.id);
+                      const originalDate = event.id.includes('_')
+                        ? event.id.split('_')[1]
+                        : dayjs(event.startsAt).format('YYYY-MM-DD');
+                      const newEvent: CalendarEventType = {
+                        id: nanoid(),
+                        title: event.title,
+                        date: dayjs(newStartsAt).format('YYYY-MM-DD'),
+                        description: event.description || '',
+                        color: event.color || 'bg-purple-500/70',
+                        startsAt: newStartsAt,
+                        endsAt: newEndsAt,
+                        isRecurring: false,
+                      };
+                      handleRecurringEventDrop({ isRecurring: true, parentId, originalDate, newEvent });
+                      return;
+                    }
+
                     await updateEvent({ ...event, startsAt: newStartsAt, endsAt: newEndsAt });
                   }}
                   onShiftClickEvent={(eventId) => {

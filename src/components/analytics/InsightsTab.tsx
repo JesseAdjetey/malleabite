@@ -6,10 +6,6 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
-  Shield,
-  Target,
-  Zap,
-  AlertTriangle,
 } from 'lucide-react';
 import { ProductivityMetrics, TimeDistribution } from '@/hooks/use-analytics-data';
 
@@ -53,25 +49,6 @@ export function InsightsTab({ metrics, timeDistribution }: InsightsTabProps) {
       });
     }
 
-    // Focus vs meeting ratio
-    const focusMinutes = thisWeek.dailyBreakdown.reduce((s, d) => s + d.focusTimeMinutes, 0);
-    const meetingMinutes = thisWeek.dailyBreakdown.reduce((s, d) => s + d.meetingTimeMinutes, 0);
-    if (meetingMinutes > focusMinutes && focusMinutes + meetingMinutes > 0) {
-      result.push({
-        icon: <AlertTriangle className="h-5 w-5" />,
-        title: 'Meetings outweigh focus time',
-        description: `You spent ${Math.round(meetingMinutes / 60)}h in meetings vs ${Math.round(focusMinutes / 60)}h of focus time. Consider blocking off dedicated focus hours.`,
-        type: 'warning',
-      });
-    } else if (focusMinutes > meetingMinutes * 2 && focusMinutes > 0) {
-      result.push({
-        icon: <Shield className="h-5 w-5" />,
-        title: 'Great focus-to-meeting ratio',
-        description: `You maintained a strong focus-to-meeting ratio this week. Keep protecting your deep work time.`,
-        type: 'positive',
-      });
-    }
-
     // Trend insights
     if (trends.eventsChange > 20) {
       result.push({
@@ -86,22 +63,6 @@ export function InsightsTab({ metrics, timeDistribution }: InsightsTabProps) {
         title: 'Lighter week than usual',
         description: `Activity dropped by ${Math.abs(trends.eventsChange).toFixed(0)}% from last week. This could be a good time for planning and reflection.`,
         type: 'neutral',
-      });
-    }
-
-    if (trends.focusTimeChange > 15) {
-      result.push({
-        icon: <Zap className="h-5 w-5" />,
-        title: 'Focus time is trending up',
-        description: `You increased focus time by ${trends.focusTimeChange.toFixed(0)}% this week. Great momentum for deep work.`,
-        type: 'positive',
-      });
-    } else if (trends.focusTimeChange < -15) {
-      result.push({
-        icon: <Target className="h-5 w-5" />,
-        title: 'Focus time dropped',
-        description: `Focus time decreased by ${Math.abs(trends.focusTimeChange).toFixed(0)}%. Try blocking uninterrupted time slots this week.`,
-        type: 'warning',
       });
     }
 

@@ -51,6 +51,18 @@ interface ResizeHandlers {
   };
 }
 
+const RESET_STATE: ResizeState = {
+  isResizing: false,
+  direction: null,
+  eventId: null,
+  originalStartY: 0,
+  originalEndY: 0,
+  startY: 0,
+  currentY: 0,
+  startTime: null,
+  endTime: null,
+};
+
 export function useEventResize(options: UseEventResizeOptions = {}): [ResizeState, ResizeHandlers] {
   const {
     minutesPerPixel = 0.5,
@@ -63,20 +75,18 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
     onResizeCancel,
   } = options;
 
-  const [state, setState] = useState<ResizeState>({
-    isResizing: false,
-    direction: null,
-    eventId: null,
-    originalStartY: 0,
-    originalEndY: 0,
-    startY: 0,
-    currentY: 0,
-    startTime: null,
-    endTime: null,
-  });
-
+  const [state, setState] = useState<ResizeState>(RESET_STATE);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Keep latest callbacks in refs so event listeners never go stale.
+  // This means the effect only needs to depend on `isResizing`, not the callbacks.
+  const onResizeRef = useRef(onResize);
+  const onResizeEndRef = useRef(onResizeEnd);
+  const onResizeCancelRef = useRef(onResizeCancel);
+  onResizeRef.current = onResize;
+  onResizeEndRef.current = onResizeEnd;
+  onResizeCancelRef.current = onResizeCancel;
 
   // Helper to snap time to interval
   const snapToGrid = useCallback((date: Date): Date => {
@@ -85,7 +95,7 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
     return dayjs(date).minute(snappedMinutes).second(0).toDate();
   }, [snapInterval]);
 
-  // Calculate new times based on mouse position
+  // Calculate new times based on pixel delta
   const calculateNewTimes = useCallback((
     deltaY: number,
     direction: ResizeDirection,
@@ -97,27 +107,17 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
     let newEnd = originalEnd;
 
     if (direction === 'top') {
-      // Resizing from top changes start time
-      newStart = dayjs(originalStart).add(deltaMinutes, 'minute').toDate();
-      newStart = snapToGrid(newStart);
-      
-      // Ensure minimum duration
+      newStart = snapToGrid(dayjs(originalStart).add(deltaMinutes, 'minute').toDate());
       const duration = dayjs(newEnd).diff(dayjs(newStart), 'minute');
       if (duration < minDuration) {
         newStart = dayjs(newEnd).subtract(minDuration, 'minute').toDate();
       }
     } else if (direction === 'bottom') {
-      // Resizing from bottom changes end time
-      newEnd = dayjs(originalEnd).add(deltaMinutes, 'minute').toDate();
-      newEnd = snapToGrid(newEnd);
-      
-      // Ensure minimum duration
+      newEnd = snapToGrid(dayjs(originalEnd).add(deltaMinutes, 'minute').toDate());
       const duration = dayjs(newEnd).diff(dayjs(newStart), 'minute');
       if (duration < minDuration) {
         newEnd = dayjs(newStart).add(minDuration, 'minute').toDate();
       }
-      
-      // Ensure maximum duration
       if (duration > maxDuration) {
         newEnd = dayjs(newStart).add(maxDuration, 'minute').toDate();
       }
@@ -125,6 +125,87 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
 
     return { newStart, newEnd };
   }, [minutesPerPixel, snapToGrid, minDuration, maxDuration]);
+
+  // Keep calculateNewTimes in a ref so it can be called from stable handlers
+  const calculateNewTimesRef = useRef(calculateNewTimes);
+  calculateNewTimesRef.current = calculateNewTimes;
+
+  // Stable handler refs — these never change identity, so the effect only needs
+  // [state.isResizing] as a dependency. No risk of missing a mouseup.
+  const stableMoveHandler = useRef((e: MouseEvent | TouchEvent) => {
+    if (!stateRef.current.isResizing) return;
+
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+    const deltaY = clientY - stateRef.current.startY;
+
+    const { newStart, newEnd } = calculateNewTimesRef.current(
+      deltaY,
+      stateRef.current.direction!,
+      stateRef.current.startTime!,
+      stateRef.current.endTime!
+    );
+
+    setState(prev => ({ ...prev, currentY: clientY }));
+    onResizeRef.current?.(stateRef.current.eventId!, newStart, newEnd);
+  });
+
+  const stableEndHandler = useRef(async () => {
+    if (!stateRef.current.isResizing) return;
+
+    const { currentY, startY, direction, startTime, endTime, eventId } = stateRef.current;
+    const deltaY = currentY - startY;
+    const { newStart, newEnd } = calculateNewTimesRef.current(
+      deltaY,
+      direction!,
+      startTime!,
+      endTime!
+    );
+
+    // Reset state SYNCHRONOUSLY before the async callback so listeners are
+    // removed immediately and can't fire again while awaiting.
+    setState(RESET_STATE);
+
+    const success = await onResizeEndRef.current?.(eventId!, newStart, newEnd);
+    if (success === false) {
+      onResizeCancelRef.current?.(eventId!);
+    }
+  });
+
+  const stableKeyHandler = useRef((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && stateRef.current.isResizing) {
+      const eventId = stateRef.current.eventId!;
+      setState(RESET_STATE);
+      onResizeCancelRef.current?.(eventId);
+    }
+  });
+
+  // Register / deregister global listeners only when isResizing changes.
+  // Because we use stable refs above, no other deps are needed.
+  useEffect(() => {
+    if (!state.isResizing) return;
+
+    const onMove = stableMoveHandler.current;
+    const onEnd = stableEndHandler.current;
+    const onKey = stableKeyHandler.current;
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onEnd);
+    window.addEventListener('keydown', onKey);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('keydown', onKey);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [state.isResizing]); // ← only this; stable refs handle everything else
 
   // Start resize operation
   const handleResizeStart = useCallback((
@@ -154,120 +235,16 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
     onResizeStart?.(eventId, direction);
   }, [onResizeStart]);
 
-  // Handle mouse/touch move
-  const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!stateRef.current.isResizing) return;
-
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const deltaY = clientY - stateRef.current.startY;
-
-    const { newStart, newEnd } = calculateNewTimes(
-      deltaY,
-      stateRef.current.direction!,
-      stateRef.current.startTime!,
-      stateRef.current.endTime!
-    );
-
-    setState(prev => ({
-      ...prev,
-      currentY: clientY,
-    }));
-
-    onResize?.(stateRef.current.eventId!, newStart, newEnd);
-  }, [calculateNewTimes, onResize]);
-
-  // Handle mouse/touch end
-  const handleEnd = useCallback(async () => {
-    if (!stateRef.current.isResizing) return;
-
-    const deltaY = stateRef.current.currentY - stateRef.current.startY;
-    const { newStart, newEnd } = calculateNewTimes(
-      deltaY,
-      stateRef.current.direction!,
-      stateRef.current.startTime!,
-      stateRef.current.endTime!
-    );
-
-    const success = await onResizeEnd?.(stateRef.current.eventId!, newStart, newEnd);
-
-    if (success === false) {
-      onResizeCancel?.(stateRef.current.eventId!);
-    }
-
-    setState({
-      isResizing: false,
-      direction: null,
-      eventId: null,
-      originalStartY: 0,
-      originalEndY: 0,
-      startY: 0,
-      currentY: 0,
-      startTime: null,
-      endTime: null,
-    });
-  }, [calculateNewTimes, onResizeEnd, onResizeCancel]);
-
-  // Handle escape key to cancel
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && stateRef.current.isResizing) {
-      onResizeCancel?.(stateRef.current.eventId!);
-      setState({
-        isResizing: false,
-        direction: null,
-        eventId: null,
-        originalStartY: 0,
-        originalEndY: 0,
-        startY: 0,
-        currentY: 0,
-        startTime: null,
-        endTime: null,
-      });
-    }
-  }, [onResizeCancel]);
-
-  // Set up global event listeners
-  useEffect(() => {
-    if (state.isResizing) {
-      window.addEventListener('mousemove', handleMove);
-      window.addEventListener('mouseup', handleEnd);
-      window.addEventListener('touchmove', handleMove);
-      window.addEventListener('touchend', handleEnd);
-      window.addEventListener('keydown', handleKeyDown);
-      document.body.style.cursor = state.direction === 'top' || state.direction === 'bottom' 
-        ? 'ns-resize' 
-        : 'ew-resize';
-      document.body.style.userSelect = 'none';
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleMove);
-      window.removeEventListener('touchend', handleEnd);
-      window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [state.isResizing, state.direction, handleMove, handleEnd, handleKeyDown]);
-
-  // Generate props for resize handles
+  // Generate props for resize handles (convenience helper, not used in current impl)
   const getResizeHandleProps = useCallback((
     eventId: string,
     direction: ResizeDirection
   ) => {
-    const isVertical = direction === 'top' || direction === 'bottom';
-    const cursor = isVertical ? 'ns-resize' : 'ew-resize';
-
+    const cursor = direction === 'top' || direction === 'bottom' ? 'ns-resize' : 'ew-resize';
     return {
-      onMouseDown: (e: React.MouseEvent) => {
-        // Will be called with start/end times from the parent component
-      },
-      onTouchStart: (e: React.TouchEvent) => {
-        // Will be called with start/end times from the parent component
-      },
-      style: {
-        cursor,
-      } as React.CSSProperties,
+      onMouseDown: (_e: React.MouseEvent) => {},
+      onTouchStart: (_e: React.TouchEvent) => {},
+      style: { cursor } as React.CSSProperties,
       className: `resize-handle resize-handle-${direction}`,
     };
   }, []);
@@ -275,7 +252,6 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
   return [state, { handleResizeStart, getResizeHandleProps }];
 }
 
-// Helper component styles for resize handles
 export const resizeHandleStyles = `
 .resize-handle {
   position: absolute;
@@ -290,63 +266,27 @@ export const resizeHandleStyles = `
 }
 
 .resize-handle-top {
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 6px;
   cursor: ns-resize;
 }
 
 .resize-handle-bottom {
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   height: 6px;
   cursor: ns-resize;
 }
 
 .resize-handle-left {
-  left: 0;
-  top: 0;
-  bottom: 0;
+  left: 0; top: 0; bottom: 0;
   width: 6px;
   cursor: ew-resize;
 }
 
 .resize-handle-right {
-  right: 0;
-  top: 0;
-  bottom: 0;
+  right: 0; top: 0; bottom: 0;
   width: 6px;
   cursor: ew-resize;
-}
-
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  background: currentColor;
-  border-radius: 2px;
-  opacity: 0.6;
-}
-
-.resize-handle-top::before,
-.resize-handle-bottom::before {
-  left: 50%;
-  transform: translateX(-50%);
-  width: 32px;
-  height: 4px;
-  top: 50%;
-  margin-top: -2px;
-}
-
-.resize-handle-left::before,
-.resize-handle-right::before {
-  top: 50%;
-  transform: translateY(-50%);
-  height: 32px;
-  width: 4px;
-  left: 50%;
-  margin-left: -2px;
 }
 `;
 

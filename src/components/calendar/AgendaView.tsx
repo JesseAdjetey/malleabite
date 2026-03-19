@@ -320,16 +320,6 @@ function AgendaEventCard({ event, onClick }: AgendaEventCardProps) {
               Recurring
             </Badge>
           )}
-          {event.eventType === 'focusTime' && (
-            <Badge variant="secondary" className="text-[10px] bg-purple-500/20 text-purple-300">
-              Focus Time
-            </Badge>
-          )}
-          {event.eventType === 'outOfOffice' && (
-            <Badge variant="secondary" className="text-[10px] bg-orange-500/20 text-orange-300">
-              Out of Office
-            </Badge>
-          )}
           {event.visibility === 'private' && (
             <Badge variant="secondary" className="text-[10px]">
               Private

@@ -132,12 +132,9 @@ export type CalendarEventType = {
   createdBy?: string;
   etag?: string; // For sync conflict detection
 
-  // Focus time / Out of office
-  eventType?: 'default' | 'focusTime' | 'outOfOffice' | 'workingLocation';
-  focusTimeDeclineMessage?: string;
-
   // Google Calendar 2-way sync
-  googleEventId?: string;  // Google Calendar event ID for sync correlation
+  googleEventId?: string;   // Google Calendar event ID (may be an instance ID for recurring events)
+  googleSeriesId?: string;  // Google Calendar series/parent ID (present on recurring instances)
   source?: 'malleabite' | 'google';  // Where the event originated
 
   // Archiving support

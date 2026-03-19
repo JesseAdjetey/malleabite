@@ -58,7 +58,6 @@ export function TrendsTab({ metrics }: TrendsTabProps) {
       const d = metrics.thisWeek.dailyBreakdown[i];
       return {
         day,
-        focus: d?.focusTimeMinutes || 0,
         meeting: d?.meetingTimeMinutes || 0,
       };
     });
@@ -70,10 +69,9 @@ export function TrendsTab({ metrics }: TrendsTabProps) {
   return (
     <div className="space-y-4">
       {/* Trend Badges */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TrendBadge value={metrics.trends.eventsChange} label="Events" />
         <TrendBadge value={metrics.trends.productivityChange} label="Productivity" />
-        <TrendBadge value={metrics.trends.focusTimeChange} label="Focus Time" />
       </div>
 
       {/* Week over Week Comparison */}
@@ -117,7 +115,6 @@ export function TrendsTab({ metrics }: TrendsTabProps) {
                 formatter={(value: number) => [`${value} min`]}
               />
               <Legend />
-              <Area type="monotone" dataKey="focus" stackId="1" fill="#6366f1" fillOpacity={0.3} stroke="#6366f1" name="Focus" />
               <Area type="monotone" dataKey="meeting" stackId="1" fill="#f59e0b" fillOpacity={0.3} stroke="#f59e0b" name="Meeting" />
             </AreaChart>
           </ResponsiveContainer>

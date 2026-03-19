@@ -1927,23 +1927,48 @@ RULES:
             className={cn(
               isMobile
                 ? "fixed left-4 z-50 h-10 w-10 rounded-xl flex items-center justify-center backdrop-blur-2xl border bg-purple-500/20 border-purple-400/30 dark:bg-white/10 dark:border-white/15 hover:bg-purple-500/30 dark:hover:bg-white/20 transition-colors"
-                : "fixed left-1/2 -translate-x-1/2 z-50 px-8 py-3 rounded-full cursor-grab active:cursor-grabbing backdrop-blur-2xl border bg-purple-500/30 border-purple-400/40 dark:bg-white/10 dark:border-white/20 hover:bg-purple-500/40 dark:hover:bg-white/20 transition-colors flex items-center gap-2",
+                : "fixed left-1/2 -translate-x-1/2 z-50 px-5 py-1.5 rounded-2xl cursor-grab active:cursor-grabbing backdrop-blur-2xl border bg-purple-500/25 border-purple-400/40 dark:bg-white/10 dark:border-white/20 hover:bg-purple-500/35 dark:hover:bg-white/20 transition-colors flex items-center justify-center overflow-hidden mally-pill-glow",
             )}
             style={{
               bottom: isMobile ? 'calc(56px + env(safe-area-inset-bottom, 0px))' : '1.5rem',
               boxShadow: isMobile
                 ? '0 4px 16px rgba(139, 92, 246, 0.25), inset 0 1px 1px rgba(255,255,255,0.2)'
-                : '0 8px 32px rgba(139, 92, 246, 0.3), inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.15)',
+                : undefined,
               touchAction: 'none',
             }}
           >
             {isMobile ? (
-              <Sparkles size={18} className="text-purple-600 dark:text-purple-400" />
+              <img src="/logo-quadrant.svg" alt="" className="h-5 w-5 object-contain select-none" draggable={false} />
             ) : (
-              <span
-                className="text-purple-700 dark:text-purple-400 font-extrabold text-xl tracking-wide select-none"
-                style={{ fontFamily: "'Courier New', Courier, monospace" }}
-              >Mally</span>
+              <>
+                {/* Floating logo icon */}
+                <motion.img
+                  src="/logo-quadrant.svg"
+                  alt=""
+                  className="h-9 w-9 object-contain select-none relative z-10"
+                  animate={{ y: [0, -2, 0] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                  draggable={false}
+                />
+
+                {/* Shimmer sweep — always running, signals "alive" */}
+                <span className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden" aria-hidden>
+                  <motion.span
+                    className="absolute top-0 bottom-0 w-[50%]"
+                    style={{
+                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)',
+                      skewX: '-15deg',
+                    }}
+                    animate={{ left: ['-55%', '130%'] }}
+                    transition={{
+                      duration: 1.0,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      repeatDelay: 2.5,
+                    }}
+                  />
+                </span>
+              </>
             )}
           </motion.button>
         )}

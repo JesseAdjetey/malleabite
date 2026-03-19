@@ -20,7 +20,6 @@ export function calculateMetrics(events: CalendarEventType[]): AnalyticsMetrics 
       completionRate: 0,
       averageEventDuration: 0,
       pomodoroSessions: 0,
-      focusTime: 0,
       meetingTime: 0,
       productivityScore: 0,
     };
@@ -32,7 +31,6 @@ export function calculateMetrics(events: CalendarEventType[]): AnalyticsMetrics 
 
   // Calculate time metrics
   let totalTime = 0;
-  let focusTime = 0;
   let meetingTime = 0;
   let pomodoroSessions = 0;
   const eventsByCategory: Record<string, number> = {};
@@ -55,16 +53,14 @@ export function calculateMetrics(events: CalendarEventType[]): AnalyticsMetrics 
     const color = event.color || 'blue';
     eventsByColor[color] = (eventsByColor[color] || 0) + 1;
 
-    // Focus vs Meeting time (heuristic based on title)
+    // Meeting time (heuristic based on title)
     const title = event.title.toLowerCase();
-    const isMeeting = title.includes('meeting') || 
-                      title.includes('call') || 
+    const isMeeting = title.includes('meeting') ||
+                      title.includes('call') ||
                       title.includes('interview');
-    
+
     if (isMeeting) {
       meetingTime += duration;
-    } else {
-      focusTime += duration;
     }
 
     // Pomodoro detection (25-minute sessions)
@@ -78,7 +74,6 @@ export function calculateMetrics(events: CalendarEventType[]): AnalyticsMetrics 
   // Calculate productivity score (0-100)
   const productivityScore = calculateProductivityScore({
     completionRate,
-    focusTime,
     meetingTime,
     totalTime,
     averageEventDuration,
@@ -95,7 +90,6 @@ export function calculateMetrics(events: CalendarEventType[]): AnalyticsMetrics 
     completionRate,
     averageEventDuration,
     pomodoroSessions,
-    focusTime,
     meetingTime,
     productivityScore,
   };
@@ -197,7 +191,6 @@ export function calculateWeeklyMetrics(
  */
 function calculateProductivityScore(factors: {
   completionRate: number;
-  focusTime: number;
   meetingTime: number;
   totalTime: number;
   averageEventDuration: number;
@@ -208,10 +201,10 @@ function calculateProductivityScore(factors: {
   // Factor 1: Completion rate (0-30 points)
   score += (factors.completionRate / 100) * 30;
 
-  // Factor 2: Focus vs Meeting time ratio (0-25 points)
+  // Factor 2: Meeting time ratio (0-25 points) — fewer meetings relative to total = higher score
   if (factors.totalTime > 0) {
-    const focusRatio = factors.focusTime / factors.totalTime;
-    score += focusRatio * 25;
+    const meetingRatio = factors.meetingTime / factors.totalTime;
+    score += (1 - meetingRatio) * 25;
   }
 
   // Factor 3: Optimal event duration (0-20 points)
@@ -227,12 +220,12 @@ function calculateProductivityScore(factors: {
   const pomodoroScore = Math.min(15, factors.pomodoroSessions * 2);
   score += pomodoroScore;
 
-  // Factor 5: Total productive time (0-10 points)
-  // Optimal: 4-6 hours of deep work per day
+  // Factor 5: Total time (0-10 points)
+  // Optimal: 4-6 hours per day
   const optimalDailyMinutes = 5 * 60; // 5 hours
   const timeScore = Math.min(
     10,
-    (factors.focusTime / optimalDailyMinutes) * 10
+    (factors.totalTime / optimalDailyMinutes) * 10
   );
   score += timeScore;
 
@@ -309,7 +302,6 @@ export function exportToCSV(metrics: AnalyticsMetrics): string {
     ['Completion Rate', `${metrics.completionRate.toFixed(1)}%`],
     ['Total Time (hours)', (metrics.totalTime / 60).toFixed(1)],
     ['Average Event Duration (minutes)', metrics.averageEventDuration.toFixed(0)],
-    ['Focus Time (hours)', (metrics.focusTime / 60).toFixed(1)],
     ['Meeting Time (hours)', (metrics.meetingTime / 60).toFixed(1)],
     ['Pomodoro Sessions', metrics.pomodoroSessions.toString()],
     ['Productivity Score', metrics.productivityScore.toString()],

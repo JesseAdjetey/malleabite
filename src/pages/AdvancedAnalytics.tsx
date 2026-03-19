@@ -78,7 +78,6 @@ export default function AdvancedAnalytics() {
         ['Completion Rate', exportData.completionRate],
         ['Events Change', exportData.trends.eventsChange.toString() + '%'],
         ['Productivity Change', exportData.trends.productivityChange.toString() + '%'],
-        ['Focus Time Change', exportData.trends.focusTimeChange.toString() + '%'],
       ];
       content = rows.map((row) => row.join(',')).join('\n');
       filename = `malleabite-analytics-${timestamp}.csv`;
@@ -220,24 +219,6 @@ export default function AdvancedAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Focus Time */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              Focus Time
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {(metrics.thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0) / 60).toFixed(1)}h
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {metrics.trends.focusTimeChange >= 0 ? '+' : ''}
-              {metrics.trends.focusTimeChange.toFixed(1)}% from last week
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Main Content Tabs */}

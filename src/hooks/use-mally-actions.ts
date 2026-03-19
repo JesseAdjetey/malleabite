@@ -88,7 +88,7 @@ export function useMallyActions() {
   // Pomodoro
   const {
     startTimer, pauseTimer, resetTimer,
-    setFocusTime, setBreakTime, setFocusTarget,
+    setWorkDuration, setBreakTime, setFocusTarget,
     getInstance: getPomodoroInstance,
   } = usePomodoroStore();
 
@@ -697,7 +697,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_timer': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.focusTime) setFocusTime(data.focusTime);
+          if (data.workDuration) setWorkDuration(data.workDuration);
           if (data.breakTime) setBreakTime(data.breakTime);
           toast.success('Timer settings updated');
           return true;
@@ -1391,7 +1391,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_settings': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.focusTime) setFocusTime(data.focusTime);
+          if (data.workDuration) setWorkDuration(data.workDuration);
           if (data.breakTime) setBreakTime(data.breakTime);
           if (data.focusTarget) setFocusTarget(data.focusTarget);
           toast.success('Pomodoro settings updated');
@@ -1956,7 +1956,7 @@ export function useMallyActions() {
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
     addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
     addReminder, updateReminder, deleteReminder, toggleReminderActive,
-    startTimer, pauseTimer, resetTimer, setFocusTime, setBreakTime, setFocusTarget,
+    startTimer, pauseTimer, resetTimer, setWorkDuration, setBreakTime, setFocusTarget,
     templates, applyTemplate, useTemplate, createTemplate, deleteTemplate,
     sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,

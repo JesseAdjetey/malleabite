@@ -24,6 +24,7 @@ interface GoogleCalendarEvent {
   start: { dateTime?: string; date?: string; timeZone?: string };
   end: { dateTime?: string; date?: string; timeZone?: string };
   colorId?: string;
+  recurringEventId?: string; // Present on recurring event instances — points to the series event ID
 }
 
 interface GoogleCalendarList {

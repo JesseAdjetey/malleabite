@@ -7,25 +7,25 @@ const DEFAULT_INSTANCE_ID = '__default__';
 
 // State for a single Pomodoro instance
 export interface PomodoroInstance {
-    focusTime: number;       // in minutes
+    workDuration: number;    // in minutes
     breakTime: number;       // in minutes
     focusTarget: number;     // in minutes
     timeLeft: number;        // in seconds
     isActive: boolean;
     timerMode: TimerMode;
-    completedFocusTime: number; // in minutes
+    completedWorkDuration: number; // in minutes
     cycles: number;
     lastTickTime: number;
 }
 
-const createDefaultInstance = (focusTime = 25, breakTime = 5): PomodoroInstance => ({
-    focusTime,
+const createDefaultInstance = (workDuration = 25, breakTime = 5): PomodoroInstance => ({
+    workDuration,
     breakTime,
     focusTarget: 180,
-    timeLeft: focusTime * 60,
+    timeLeft: workDuration * 60,
     isActive: false,
     timerMode: 'focus',
-    completedFocusTime: 0,
+    completedWorkDuration: 0,
     cycles: 0,
     lastTickTime: Date.now(),
 });
@@ -38,7 +38,7 @@ interface PomodoroState {
     ensureInstance: (id?: string) => void;
 
     // Actions (all instance-scoped)
-    setFocusTime: (minutes: number, id?: string) => void;
+    setWorkDuration: (minutes: number, id?: string) => void;
     setBreakTime: (minutes: number, id?: string) => void;
     setFocusTarget: (minutes: number, id?: string) => void;
     startTimer: (id?: string) => void;
@@ -90,11 +90,11 @@ export const usePomodoroStore = create<PomodoroState>()(
                 }
             },
 
-            setFocusTime: (minutes, id?) => {
+            setWorkDuration: (minutes, id?) => {
                 const key = resolveId(id);
                 set((state) => ({
                     instances: updateInstance(state.instances, key, (inst) => {
-                        const updates: Partial<PomodoroInstance> = { focusTime: minutes };
+                        const updates: Partial<PomodoroInstance> = { workDuration: minutes };
                         if (inst.timerMode === 'focus' && !inst.isActive) {
                             updates.timeLeft = minutes * 60;
                         }
@@ -156,7 +156,7 @@ export const usePomodoroStore = create<PomodoroState>()(
                     instances: updateInstance(state.instances, key, (inst) => ({
                         isActive: false,
                         timerMode: 'focus',
-                        timeLeft: inst.focusTime * 60,
+                        timeLeft: inst.workDuration * 60,
                         lastTickTime: Date.now(),
                     })),
                 }));
@@ -190,14 +190,14 @@ export const usePomodoroStore = create<PomodoroState>()(
                             return {
                                 timerMode: 'break',
                                 timeLeft: inst.breakTime * 60,
-                                completedFocusTime: inst.completedFocusTime + inst.focusTime,
+                                completedWorkDuration: inst.completedWorkDuration + inst.workDuration,
                                 cycles: inst.cycles + 1,
                                 isActive: false,
                             };
                         } else {
                             return {
                                 timerMode: 'focus',
-                                timeLeft: inst.focusTime * 60,
+                                timeLeft: inst.workDuration * 60,
                                 isActive: false,
                             };
                         }

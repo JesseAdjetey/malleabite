@@ -57,43 +57,32 @@ export function ProductivityScore() {
   const factors: ScoreFactor[] = useMemo(() => {
     if (!currentMetrics) return [];
 
-    const completionScore = (currentMetrics.completionRate / 100) * 30;
-    const focusRatio =
-      currentMetrics.totalTime > 0 ? currentMetrics.focusTime / currentMetrics.totalTime : 0;
-    const focusScore = focusRatio * 25;
+    const completionScore = (currentMetrics.completionRate / 100) * 40;
 
     const idealDuration = 60;
     const durationScore = Math.max(
       0,
-      20 - Math.abs(currentMetrics.averageEventDuration - idealDuration) / 3
+      30 - Math.abs(currentMetrics.averageEventDuration - idealDuration) / 3
     );
 
-    const pomodoroScore = Math.min(15, currentMetrics.pomodoroSessions * 2);
+    const pomodoroScore = Math.min(20, currentMetrics.pomodoroSessions * 2);
 
     const optimalDailyMinutes = 5 * 60;
-    const timeScore = Math.min(10, (currentMetrics.focusTime / optimalDailyMinutes) * 10);
+    const timeScore = Math.min(10, (currentMetrics.totalTime / optimalDailyMinutes) * 10);
 
     return [
       {
         name: 'Task Completion',
         value: Math.round(completionScore),
-        max: 30,
+        max: 40,
         description: `${Math.round(currentMetrics.completionRate)}% of events completed`,
         icon: CheckCircle2,
         color: 'green',
       },
       {
-        name: 'Focus Time',
-        value: Math.round(focusScore),
-        max: 25,
-        description: `${Math.round(focusRatio * 100)}% time in deep work`,
-        icon: Target,
-        color: 'blue',
-      },
-      {
         name: 'Optimal Duration',
         value: Math.round(durationScore),
-        max: 20,
+        max: 30,
         description: `Avg ${Math.round(currentMetrics.averageEventDuration)} min per event`,
         icon: Clock,
         color: 'purple',
@@ -101,7 +90,7 @@ export function ProductivityScore() {
       {
         name: 'Pomodoro Sessions',
         value: Math.round(pomodoroScore),
-        max: 15,
+        max: 20,
         description: `${currentMetrics.pomodoroSessions} focused sessions`,
         icon: Zap,
         color: 'yellow',
@@ -110,7 +99,7 @@ export function ProductivityScore() {
         name: 'Total Productive Time',
         value: Math.round(timeScore),
         max: 10,
-        description: `${Math.round(currentMetrics.focusTime / 60)} hours of focus time`,
+        description: `${Math.round(currentMetrics.totalTime / 60)} hours scheduled`,
         icon: TrendingUp,
         color: 'indigo',
       },
@@ -263,14 +252,14 @@ export function ProductivityScore() {
               {score < 70 && (
                 <>
                   <li>• Complete more of your scheduled tasks to boost completion rate</li>
-                  <li>• Block out dedicated focus time for deep work sessions</li>
+                  <li>• Schedule deep work sessions during your peak hours</li>
                   <li>• Use 25-minute Pomodoro sessions for better concentration</li>
                 </>
               )}
               {score >= 70 && score < 90 && (
                 <>
                   <li>• Maintain your current productivity habits</li>
-                  <li>• Try to increase your focus time ratio</li>
+                  <li>• Use Pomodoro sessions to maintain concentration</li>
                   <li>• Optimize event durations for peak efficiency</li>
                 </>
               )}

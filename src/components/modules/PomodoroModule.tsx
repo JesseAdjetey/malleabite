@@ -28,7 +28,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 }) => {
   const {
     getInstance, ensureInstance,
-    setFocusTime, setBreakTime, setFocusTarget,
+    setWorkDuration, setBreakTime, setFocusTarget,
     setTimeLeft, toggleTimer, resetTimer,
     tick, completeCycle
   } = usePomodoroStore();
@@ -41,19 +41,19 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   // Read instance state
   const instance = getInstance(instanceId);
   const {
-    focusTime, breakTime, focusTarget,
+    workDuration, breakTime, focusTarget,
     timeLeft, isActive, timerMode,
-    completedFocusTime, cycles
+    completedWorkDuration, cycles
   } = instance;
 
   const [showSettings, setShowSettings] = useState(false);
 
   // Calculate total time for current mode
-  const totalTime = timerMode === 'focus' ? focusTime * 60 : breakTime * 60;
+  const totalTime = timerMode === 'focus' ? workDuration * 60 : breakTime * 60;
   const progress = (timeLeft / totalTime) * 100;
 
   // Target progress percentage
-  const targetProgress = Math.min((completedFocusTime / focusTarget) * 100, 100);
+  const targetProgress = Math.min((completedWorkDuration / focusTarget) * 100, 100);
 
   // Handle timer tick
   useEffect(() => {
@@ -120,7 +120,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   };
 
   const handleFocusTimeChange = (value: number[]) => {
-    setFocusTime(value[0], instanceId);
+    setWorkDuration(value[0], instanceId);
   };
 
   const handleBreakTimeChange = (value: number[]) => {
@@ -217,7 +217,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
         <div className="w-full mb-4">
           <div className="flex justify-between text-xs mb-1 text-gray-700 dark:text-gray-300">
             <span>Focus Target</span>
-            <span>{completedFocusTime}/{focusTarget} min</span>
+            <span>{completedWorkDuration}/{focusTarget} min</span>
           </div>
           <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
             <div
@@ -239,13 +239,13 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
                   <Clock size={14} />
                   Focus Time
                 </label>
-                <span className="text-xs text-gray-700 dark:text-gray-300">{focusTime} min</span>
+                <span className="text-xs text-gray-700 dark:text-gray-300">{workDuration} min</span>
               </div>
               <Slider
                 min={1}
                 max={60}
                 step={1}
-                value={[focusTime]}
+                value={[workDuration]}
                 onValueChange={handleFocusTimeChange}
               />
             </div>

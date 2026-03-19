@@ -42,29 +42,29 @@ export function useBulkSelection() {
   // Check if any selected events are recurring
   const hasRecurringEvents = useCallback((): boolean => {
     const selectedEvents = getSelectedEvents();
-    return selectedEvents.some(event => 
-      event.isRecurring || 
-      event.recurrenceParentId || 
-      (event.id && event.id.includes('_'))
+    return selectedEvents.some(event =>
+      event.isRecurring ||
+      event.recurrenceParentId ||
+      (event.id && !event.id.startsWith('synced_') && event.id.includes('_'))
     );
   }, [getSelectedEvents]);
 
   // Get all recurring events from selection
   const getRecurringEvents = useCallback((): CalendarEventType[] => {
     const selectedEvents = getSelectedEvents();
-    return selectedEvents.filter(event => 
-      event.isRecurring || 
-      event.recurrenceParentId || 
-      (event.id && event.id.includes('_'))
+    return selectedEvents.filter(event =>
+      event.isRecurring ||
+      event.recurrenceParentId ||
+      (event.id && !event.id.startsWith('synced_') && event.id.includes('_'))
     );
   }, [getSelectedEvents]);
 
   // Bulk operations - updated to handle recurring events
   const bulkDelete = useCallback(async (recurringScope?: RecurringDeleteScope) => {
     const selectedEvents = getSelectedEvents();
-    
+
     for (const event of selectedEvents) {
-      const isRecurring = event.isRecurring || event.recurrenceParentId || (event.id && event.id.includes('_'));
+      const isRecurring = event.isRecurring || event.recurrenceParentId || (event.id && !event.id.startsWith('synced_') && event.id.includes('_'));
       
       if (isRecurring && recurringScope) {
         // Handle recurring event based on scope

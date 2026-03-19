@@ -194,7 +194,8 @@ const Auth = () => {
 
           {/* Center: Logo */}
           <div className="flex-1 flex justify-center">
-            <img src="/logo-quadrant.svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
+            <img src="/logo-
+            .svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
           </div>
 
           {/* Right: Sign in Pill */}

@@ -11,7 +11,6 @@ export interface AnalyticsMetrics {
   completionRate: number; // percentage
   averageEventDuration: number; // in minutes
   pomodoroSessions: number;
-  focusTime: number; // in minutes
   meetingTime: number; // in minutes
   productivityScore: number; // 0-100
 }
@@ -73,7 +72,6 @@ const defaultMetrics: AnalyticsMetrics = {
   completionRate: 0,
   averageEventDuration: 0,
   pomodoroSessions: 0,
-  focusTime: 0,
   meetingTime: 0,
   productivityScore: 0,
 };

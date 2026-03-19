@@ -25,7 +25,6 @@ export function DistributionTab({ metrics, timeDistribution }: DistributionTabPr
   const dailyData = useMemo(() => {
     return metrics.thisWeek.dailyBreakdown.map(d => ({
       date: d.date.slice(5), // MM-DD
-      focus: Math.round(d.focusTimeMinutes),
       meeting: Math.round(d.meetingTimeMinutes),
       break: Math.round(d.breakTimeMinutes),
     }));
@@ -93,8 +92,7 @@ export function DistributionTab({ metrics, timeDistribution }: DistributionTabPr
                   formatter={(value: number) => [`${value} min`]}
                 />
                 <Legend />
-                <Bar dataKey="focus" stackId="a" fill="#6366f1" name="Focus" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="meeting" stackId="a" fill="#f59e0b" name="Meeting" />
+                <Bar dataKey="meeting" stackId="a" fill="#f59e0b" name="Meeting" radius={[0, 0, 0, 0]} />
                 <Bar dataKey="break" stackId="a" fill="#10b981" name="Break" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

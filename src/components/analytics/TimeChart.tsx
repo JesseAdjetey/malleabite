@@ -35,7 +35,6 @@ export default function TimeChart({
   const chartData = data.map((day) => ({
     date: dayjs(day.date).format('ddd'),
     fullDate: dayjs(day.date).format('MMM D'),
-    'Focus Time': Math.round((day.focusTimeMinutes / 60) * 10) / 10,
     'Meetings': Math.round((day.meetingTimeMinutes / 60) * 10) / 10,
     'Breaks': Math.round((day.breakTimeMinutes / 60) * 10) / 10,
     'Total': day.productiveHours,
@@ -93,12 +92,6 @@ export default function TimeChart({
               <>
                 <Line
                   type="monotone"
-                  dataKey="Focus Time"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                />
-                <Line
-                  type="monotone"
                   dataKey="Meetings"
                   stroke="#8b5cf6"
                   strokeWidth={2}
@@ -112,14 +105,6 @@ export default function TimeChart({
               </>
             ) : (
               <>
-                <Area
-                  type="monotone"
-                  dataKey="Focus Time"
-                  stackId="1"
-                  stroke="#3b82f6"
-                  fill="#3b82f6"
-                  fillOpacity={0.6}
-                />
                 <Area
                   type="monotone"
                   dataKey="Meetings"

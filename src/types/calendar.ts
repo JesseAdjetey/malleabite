@@ -125,7 +125,8 @@ export interface CalendarPreferences {
 export interface SyncedCalendarEvent {
   id: string;
   calendarId: string;          // Reference to ConnectedCalendar
-  externalId: string;          // Event ID from source (Google, Microsoft)
+  externalId: string;          // Event ID from source (Google, Microsoft) — may be an instance ID
+  googleSeriesId?: string;     // Google series/parent event ID (present on recurring instances)
   title: string;
   description?: string;
   location?: string;

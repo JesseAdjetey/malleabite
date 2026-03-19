@@ -28,7 +28,6 @@ export interface DailyAnalytics {
   pomodoroSessions: number;
   tasksCompleted: number;
   productiveHours: number;
-  focusTimeMinutes: number;
   meetingTimeMinutes: number;
   breakTimeMinutes: number;
 }
@@ -58,7 +57,6 @@ export interface ProductivityMetrics {
   trends: {
     eventsChange: number; // % change from last week
     productivityChange: number; // % change from last week
-    focusTimeChange: number; // % change from last week
   };
 }
 
@@ -83,24 +81,21 @@ function calculateDailyMetrics(
 
   let totalEventTime = 0;
   let meetingTime = 0;
-  let focusTime = 0;
   let breakTime = 0;
-  
+
   dayEvents.forEach((event) => {
     const start = dayjs(event.startsAt);
     const end = dayjs(event.endsAt);
     const duration = end.diff(start, 'minute');
-    
+
     totalEventTime += duration;
-    
+
     // Categorize by event type (based on title/description keywords)
     const eventText = `${event.title} ${event.description}`.toLowerCase();
     if (eventText.includes('meeting') || eventText.includes('call')) {
       meetingTime += duration;
     } else if (eventText.includes('break') || eventText.includes('lunch')) {
       breakTime += duration;
-    } else {
-      focusTime += duration;
     }
   });
 
@@ -111,7 +106,6 @@ function calculateDailyMetrics(
     pomodoroSessions: 0, // TODO: Track from Pomodoro module
     tasksCompleted: dayEvents.filter((e) => e.isTodo).length,
     productiveHours: Math.round((totalEventTime / 60) * 10) / 10,
-    focusTimeMinutes: focusTime,
     meetingTimeMinutes: meetingTime,
     breakTimeMinutes: breakTime,
   };
@@ -214,12 +208,6 @@ export function useAnalyticsData() {
     const productivityChange = lastWeek.totalEventTime > 0
       ? ((thisWeek.totalEventTime - lastWeek.totalEventTime) / lastWeek.totalEventTime) * 100
       : 0;
-    
-    const thisFocusTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0);
-    const lastFocusTime = lastWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0);
-    const focusTimeChange = lastFocusTime > 0
-      ? ((thisFocusTime - lastFocusTime) / lastFocusTime) * 100
-      : 0;
 
     return {
       thisWeek,
@@ -227,15 +215,14 @@ export function useAnalyticsData() {
       thisMonth: {
         totalEvents: monthEvents.length,
         totalHours: Math.round((totalMonthTime / 60) * 10) / 10,
-        completionRate: monthEvents.length > 0 
-          ? (monthEvents.filter(e => e.isTodo).length / monthEvents.length) * 100 
+        completionRate: monthEvents.length > 0
+          ? (monthEvents.filter(e => e.isTodo).length / monthEvents.length) * 100
           : 0,
         averageDailyEvents: Math.round((monthEvents.length / daysInMonth) * 10) / 10,
       },
       trends: {
         eventsChange: Math.round(eventsChange * 10) / 10,
         productivityChange: Math.round(productivityChange * 10) / 10,
-        focusTimeChange: Math.round(focusTimeChange * 10) / 10,
       },
     };
   }, [events, loading]);
@@ -244,24 +231,17 @@ export function useAnalyticsData() {
   const timeDistribution = useMemo<TimeDistribution[]>(() => {
     if (!metrics) return [];
     
-    const { focusTimeMinutes, meetingTimeMinutes, breakTimeMinutes } = 
+    const { meetingTimeMinutes, breakTimeMinutes } =
       metrics.thisWeek.dailyBreakdown.reduce((acc, day) => ({
-        focusTimeMinutes: acc.focusTimeMinutes + day.focusTimeMinutes,
         meetingTimeMinutes: acc.meetingTimeMinutes + day.meetingTimeMinutes,
         breakTimeMinutes: acc.breakTimeMinutes + day.breakTimeMinutes,
-      }), { focusTimeMinutes: 0, meetingTimeMinutes: 0, breakTimeMinutes: 0 });
-    
-    const total = focusTimeMinutes + meetingTimeMinutes + breakTimeMinutes;
-    
+      }), { meetingTimeMinutes: 0, breakTimeMinutes: 0 });
+
+    const total = meetingTimeMinutes + breakTimeMinutes;
+
     if (total === 0) return [];
-    
+
     return [
-      {
-        category: 'Focus Time',
-        minutes: focusTimeMinutes,
-        percentage: Math.round((focusTimeMinutes / total) * 100),
-        color: '#3b82f6', // blue
-      },
       {
         category: 'Meetings',
         minutes: meetingTimeMinutes,

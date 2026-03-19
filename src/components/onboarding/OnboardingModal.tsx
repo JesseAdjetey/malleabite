@@ -205,7 +205,7 @@ export function OnboardingModal({ isOpen, onClose, onComplete }: OnboardingModal
             You're ready to boost your productivity!
           </p>
           <div className="flex flex-wrap justify-center gap-2">
-            {['📊 Analytics', '⏱️ Pomodoro', '✅ Todos', '🎯 Focus Time'].map((feature) => (
+            {['📊 Analytics', '⏱️ Pomodoro', '✅ Todos'].map((feature) => (
               <span
                 key={feature}
                 className="px-3 py-1 bg-muted rounded-full text-sm"

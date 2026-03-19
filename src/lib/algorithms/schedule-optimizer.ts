@@ -50,7 +50,6 @@ export interface OptimizedSchedule {
     tasksScheduled: number;
     tasksUnscheduled: number;
     averageScore: number;
-    focusTimeProtected: boolean;
   };
 }
 
@@ -284,10 +283,6 @@ export function optimizeSchedule(
       ? suggestions.reduce((sum, s) => sum + s.suggestedSlot.score, 0) / suggestions.length
       : 0;
 
-  const focusTimeProtected = suggestions
-    .filter((s) => s.task.type === 'focus')
-    .every((s) => s.suggestedSlot.score >= 60);
-
   return {
     suggestions,
     conflicts,
@@ -295,7 +290,6 @@ export function optimizeSchedule(
       tasksScheduled: suggestions.length,
       tasksUnscheduled: conflicts.length,
       averageScore: Math.round(averageScore),
-      focusTimeProtected,
     },
   };
 }

@@ -25,6 +25,7 @@ import TodoDropDialog from "@/components/calendar/integration/TodoDropDialog";
 import TodoLinkedWarningDialog from "@/components/calendar/integration/TodoLinkedWarningDialog";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useBulkSelection } from "@/hooks/use-bulk-selection";
+import { useBulkDragGhosts } from "@/hooks/use-bulk-drag-ghosts";
 import { BulkActionToolbar } from "@/components/calendar";
 import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { RecurringEventEditDialog } from "@/components/calendar/RecurringEventEditDialog";
@@ -62,7 +63,15 @@ const WeekView = () => {
     bulkDuplicate,
     hasRecurringEvents,
     getRecurringEvents,
+    enableBulkMode,
+    disableBulkMode,
   } = useBulkSelection();
+
+  const { ghostsPortal, draggingBulkEventId } = useBulkDragGhosts({
+    isBulkMode,
+    selectedIds,
+    events,
+  });
 
   // Calendar filtering — subscribe to both the function AND the data so React
   // knows to re-render when hiddenCalendarIds changes (function ref is stable).
@@ -206,6 +215,20 @@ const WeekView = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 'b' key toggles bulk mode on/off (skip when typing in inputs)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (e.key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (isBulkMode) disableBulkMode();
+        else enableBulkMode();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBulkMode, enableBulkMode, disableBulkMode]);
+
   useEffect(() => {
     if (pendingTimeSelection) {
       const { day, hour } = pendingTimeSelection;
@@ -278,14 +301,15 @@ const WeekView = () => {
     const grouped = new Map<string, CalendarEventType[]>();
 
     timedDisplayEvents.forEach((event) => {
-      const dayKey = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
-      if (!dayKey) return;
+      const rawKey = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
+      if (!rawKey) return;
+      const dayKey = rawKey instanceof Date ? dayjs(rawKey).format("YYYY-MM-DD") : rawKey;
 
       const list = grouped.get(dayKey);
       if (list) {
         list.push(event);
       } else {
-        grouped.set(dayKey, [event]);
+        grouped.set(dayKey as string, [event]);
       }
     });
 
@@ -322,7 +346,7 @@ const WeekView = () => {
     setPendingTimeSelection({ day: dayObj, hour: hourObj });
   };
 
-  const handleDrop = (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
+  const handleDrop = async (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
     e.preventDefault();
     e.stopPropagation();
     console.log("🎯 DROP EVENT FIRED on week-view");
@@ -411,8 +435,32 @@ const WeekView = () => {
         return;
       }
 
+      // ── BULK MOVE: drag a selected event in bulk mode → move all selected events ──
+      if (isBulkMode && selectedIds.has(data.id) && selectedIds.size > 1) {
+        const originalStart = dayjs(data.startsAt);
+        const newStart = day
+          .hour(parseInt(newStartTime.split(':')[0]))
+          .minute(parseInt(newStartTime.split(':')[1]))
+          .second(0);
+        const deltaMs = newStart.valueOf() - originalStart.valueOf();
+
+        const selectedEvents = events.filter(e => selectedIds.has(e.id));
+        await Promise.all(
+          selectedEvents.map(event =>
+            updateEvent({
+              ...event,
+              startsAt: dayjs(event.startsAt).add(deltaMs, 'ms').toISOString(),
+              endsAt:   dayjs(event.endsAt).add(deltaMs, 'ms').toISOString(),
+              date:     dayjs(event.startsAt).add(deltaMs, 'ms').format('YYYY-MM-DD'),
+            })
+          )
+        );
+        toast.success(`Moved ${selectedEvents.length} events`);
+        return;
+      }
+
       // Check if this is a recurring event instance
-      const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));
+      const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && !data.id.startsWith('synced_') && data.id.includes('_'));
 
       if (isRecurringInstance) {
         const parentId = data.recurrenceParentId || (data.id.includes('_') ? data.id.split('_')[0] : data.id);
@@ -653,6 +701,14 @@ const WeekView = () => {
                   onColorChange={handleColorChange}
                   onAddAlarm={handleAddAlarmToEvent}
                   onAddTodo={handleAddTodoFromEvent}
+                  onEventResize={async (event, newStartsAt, newEndsAt) => {
+                    await updateEvent({ ...event, startsAt: newStartsAt, endsAt: newEndsAt });
+                  }}
+                  onShiftClickEvent={(eventId) => {
+                    enableBulkMode();
+                    toggleSelection(eventId);
+                  }}
+                  draggingBulkEventId={draggingBulkEventId}
                 />
               );
             })}
@@ -719,6 +775,9 @@ const WeekView = () => {
           }}
         />
       )}
+
+      {/* Ghost copies of other selected events that follow the cursor during bulk drag */}
+      {ghostsPortal}
     </>
   );
 };

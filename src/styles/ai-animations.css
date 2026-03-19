@@ -291,3 +291,16 @@
   50% { transform: scaleY(0.8); }
   75% { transform: scaleY(1.4); }
 }
+
+/* Minimized pill glow breath — sine-wave progression so it never snaps */
+@keyframes mallyPillGlow {
+  0%   { box-shadow: 0 6px 18px rgba(139, 92, 246, 0.15), inset 0 1px 2px rgba(255,255,255,0.2); }
+  25%  { box-shadow: 0 8px 28px rgba(139, 92, 246, 0.28), inset 0 1px 2px rgba(255,255,255,0.25); }
+  50%  { box-shadow: 0 10px 40px rgba(139, 92, 246, 0.42), inset 0 1px 2px rgba(255,255,255,0.3); }
+  75%  { box-shadow: 0 8px 28px rgba(139, 92, 246, 0.28), inset 0 1px 2px rgba(255,255,255,0.25); }
+  100% { box-shadow: 0 6px 18px rgba(139, 92, 246, 0.15), inset 0 1px 2px rgba(255,255,255,0.2); }
+}
+
+.mally-pill-glow {
+  animation: mallyPillGlow 4s linear infinite;
+}

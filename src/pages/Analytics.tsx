@@ -40,7 +40,6 @@ export default function Analytics() {
     
     const { thisWeek } = metrics;
     const totalTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.totalEventTime, 0);
-    const focusTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0);
     const meetingTime = thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.meetingTimeMinutes, 0);
     
     const eventsByCategory: Record<string, number> = {};
@@ -68,7 +67,7 @@ export default function Analytics() {
       completionRate: thisWeek.totalEvents > 0 ? (thisWeek.tasksCompleted / thisWeek.totalEvents) * 100 : 0,
       averageEventDuration: thisWeek.averageEventDuration,
       pomodoroSessions: 0,
-      focusTime,
+
       meetingTime,
       productivityScore: 0,
     };
@@ -311,14 +310,6 @@ export default function Analytics() {
             icon={CheckCircle2}
             iconColor="text-emerald-500"
             bgColor="bg-emerald-500/10"
-          />
-          <StatCard
-            value={`${Math.round(thisWeek.dailyBreakdown.reduce((sum, d) => sum + d.focusTimeMinutes, 0) / 60 * 10) / 10}h`}
-            label="Focus Time"
-            change={trends.focusTimeChange}
-            icon={Zap}
-            iconColor="text-orange-500"
-            bgColor="bg-orange-500/10"
           />
         </div>
 

@@ -15,6 +15,8 @@ export interface GoogleSyncBridgeContextValue {
   pushDeleteToGoogle: (event: CalendarEventType) => Promise<boolean>;
   /** Reconnect a Google account whose token expired. Opens sign-in popup. */
   reconnectAccount: (accountEmail: string) => Promise<boolean>;
+  /** Look up the ConnectedCalendar for a given calendarId (returns null if not a Google calendar). */
+  getGoogleCalendar: (calendarId: string | undefined) => import('@/types/calendar').ConnectedCalendar | null;
 }
 
 const GoogleSyncBridgeContext = createContext<GoogleSyncBridgeContextValue | null>(null);

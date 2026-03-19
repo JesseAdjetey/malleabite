@@ -89,7 +89,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
-  const { events } = useCalendarEvents();
+  const { events, addEvent } = useCalendarEvents();
   const { calendars: connectedCalendars } = useCalendarGroups();
   const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
   const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
@@ -280,16 +280,23 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     const calendarsToSave = selectedCalendarIds.length > 1 ? selectedCalendarIds : [selectedCalendarIds[0] || undefined];
 
     for (const calId of calendarsToSave) {
+      const isFirst = calId === calendarsToSave[0];
       const eventForCalendar: CalendarEventType = {
         ...updatedEvent,
-        id: calId === calendarsToSave[0] ? updatedEvent.id : crypto.randomUUID(),
+        id: isFirst ? updatedEvent.id : crypto.randomUUID(),
         calendarId: calId,
       };
 
-      if (onUpdateEvent) {
-        onUpdateEvent(eventForCalendar);
-      } else if (onSave) {
-        onSave(eventForCalendar);
+      if (isFirst) {
+        // First calendar: update the original event
+        if (onUpdateEvent) {
+          onUpdateEvent(eventForCalendar);
+        } else if (onSave) {
+          onSave(eventForCalendar);
+        }
+      } else {
+        // Extra calendars: always create a new event, never update
+        addEvent(eventForCalendar);
       }
     }
 

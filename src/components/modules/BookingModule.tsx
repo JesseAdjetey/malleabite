@@ -19,7 +19,7 @@ import { useAppointmentScheduling, BookingPageFormData } from '@/hooks/use-appoi
 import { useGroupMeets, CreateGroupMeetData } from '@/hooks/use-group-meets';
 import { GroupMeetSession, GroupMeetSlot } from '@/lib/stores/types';
 import { useAuth } from '@/contexts/AuthContext.firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
@@ -111,10 +111,10 @@ const GroupMeetItem: React.FC<{
   const totalCount = session.participants.length;
 
   const statusColor = {
-    collecting: 'text-yellow-500',
-    confirmed: 'text-green-500',
+    collecting: 'text-amber-600 dark:text-yellow-500',
+    confirmed: 'text-green-600 dark:text-green-500',
     expired: 'text-muted-foreground',
-    cancelled: 'text-red-500',
+    cancelled: 'text-red-600 dark:text-red-500',
   }[session.status];
 
   const handleInvite = () => {
@@ -126,10 +126,10 @@ const GroupMeetItem: React.FC<{
   };
 
   return (
-    <div className="rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+    <div className="rounded-lg bg-muted/50 hover:bg-muted border border-border/40 transition-colors">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center gap-2 p-2 text-left"
+        className="w-full flex items-center gap-2 p-2 text-left text-foreground"
       >
         <Users className="h-4 w-4 text-muted-foreground shrink-0" />
         <div className="flex-1 min-w-0">
@@ -234,7 +234,7 @@ interface NewGroupMeetFormProps {
   onCancel: () => void;
 }
 
-const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, organizerName, onDone, onCancel }) => {
+const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone, onCancel }) => {
   const { createGroupMeet } = useGroupMeets(instanceId);
   const { user } = useAuth();
   const [title, setTitle] = useState('');
@@ -373,7 +373,7 @@ const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, organiz
       {calendars.length > 0 && (
         <div className="space-y-1.5">
           <Label className="text-xs">Check availability from</Label>
-          <div className="space-y-1">
+          <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
             {calendars.map(cal => {
               const checked = selectedCalendarIds.includes(cal.id);
               return (
@@ -471,7 +471,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
     copyBookingUrl,
   } = useAppointmentScheduling();
 
-  const { sessions, loading: meetsLoading, confirmSlot, addParticipantToSession } = useGroupMeets(instanceId);
+  const { sessions, confirmSlot, addParticipantToSession } = useGroupMeets(instanceId);
 
   const [createMode, setCreateMode] = useState<CreateMode>(null);
   const [newTitle, setNewTitle] = useState('');
@@ -483,7 +483,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
 
   // Derive organizer name from auth — we pass this into the share sheet
   // We can't use useAuth here without prop drilling, so we read from the first session if available
-  const organizerName = sessions.find(s => true)?.organizerName ?? 'Someone';
+  const organizerName = sessions[0]?.organizerName ?? 'Someone';
 
   const handleCreatePage = async () => {
     if (!newTitle.trim()) return;
@@ -522,7 +522,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
       isMinimized={isMinimized}
       isDragging={isDragging}
     >
-      <div className="space-y-3">
+      <div className="space-y-3 overflow-y-auto max-h-[420px] pr-0.5">
         {loading ? (
           <div className="flex justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -546,7 +546,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
             {bookingPages.map(page => (
               <div
                 key={page.id}
-                className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 hover:bg-muted border border-border/40 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{page.title}</p>
@@ -590,10 +590,10 @@ const BookingModule: React.FC<BookingModuleProps> = ({
             {/* ── Add buttons ── */}
             {!createMode && !shareSessionId && (
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => setCreateMode('page')}>
+                <Button variant="outline" size="sm" className="flex-1 text-foreground" onClick={() => setCreateMode('page')}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Page
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => setCreateMode('group_meet')}>
+                <Button variant="outline" size="sm" className="flex-1 text-foreground" onClick={() => setCreateMode('group_meet')}>
                   <Users className="h-3.5 w-3.5 mr-1" /> Group meet
                 </Button>
               </div>

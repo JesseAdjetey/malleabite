@@ -1,12 +1,13 @@
 /**
  * Real-time Data Service — Client side (browser / Vapi tool calls)
  *
- * Fetches live data from external APIs using VITE_ environment keys.
- * Called from BottomMallyAI.tsx onToolCall handler when Mally invokes
- * search_web / get_weather / get_stock_price / get_flight_status.
+ * All API keys are kept server-side. This module calls the
+ * realtimeDataProxy Cloud Function which holds the secrets.
  */
 
-// ─── Types (mirrored from Firebase side) ─────────────────────────────────────
+import { getAuth } from 'firebase/auth';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface WeatherResult {
   location: string;
@@ -49,149 +50,56 @@ export interface SearchResult {
   description: string;
 }
 
-// ─── Weather ─────────────────────────────────────────────────────────────────
+// ─── Proxy helper ────────────────────────────────────────────────────────────
+
+const PROXY_URL =
+  'https://us-central1-malleabite-97d35.cloudfunctions.net/realtimeDataProxy';
+
+async function callProxy<T>(action: string, params: Record<string, any>): Promise<T | null> {
+  try {
+    const user = getAuth().currentUser;
+    if (!user) {
+      console.warn('[RealtimeData] No authenticated user');
+      return null;
+    }
+    const token = await user.getIdToken();
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ action, params }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data as T;
+  } catch (err) {
+    console.error(`[RealtimeData] ${action} error:`, err);
+    return null;
+  }
+}
+
+// ─── Public API (same signatures as before) ──────────────────────────────────
 
 export async function getWeather(location: string): Promise<WeatherResult | null> {
-  const key = import.meta.env.VITE_OPENWEATHER_API_KEY as string | undefined;
-  if (!key) {
-    console.warn('[RealtimeData] VITE_OPENWEATHER_API_KEY not set');
-    return null;
-  }
-  try {
-    const res = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location)}&appid=${key}&units=metric`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return {
-      location: `${data.name}, ${data.sys?.country}`,
-      temp: Math.round(data.main?.temp),
-      feels_like: Math.round(data.main?.feels_like),
-      description: data.weather?.[0]?.description,
-      humidity: data.main?.humidity,
-      wind_speed: Math.round((data.wind?.speed || 0) * 3.6),
-      icon: data.weather?.[0]?.icon,
-    };
-  } catch (err) {
-    console.error('[RealtimeData] Weather error:', err);
-    return null;
-  }
+  return callProxy<WeatherResult>('get_weather', { location });
 }
-
-// ─── Stock Price ──────────────────────────────────────────────────────────────
 
 export async function getStockPrice(symbol: string): Promise<StockResult | null> {
-  const key = import.meta.env.VITE_ALPHAVANTAGE_API_KEY as string | undefined;
-  if (!key) {
-    console.warn('[RealtimeData] VITE_ALPHAVANTAGE_API_KEY not set');
-    return null;
-  }
-  try {
-    const res = await fetch(
-      `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol.toUpperCase())}&apikey=${key}`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const quote = data['Global Quote'];
-    if (!quote?.['05. price']) return null;
-    return {
-      symbol: quote['01. symbol'],
-      price: parseFloat(quote['05. price']),
-      change: parseFloat(quote['09. change']),
-      change_percent: quote['10. change percent'],
-      open: parseFloat(quote['02. open']),
-      high: parseFloat(quote['03. high']),
-      low: parseFloat(quote['04. low']),
-      volume: parseInt(quote['06. volume']).toLocaleString(),
-      updated: quote['07. latest trading day'],
-    };
-  } catch (err) {
-    console.error('[RealtimeData] Stock error:', err);
-    return null;
-  }
+  return callProxy<StockResult>('get_stock_price', { symbol });
 }
-
-// ─── Flight Status ────────────────────────────────────────────────────────────
 
 export async function getFlightStatus(flightNumber: string): Promise<FlightResult | null> {
-  const key = import.meta.env.VITE_AVIATIONSTACK_API_KEY as string | undefined;
-  if (!key) {
-    console.warn('[RealtimeData] VITE_AVIATIONSTACK_API_KEY not set');
-    return null;
-  }
-  try {
-    const iata = flightNumber.toUpperCase().replace(/\s/g, '');
-    const res = await fetch(
-      `http://api.aviationstack.com/v1/flights?access_key=${key}&flight_iata=${encodeURIComponent(iata)}&limit=1`
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const flight = data?.data?.[0];
-    if (!flight) return null;
-
-    return {
-      flight_number: flight.flight?.iata || flightNumber,
-      airline: flight.airline?.name || 'Unknown',
-      status: formatStatus(flight.flight_status),
-      departure_airport: `${flight.departure?.airport} (${flight.departure?.iata})`,
-      departure_time: flight.departure?.scheduled || 'TBD',
-      departure_actual: flight.departure?.actual,
-      arrival_airport: `${flight.arrival?.airport} (${flight.arrival?.iata})`,
-      arrival_time: flight.arrival?.scheduled || 'TBD',
-      arrival_actual: flight.arrival?.actual,
-      delay_minutes: flight.departure?.delay || flight.arrival?.delay,
-    };
-  } catch (err) {
-    console.error('[RealtimeData] Flight error:', err);
-    return null;
-  }
+  return callProxy<FlightResult>('get_flight_status', { flightNumber });
 }
-
-function formatStatus(status: string): string {
-  const map: Record<string, string> = {
-    scheduled: '🕐 Scheduled',
-    active: '✈️ In Air',
-    landed: '✅ Landed',
-    cancelled: '❌ Cancelled',
-    incident: '⚠️ Incident',
-    diverted: '🔀 Diverted',
-  };
-  return map[status?.toLowerCase()] || status || 'Unknown';
-}
-
-// ─── Web Search ───────────────────────────────────────────────────────────────
 
 export async function searchWeb(query: string, count = 5): Promise<SearchResult[]> {
-  const key = import.meta.env.VITE_BRAVE_SEARCH_API_KEY as string | undefined;
-  if (!key) {
-    console.warn('[RealtimeData] VITE_BRAVE_SEARCH_API_KEY not set');
-    return [];
-  }
-  try {
-    const res = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${count}&text_decorations=0&search_lang=en`,
-      {
-        headers: {
-          Accept: 'application/json',
-          'Accept-Encoding': 'gzip',
-          'X-Subscription-Token': key,
-        },
-      }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data?.web?.results || []).slice(0, count).map((r: any) => ({
-      title: r.title,
-      url: r.url,
-      description: r.description || r.extra_snippets?.[0] || '',
-    }));
-  } catch (err) {
-    console.error('[RealtimeData] Search error:', err);
-    return [];
-  }
+  const result = await callProxy<SearchResult[]>('search_web', { query, count });
+  return result || [];
 }
 
-// ─── Format helpers ───────────────────────────────────────────────────────────
+// ─── Format helpers ──────────────────────────────────────────────────────────
 
 export function formatWeather(w: WeatherResult): string {
   return `**Weather in ${w.location}:** ${w.temp}°C (feels like ${w.feels_like}°C) · ${w.description} · Humidity: ${w.humidity}% · Wind: ${w.wind_speed} km/h`;

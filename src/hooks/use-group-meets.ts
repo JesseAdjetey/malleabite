@@ -39,11 +39,15 @@ async function computeOrganizerFreeSlots(
   duration: number,
   calendarIds?: string[]
 ): Promise<GroupMeetSlot[]> {
+  // Start from beginning of the first day to catch morning events even when
+  // window.start is a mid-day timestamp (session created at 3pm but slots from 8am)
+  const queryStart = dayjs(window.start).startOf('day').toISOString();
+
   // Query 1: user's own Malleabite events (calendar_events flat collection)
   const ownEventsQuery = query(
     collection(db, 'calendar_events'),
     where('userId', '==', userId),
-    where('startsAt', '>=', window.start),
+    where('startsAt', '>=', queryStart),
     where('startsAt', '<=', window.end)
   );
 
@@ -51,7 +55,7 @@ async function computeOrganizerFreeSlots(
   // Filter by time range only — calendarId filter applied in-memory to avoid composite index requirement
   const syncedQuery = query(
     collection(db, `users/${userId}/syncedEvents`),
-    where('startTime', '>=', window.start),
+    where('startTime', '>=', queryStart),
     where('startTime', '<=', window.end)
   );
 

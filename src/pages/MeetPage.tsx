@@ -56,7 +56,9 @@ async function fetchFreeSlotsFromGoogleCalendar(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        timeMin: window.start,
+        // Start from beginning of the first day so events before window.start
+        // (e.g. morning events when the session was created at 3pm) are included
+        timeMin: dayjs(window.start).startOf('day').toISOString(),
         timeMax: window.end,
         items: [{ id: 'primary' }],
       }),
@@ -93,19 +95,22 @@ async function fetchFreeSlotsFromFirestore(
   try {
     const includePersonal = !calendarIds || calendarIds.includes('personal');
     const googleIds = calendarIds ? calendarIds.filter(id => id !== 'personal') : null;
+    // Start from beginning of the first day so morning events aren't missed
+    // when window.start is mid-day (e.g. session created at 3pm but slots show from 8am)
+    const queryStart = dayjs(window.start).startOf('day').toISOString();
 
     const [nativeSnap, syncedSnap] = await Promise.all([
       includePersonal
         ? getDocs(query(
             collection(db, 'calendar_events'),
             where('userId', '==', userId),
-            where('startsAt', '>=', window.start),
+            where('startsAt', '>=', queryStart),
             where('startsAt', '<=', window.end)
           ))
         : Promise.resolve(null),
       getDocs(query(
         collection(db, `users/${userId}/syncedEvents`),
-        where('startTime', '>=', window.start),
+        where('startTime', '>=', queryStart),
         where('startTime', '<=', window.end)
       )),
     ]);
@@ -262,13 +267,14 @@ const MeetPage: React.FC = () => {
       setName(user.displayName || '');
       setEmail(user.email || '');
 
-      // Fetch the user's calendars so they can choose which to check
+      // Synchronously advance the step so this effect cannot fire again
+      // (avoids duplicate fetches if session updates while awaiting)
+      setStep('calendar_picker');
       setLoadingCalendars(true);
       fetchUserCalendars(user.uid).then(cals => {
         setCalendarOptions(cals);
         setSelectedCalendarIds(cals.map(c => c.id)); // default: all selected
         setLoadingCalendars(false);
-        setStep('calendar_picker');
       });
     }
   }, [user, session]);
@@ -677,7 +683,7 @@ const MeetPage: React.FC = () => {
               <div className="flex items-start gap-2 rounded-lg bg-purple-500/10 border border-purple-500/20 px-3 py-2.5">
                 <Sparkles size={14} className="text-purple-400 mt-0.5 shrink-0" />
                 <p className="text-xs text-purple-300 leading-relaxed">
-                  We synced your Google Calendar and found{' '}
+                  We synced your calendar and found{' '}
                   <span className="font-semibold">{selected.length} times</span> that work for you.
                   Deselect any you can't make.
                 </p>

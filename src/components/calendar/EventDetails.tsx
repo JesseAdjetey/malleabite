@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useCallback, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useEventStore } from "@/lib/store";
@@ -92,6 +92,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
   const [showRecurringEditDialog, setShowRecurringEditDialog] = useState(false);
   const [editScope, setEditScope] = useState<EditScope | null>(null);
+
+  // Reset local edit state when the dialog closes so the next event opens in view mode
+  useEffect(() => {
+    if (!open) {
+      setIsEditing(false);
+      setShowRecurringDeleteDialog(false);
+      setShowRecurringEditDialog(false);
+      setEditScope(null);
+    }
+  }, [open]);
 
   // All hooks must be called before any early returns!
   // Memoize handleRecurringDeleteConfirm at the top level

@@ -7,6 +7,7 @@
 import { useCallback } from 'react';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { useGoogleSyncBridgeContext } from '@/contexts/GoogleSyncBridgeContext';
+import { useEventStore } from '@/lib/store';
 import { CalendarEventType } from '@/lib/stores/types';
 import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
@@ -89,7 +90,27 @@ export function useEventCRUD() {
 
   const deleteEventWithSync = useCallback(
     async (eventOrId: string | CalendarEventType) => {
-      // If we got an event object, try to push delete to Google first
+      // Resolve the full event object (needed to check googleEventId)
+      const eventObj: CalendarEventType | null = typeof eventOrId !== 'string'
+        ? eventOrId
+        : useEventStore.getState().events.find(e => e.id === eventOrId) ?? null;
+
+      const id = typeof eventOrId === 'string' ? eventOrId : eventOrId.id;
+
+      // Google Calendar events: use API delete + local state removal to avoid
+      // Firestore permission errors on imported/synced events.
+      if (eventObj?.googleEventId && bridge) {
+        try {
+          await bridge.pushDeleteToGoogle(eventObj);
+        } catch (err) {
+          logger.error('useEventCRUD', 'Google delete failed', { error: err });
+          toast.warning('Event removed locally but could not be removed from Google Calendar.');
+        }
+        useEventStore.getState().deleteEvent(id);
+        return { success: true };
+      }
+
+      // Non-Google events with a full event object: attempt Google sync if applicable
       if (typeof eventOrId !== 'string' && bridge) {
         try {
           const deleted = await bridge.pushDeleteToGoogle(eventOrId);
@@ -102,7 +123,6 @@ export function useEventCRUD() {
         }
       }
 
-      const id = typeof eventOrId === 'string' ? eventOrId : eventOrId.id;
       return doDelete(id);
     },
     [doDelete, bridge]

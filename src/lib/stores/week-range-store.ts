@@ -6,6 +6,10 @@ interface WeekRangeStoreType {
   rangeStart: number;
   /** End day index (inclusive) */
   rangeEnd: number;
+  /** True when the current range was auto-applied due to mobile detection (not user-chosen) */
+  wasAutoMobile: boolean;
+  /** The desktop range saved before switching to mobile auto-range */
+  savedDesktopRange: { start: number; end: number } | null;
   /** Set the start index (clamped 0–rangeEnd) */
   setRangeStart: (index: number) => void;
   /** Set the end index (clamped rangeStart–6) */
@@ -14,6 +18,8 @@ interface WeekRangeStoreType {
   setRange: (start: number, end: number) => void;
   /** Reset to full week (0–6) */
   resetRange: () => void;
+  setWasAutoMobile: (val: boolean) => void;
+  setSavedDesktopRange: (range: { start: number; end: number } | null) => void;
 }
 
 export const useWeekRangeStore = create<WeekRangeStoreType>()(
@@ -22,6 +28,8 @@ export const useWeekRangeStore = create<WeekRangeStoreType>()(
       (set, get) => ({
         rangeStart: 0,
         rangeEnd: 6,
+        wasAutoMobile: false,
+        savedDesktopRange: null,
 
         setRangeStart: (index: number) => {
           const clamped = Math.max(0, Math.min(index, get().rangeEnd));
@@ -40,6 +48,8 @@ export const useWeekRangeStore = create<WeekRangeStoreType>()(
         },
 
         resetRange: () => set({ rangeStart: 0, rangeEnd: 6 }),
+        setWasAutoMobile: (val: boolean) => set({ wasAutoMobile: val }),
+        setSavedDesktopRange: (range) => set({ savedDesktopRange: range }),
       }),
       { name: "week_range", skipHydration: true }
     )

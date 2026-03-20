@@ -85,38 +85,59 @@ const WeekView = () => {
   const { rangeStart, rangeEnd } = useWeekRangeStore();
   const isMobile = useIsMobile();
 
-  // Save/restore desktop range when crossing the mobile breakpoint
-  const savedDesktopRange = useRef<{ start: number; end: number } | null>(null);
+  // Track transitions — uses window.innerWidth for initial value to avoid the
+  // !!undefined → false false-start from useIsMobile on first render.
   const prevIsMobileRef = useRef<boolean | null>(null);
+
+  // One-time mount check: if we're on desktop but the store still has a mobile
+  // auto-range from a previous session (component was unmounted while on mobile),
+  // reset to the saved desktop range or full week.
+  useEffect(() => {
+    const currentlyMobile = window.innerWidth < 768;
+    const store = useWeekRangeStore.getState();
+    if (!currentlyMobile && store.wasAutoMobile) {
+      if (store.savedDesktopRange) {
+        store.setRange(store.savedDesktopRange.start, store.savedDesktopRange.end);
+        store.setSavedDesktopRange(null);
+      } else {
+        store.resetRange();
+      }
+      store.setWasAutoMobile(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const store = useWeekRangeStore.getState();
     if (prevIsMobileRef.current === null) {
-      // Initial render
-      prevIsMobileRef.current = isMobile;
-      if (isMobile && store.rangeStart === 0 && store.rangeEnd === 6) {
+      // Use real window width so we don't confuse !!undefined=false with "desktop"
+      const actuallyMobile = window.innerWidth < 768;
+      prevIsMobileRef.current = actuallyMobile;
+      if (actuallyMobile && store.rangeStart === 0 && store.rangeEnd === 6 && !store.wasAutoMobile) {
         const todayIdx = dayjs().day();
         const start = Math.max(0, Math.min(todayIdx - 1, 4));
         store.setRange(start, start + 2);
+        store.setWasAutoMobile(true);
       }
       return;
     }
     const wasDesktop = !prevIsMobileRef.current;
     prevIsMobileRef.current = isMobile;
     if (wasDesktop && isMobile) {
-      // Desktop → Mobile: save current range, narrow to 3 days
-      savedDesktopRange.current = { start: store.rangeStart, end: store.rangeEnd };
+      // Desktop → Mobile: persist the desktop range so it survives remounts
+      store.setSavedDesktopRange({ start: store.rangeStart, end: store.rangeEnd });
       const todayIdx = dayjs().day();
       const start = Math.max(0, Math.min(todayIdx - 1, 4));
       store.setRange(start, start + 2);
+      store.setWasAutoMobile(true);
     } else if (!wasDesktop && !isMobile) {
       // Mobile → Desktop: restore saved range or full week
-      if (savedDesktopRange.current) {
-        store.setRange(savedDesktopRange.current.start, savedDesktopRange.current.end);
-        savedDesktopRange.current = null;
+      if (store.savedDesktopRange) {
+        store.setRange(store.savedDesktopRange.start, store.savedDesktopRange.end);
+        store.setSavedDesktopRange(null);
       } else {
         store.resetRange();
       }
+      store.setWasAutoMobile(false);
     }
   }, [isMobile]);
 

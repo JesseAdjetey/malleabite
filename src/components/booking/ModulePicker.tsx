@@ -58,8 +58,8 @@ const ModulePicker: React.FC<ModulePickerProps> = ({
           type: 'booking',
           title: 'Booking',
         });
-        if (result?.success && result?.module?.instanceId) {
-          await attachToModule(sessionId, result.module.instanceId);
+        if (result?.success && result?.instanceId) {
+          await attachToModule(sessionId, result.instanceId);
         }
       }
       onDone();

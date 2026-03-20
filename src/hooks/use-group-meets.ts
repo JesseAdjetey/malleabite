@@ -59,7 +59,12 @@ async function computeOrganizerFreeSlots(
     where('startTime', '<=', window.end)
   );
 
-  const [ownSnap, syncedSnap] = await Promise.all([getDocs(ownEventsQuery), getDocs(syncedQuery)]);
+  // Query 3: recurring template events (users/{uid}/calendarTemplates)
+  const [ownSnap, syncedSnap, templatesSnap] = await Promise.all([
+    getDocs(ownEventsQuery),
+    getDocs(syncedQuery),
+    getDocs(collection(db, `users/${userId}/calendarTemplates`)),
+  ]);
 
   // Filter synced events: if specific calendarIds given, only include those Google calendars
   // (exclude 'personal' from this filter since personal = native events handled separately)
@@ -77,6 +82,31 @@ async function computeOrganizerFreeSlots(
   const includeNativeEvents = !calendarIds || calendarIds.length === 0
     || calendarIds.includes(PERSONAL_CALENDAR_ID);
 
+  // Expand active template events into busy slots for each day in the window
+  const templateBusySlots: { start: string; end: string }[] = [];
+  if (includeNativeEvents) {
+    const windowStart2 = dayjs(window.start).startOf('day');
+    const windowEnd2 = dayjs(window.end);
+    let tDay = windowStart2;
+    while (tDay.isBefore(windowEnd2)) {
+      const dow = tDay.day(); // 0=Sun..6=Sat
+      for (const tDoc of templatesSnap.docs) {
+        const tmpl = tDoc.data();
+        if (!tmpl.isActive) continue;
+        for (const ev of (tmpl.events || []) as Array<{ dayOfWeek: number; startTime: string; endTime: string; isAllDay?: boolean }>) {
+          if (ev.dayOfWeek !== dow) continue;
+          const [sh, sm] = ev.startTime.split(':').map(Number);
+          const [eh, em] = ev.endTime.split(':').map(Number);
+          templateBusySlots.push({
+            start: tDay.hour(sh).minute(sm).second(0).toISOString(),
+            end: tDay.hour(eh).minute(em).second(0).toISOString(),
+          });
+        }
+      }
+      tDay = tDay.add(1, 'day');
+    }
+  }
+
   const busySlots: { start: string; end: string }[] = [
     ...(includeNativeEvents ? ownSnap.docs.map(d => {
       const data = d.data();
@@ -89,6 +119,7 @@ async function computeOrganizerFreeSlots(
       const data = d.data();
       return { start: data.startTime as string, end: data.endTime as string };
     }),
+    ...templateBusySlots,
   ].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
   const freeSlots: GroupMeetSlot[] = [];

@@ -228,7 +228,9 @@ interface NewGroupMeetFormProps {
 const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone, onCancel }) => {
   const { createGroupMeet } = useGroupMeets(instanceId);
   // Get all calendars from the filter store (includes Personal + all connected Google calendars)
-  const allCalendars = useCalendarFilterStore(s => s.accounts);
+  // Deduplicate by ID to avoid showing the same calendar twice (two sync paths can both add same calendar)
+  const rawCalendars = useCalendarFilterStore(s => s.accounts);
+  const allCalendars = rawCalendars.filter((cal, idx, arr) => arr.findIndex(c => c.id === cal.id) === idx);
   const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
 
   const [title, setTitle] = useState('');

@@ -349,7 +349,7 @@ export function useSidebarPages() {
         updatedAt: serverTimestamp()
       });
 
-      return { success: true };
+      return { success: true, instanceId: moduleToAdd.instanceId };
     } catch (err) {
       console.error('Error adding module to page:', err);
       toast.error('Failed to add module');

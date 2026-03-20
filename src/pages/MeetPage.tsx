@@ -99,7 +99,7 @@ async function fetchFreeSlotsFromFirestore(
     // when window.start is mid-day (e.g. session created at 3pm but slots show from 8am)
     const queryStart = dayjs(window.start).startOf('day').toISOString();
 
-    const [nativeSnap, syncedSnap] = await Promise.all([
+    const [nativeSnap, syncedSnap, templatesSnap] = await Promise.all([
       includePersonal
         ? getDocs(query(
             collection(db, 'calendar_events'),
@@ -113,14 +113,42 @@ async function fetchFreeSlotsFromFirestore(
         where('startTime', '>=', queryStart),
         where('startTime', '<=', window.end)
       )),
+      includePersonal
+        ? getDocs(collection(db, `users/${userId}/calendarTemplates`))
+        : Promise.resolve(null),
     ]);
 
     const filteredSynced = googleIds !== null
       ? syncedSnap.docs.filter((d) => googleIds.includes(d.data().calendarId as string))
       : syncedSnap.docs;
 
+    // Expand active template events into busy slots for each day in the window
+    const templateBusy: { start: string; end: string }[] = [];
+    if (includePersonal && templatesSnap) {
+      const winStart = dayjs(window.start).startOf('day');
+      const winEnd = dayjs(window.end);
+      let tDay = winStart;
+      while (tDay.isBefore(winEnd)) {
+        const dow = tDay.day();
+        for (const tDoc of templatesSnap.docs) {
+          const tmpl = tDoc.data();
+          if (!tmpl.isActive) continue;
+          for (const ev of (tmpl.events || []) as Array<{ dayOfWeek: number; startTime: string; endTime: string }>) {
+            if (ev.dayOfWeek !== dow) continue;
+            const [sh, sm] = ev.startTime.split(':').map(Number);
+            const [eh, em] = ev.endTime.split(':').map(Number);
+            templateBusy.push({
+              start: tDay.hour(sh).minute(sm).second(0).toISOString(),
+              end: tDay.hour(eh).minute(em).second(0).toISOString(),
+            });
+          }
+        }
+        tDay = tDay.add(1, 'day');
+      }
+    }
+
     // No calendar data at all — can't auto-fill meaningfully
-    if ((!nativeSnap || nativeSnap.empty) && filteredSynced.length === 0) return null;
+    if ((!nativeSnap || nativeSnap.empty) && filteredSynced.length === 0 && templateBusy.length === 0) return null;
 
     const busyPeriods: { start: string; end: string }[] = [
       ...(nativeSnap ? nativeSnap.docs.map(d => {
@@ -134,6 +162,7 @@ async function fetchFreeSlotsFromFirestore(
         const data = d.data();
         return { start: data.startTime as string, end: data.endTime as string };
       }),
+      ...templateBusy,
     ];
 
     return organizerFreeSlots.filter(slot => {

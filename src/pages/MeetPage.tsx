@@ -20,6 +20,26 @@ import {
 import { db } from '@/integrations/firebase/config';
 import { isNative } from '@/lib/platform';
 
+interface CalendarOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+async function fetchUserCalendars(userId: string): Promise<CalendarOption[]> {
+  try {
+    const snap = await getDocs(collection(db, `users/${userId}/connectedCalendars`));
+    const googleCals = snap.docs.map(d => ({
+      id: d.id,
+      name: (d.data().name as string) || 'Google Calendar',
+      color: (d.data().color as string) || '#4285F4',
+    }));
+    return [{ id: 'personal', name: 'Personal', color: '#8B5CF6' }, ...googleCals];
+  } catch {
+    return [{ id: 'personal', name: 'Personal', color: '#8B5CF6' }];
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Call Google Calendar freebusy API and return which organizer slots the guest is free for */
@@ -67,17 +87,22 @@ async function fetchFreeSlotsFromGoogleCalendar(
 async function fetchFreeSlotsFromFirestore(
   userId: string,
   window: { start: string; end: string },
-  organizerFreeSlots: GroupMeetSlot[]
+  organizerFreeSlots: GroupMeetSlot[],
+  calendarIds?: string[]
 ): Promise<GroupMeetSlot[] | null> {
   try {
-    // Check both native events AND synced (Google) events
+    const includePersonal = !calendarIds || calendarIds.includes('personal');
+    const googleIds = calendarIds ? calendarIds.filter(id => id !== 'personal') : null;
+
     const [nativeSnap, syncedSnap] = await Promise.all([
-      getDocs(query(
-        collection(db, 'calendar_events'),
-        where('userId', '==', userId),
-        where('startsAt', '>=', window.start),
-        where('startsAt', '<=', window.end)
-      )),
+      includePersonal
+        ? getDocs(query(
+            collection(db, 'calendar_events'),
+            where('userId', '==', userId),
+            where('startsAt', '>=', window.start),
+            where('startsAt', '<=', window.end)
+          ))
+        : Promise.resolve(null),
       getDocs(query(
         collection(db, `users/${userId}/syncedEvents`),
         where('startTime', '>=', window.start),
@@ -85,18 +110,22 @@ async function fetchFreeSlotsFromFirestore(
       )),
     ]);
 
+    const filteredSynced = googleIds !== null
+      ? syncedSnap.docs.filter((d) => googleIds.includes(d.data().calendarId as string))
+      : syncedSnap.docs;
+
     // No calendar data at all — can't auto-fill meaningfully
-    if (nativeSnap.empty && syncedSnap.empty) return null;
+    if ((!nativeSnap || nativeSnap.empty) && filteredSynced.length === 0) return null;
 
     const busyPeriods: { start: string; end: string }[] = [
-      ...nativeSnap.docs.map(d => {
+      ...(nativeSnap ? nativeSnap.docs.map(d => {
         const data = d.data();
         return {
           start: data.startsAt instanceof Timestamp ? data.startsAt.toDate().toISOString() : data.startsAt,
           end: data.endsAt instanceof Timestamp ? data.endsAt.toDate().toISOString() : data.endsAt,
         };
-      }),
-      ...syncedSnap.docs.map(d => {
+      }) : []),
+      ...filteredSynced.map(d => {
         const data = d.data();
         return { start: data.startTime as string, end: data.endTime as string };
       }),
@@ -190,7 +219,7 @@ const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Step = 'identity' | 'availability' | 'done' | 'organizer';
+type Step = 'identity' | 'calendar_picker' | 'availability' | 'done' | 'organizer';
 
 const MeetPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -206,12 +235,17 @@ const MeetPage: React.FC = () => {
   const [signingIn, setSigningIn] = useState(false);
   const [autoFilled, setAutoFilled] = useState(false);
 
+  // Calendar picker state (for already-logged-in users)
+  const [calendarOptions, setCalendarOptions] = useState<CalendarOption[]>([]);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
+  const [computingSlots, setComputingSlots] = useState(false);
+
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  // If already signed in when landing — handle organizer + auto-compute from Firestore calendar
+  // If already signed in when landing — handle organizer then show calendar picker
   useEffect(() => {
     if (user && session && step === 'identity') {
-      // Organizer opens their own link — show them the organizer view
       if (user.uid === session.organizerId) {
         setStep('organizer');
         return;
@@ -224,22 +258,40 @@ const MeetPage: React.FC = () => {
         setStep('done');
         return;
       }
+
       setName(user.displayName || '');
       setEmail(user.email || '');
 
-      fetchFreeSlotsFromFirestore(user.uid, session.window, session.organizerFreeSlots)
-        .then(freeSlots => {
-          if (freeSlots !== null) {
-            setSelected(freeSlots);
-            setAutoFilled(true);
-          }
-          // null means no calendar data — leave selected empty, manual selection
-        })
-        .catch(() => {});
-
-      setStep('availability');
+      // Fetch the user's calendars so they can choose which to check
+      setLoadingCalendars(true);
+      fetchUserCalendars(user.uid).then(cals => {
+        setCalendarOptions(cals);
+        setSelectedCalendarIds(cals.map(c => c.id)); // default: all selected
+        setLoadingCalendars(false);
+        setStep('calendar_picker');
+      });
     }
   }, [user, session]);
+
+  const handleCalendarConfirm = async () => {
+    if (!user || !session) return;
+    setComputingSlots(true);
+    try {
+      const freeSlots = await fetchFreeSlotsFromFirestore(
+        user.uid,
+        session.window,
+        session.organizerFreeSlots,
+        selectedCalendarIds
+      );
+      if (freeSlots !== null && freeSlots.length > 0) {
+        setSelected(freeSlots);
+        setAutoFilled(true);
+      }
+    } finally {
+      setComputingSlots(false);
+      setStep('availability');
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     if (!session) return;
@@ -540,14 +592,84 @@ const MeetPage: React.FC = () => {
           </div>
         )}
 
+        {/* Step: Calendar Picker (already-logged-in users) */}
+        {step === 'calendar_picker' && (
+          <div className="space-y-4">
+            {loadingCalendars ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm font-semibold mb-1">Which calendars should we check?</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    We'll use these to find times you're free.
+                  </p>
+                  <div className="space-y-2">
+                    {calendarOptions.map(cal => {
+                      const checked = selectedCalendarIds.includes(cal.id);
+                      return (
+                        <button
+                          key={cal.id}
+                          type="button"
+                          onClick={() => setSelectedCalendarIds(prev =>
+                            checked ? prev.filter(id => id !== cal.id) : [...prev, cal.id]
+                          )}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left',
+                            checked
+                              ? 'border-purple-500/50 bg-purple-500/8'
+                              : 'border-border/40 text-muted-foreground hover:border-border/70'
+                          )}
+                        >
+                          <span
+                            className="h-3 w-3 rounded-full shrink-0"
+                            style={{ background: cal.color }}
+                          />
+                          <span className="flex-1 text-sm">{cal.name}</span>
+                          <div className={cn(
+                            'h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                            checked ? 'bg-purple-500 border-purple-500' : 'border-border/50'
+                          )}>
+                            {checked && <Check size={10} className="text-white" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleCalendarConfirm}
+                  disabled={computingSlots || selectedCalendarIds.length === 0}
+                  className="w-full h-11 bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  {computingSlots
+                    ? <><Loader2 size={15} className="mr-2 animate-spin" /> Checking your calendar...</>
+                    : 'Continue'
+                  }
+                </Button>
+
+                <button
+                  onClick={() => setStep('availability')}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground text-center"
+                >
+                  Skip — I'll select times manually
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Step: Availability */}
         {step === 'availability' && (
           <div className="space-y-4">
             <button
-              onClick={() => { if (!user) setStep('identity'); }}
+              onClick={() => { if (user) setStep('calendar_picker'); else setStep('identity'); }}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
             >
-              {!user && <><ChevronLeft size={13} /> Back</>}
+              <ChevronLeft size={13} /> Back
             </button>
 
             {/* Auto-filled banner */}

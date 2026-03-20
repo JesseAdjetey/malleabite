@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,18 +18,9 @@ import {
 import { useAppointmentScheduling, BookingPageFormData } from '@/hooks/use-appointment-scheduling';
 import { useGroupMeets, CreateGroupMeetData } from '@/hooks/use-group-meets';
 import { GroupMeetSession, GroupMeetSlot } from '@/lib/stores/types';
-import { useAuth } from '@/contexts/AuthContext.firebase';
-import { collection, query, getDocs } from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
+import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
-
-interface ConnectedCalendarBasic {
-  id: string;
-  name: string;
-  color: string;
-  isActive: boolean;
-}
 
 interface BookingModuleProps {
   title?: string;
@@ -236,7 +227,10 @@ interface NewGroupMeetFormProps {
 
 const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone, onCancel }) => {
   const { createGroupMeet } = useGroupMeets(instanceId);
-  const { user } = useAuth();
+  // Get all calendars from the filter store (includes Personal + all connected Google calendars)
+  const allCalendars = useCalendarFilterStore(s => s.accounts);
+  const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
+
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('30');
   const [window, setWindow] = useState('week');
@@ -244,21 +238,10 @@ const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone,
   const [autoConfirm, setAutoConfirm] = useState(false);
   const [participants, setParticipants] = useState<{ name: string; email: string }[]>([]);
   const [creating, setCreating] = useState(false);
-  const [calendars, setCalendars] = useState<ConnectedCalendarBasic[]>([]);
-  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]); // empty = all
-
-  // Fetch user's connected calendars
-  useEffect(() => {
-    if (!user?.uid) return;
-    getDocs(query(
-      collection(db, `users/${user.uid}/connectedCalendars`),
-    )).then(snap => {
-      const cals = snap.docs.map(d => ({ id: d.id, ...d.data() } as ConnectedCalendarBasic));
-      setCalendars(cals);
-      // Default: all active calendars selected
-      setSelectedCalendarIds(cals.filter(c => c.isActive).map(c => c.id));
-    }).catch(() => {});
-  }, [user?.uid]);
+  // Default: calendars currently toggled ON in the calendar dropdown
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(
+    () => getVisibleCalendarIds()
+  );
 
   const toggleCalendar = (id: string) => {
     setSelectedCalendarIds(prev =>
@@ -370,11 +353,11 @@ const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone,
       </div>
 
       {/* ── Calendar picker ── */}
-      {calendars.length > 0 && (
+      {allCalendars.length > 0 && (
         <div className="space-y-1.5">
           <Label className="text-xs">Check availability from</Label>
           <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
-            {calendars.map(cal => {
+            {allCalendars.map(cal => {
               const checked = selectedCalendarIds.includes(cal.id);
               return (
                 <button

@@ -15,6 +15,7 @@ import {
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { GroupMeetSession, GroupMeetParticipant, GroupMeetSlot } from '@/lib/stores/types';
+import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 
@@ -56,18 +57,30 @@ async function computeOrganizerFreeSlots(
 
   const [ownSnap, syncedSnap] = await Promise.all([getDocs(ownEventsQuery), getDocs(syncedQuery)]);
 
-  const syncedDocs = (calendarIds && calendarIds.length > 0)
-    ? syncedSnap.docs.filter(d => calendarIds.includes(d.data().calendarId as string))
-    : syncedSnap.docs;
+  // Filter synced events: if specific calendarIds given, only include those Google calendars
+  // (exclude 'personal' from this filter since personal = native events handled separately)
+  const googleCalendarIds = calendarIds
+    ? calendarIds.filter(id => id !== PERSONAL_CALENDAR_ID)
+    : undefined;
+
+  const syncedDocs = (googleCalendarIds && googleCalendarIds.length > 0)
+    ? syncedSnap.docs.filter(d => googleCalendarIds.includes(d.data().calendarId as string))
+    : (calendarIds && calendarIds.length > 0 && googleCalendarIds?.length === 0)
+      ? [] // only personal was selected — skip synced events
+      : syncedSnap.docs;
+
+  // Include native events only if 'personal' calendar is selected (or no filter given)
+  const includeNativeEvents = !calendarIds || calendarIds.length === 0
+    || calendarIds.includes(PERSONAL_CALENDAR_ID);
 
   const busySlots: { start: string; end: string }[] = [
-    ...ownSnap.docs.map(d => {
+    ...(includeNativeEvents ? ownSnap.docs.map(d => {
       const data = d.data();
       return {
         start: data.startsAt instanceof Timestamp ? data.startsAt.toDate().toISOString() : data.startsAt,
         end: data.endsAt instanceof Timestamp ? data.endsAt.toDate().toISOString() : data.endsAt,
       };
-    }),
+    }) : []),
     ...syncedDocs.map(d => {
       const data = d.data();
       return { start: data.startTime as string, end: data.endTime as string };

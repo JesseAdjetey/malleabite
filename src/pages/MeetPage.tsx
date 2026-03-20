@@ -60,9 +60,9 @@ async function fetchFreeSlotsFromGoogleCalendar(
 }
 
 /**
- * Query Firestore calendar_events for an app user.
- * Returns null if the user has no events in the window (can't auto-fill reliably).
- * Returns the filtered free slots if they have calendar data.
+ * Query Firestore calendar_events + syncedEvents for an app user.
+ * Returns null only if the user has NO calendar data in the window (can't auto-fill reliably).
+ * Returns the filtered free slots otherwise.
  */
 async function fetchFreeSlotsFromFirestore(
   userId: string,
@@ -70,23 +70,37 @@ async function fetchFreeSlotsFromFirestore(
   organizerFreeSlots: GroupMeetSlot[]
 ): Promise<GroupMeetSlot[] | null> {
   try {
-    const q = query(
-      collection(db, 'calendar_events'),
-      where('userId', '==', userId),
-      where('startsAt', '>=', window.start),
-      where('startsAt', '<=', window.end)
-    );
-    const snapshot = await getDocs(q);
-    // No calendar data — can't auto-fill meaningfully
-    if (snapshot.empty) return null;
+    // Check both native events AND synced (Google) events
+    const [nativeSnap, syncedSnap] = await Promise.all([
+      getDocs(query(
+        collection(db, 'calendar_events'),
+        where('userId', '==', userId),
+        where('startsAt', '>=', window.start),
+        where('startsAt', '<=', window.end)
+      )),
+      getDocs(query(
+        collection(db, `users/${userId}/syncedEvents`),
+        where('startTime', '>=', window.start),
+        where('startTime', '<=', window.end)
+      )),
+    ]);
 
-    const busyPeriods = snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        start: data.startsAt instanceof Timestamp ? data.startsAt.toDate().toISOString() : data.startsAt,
-        end: data.endsAt instanceof Timestamp ? data.endsAt.toDate().toISOString() : data.endsAt,
-      };
-    });
+    // No calendar data at all — can't auto-fill meaningfully
+    if (nativeSnap.empty && syncedSnap.empty) return null;
+
+    const busyPeriods: { start: string; end: string }[] = [
+      ...nativeSnap.docs.map(d => {
+        const data = d.data();
+        return {
+          start: data.startsAt instanceof Timestamp ? data.startsAt.toDate().toISOString() : data.startsAt,
+          end: data.endsAt instanceof Timestamp ? data.endsAt.toDate().toISOString() : data.endsAt,
+        };
+      }),
+      ...syncedSnap.docs.map(d => {
+        const data = d.data();
+        return { start: data.startTime as string, end: data.endTime as string };
+      }),
+    ];
 
     return organizerFreeSlots.filter(slot => {
       const slotStart = new Date(slot.start).getTime();
@@ -310,6 +324,10 @@ const MeetPage: React.FC = () => {
       if (result.success) {
         setStep('done');
         if (user) {
+          // Set pendingMeetSessionId so PendingMeetHandler shows ModulePicker on home
+          sessionStorage.setItem('pendingMeetSessionId', sessionId!);
+          sessionStorage.setItem('pendingMeetTitle', session?.title ?? '');
+          sessionStorage.setItem('pendingMeetOrganizerName', session?.organizerName ?? '');
           navigate('/', { replace: true });
         }
       } else {

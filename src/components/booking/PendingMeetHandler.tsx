@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import ModulePicker from './ModulePicker';
 
@@ -11,6 +12,7 @@ import ModulePicker from './ModulePicker';
  */
 const PendingMeetHandler: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
   const [pending, setPending] = useState<{
     sessionId: string;
     title: string;
@@ -27,7 +29,7 @@ const PendingMeetHandler: React.FC = () => {
     if (sessionId) {
       setPending({ sessionId, title, organizerName });
     }
-  }, [user]);
+  }, [user, location.pathname]);
 
   const handleDone = () => {
     sessionStorage.removeItem('pendingMeetSessionId');

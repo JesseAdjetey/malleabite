@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Plus,
   Trash2,
@@ -240,7 +241,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[70vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-title3">Calendar Templates</DialogTitle>
           <DialogDescription>
@@ -248,7 +249,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[50vh] overflow-y-auto -mx-1 px-1">
+        <ScrollArea className="flex-1">
           <div className="space-y-2 py-2">
             {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
@@ -363,7 +364,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange })
               </AnimatePresence>
             )}
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

@@ -71,13 +71,18 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
       <button
         onClick={() => onToggle(calendar.id, !isVisible)}
         className={cn(
-          'w-4 h-4 rounded-[4px] border-2 flex items-center justify-center flex-shrink-0',
+          'rounded-[4px] border-2 flex items-center justify-center flex-shrink-0',
           'transition-all duration-200',
           isVisible
             ? 'border-transparent'
             : 'border-muted-foreground/30 bg-transparent'
         )}
         style={{
+          width: '1rem',
+          height: '1rem',
+          minWidth: '1rem',
+          minHeight: '1rem',
+          padding: 0,
           backgroundColor: isVisible ? calendar.color : undefined,
         }}
         aria-label={`Toggle ${calendar.name} visibility`}

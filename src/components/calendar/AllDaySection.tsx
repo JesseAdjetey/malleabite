@@ -35,6 +35,7 @@ interface AllDaySectionBaseProps {
 
 interface WeekAllDayRowProps extends AllDaySectionBaseProps {
   weekDays: { currentDate: dayjs.Dayjs; today: boolean }[];
+  onAllDayEventDrop?: (event: CalendarEventType, newDate: dayjs.Dayjs) => void;
 }
 
 /**
@@ -56,8 +57,10 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
   onAddAlarm,
   onAddTodo,
   onLockToggle,
+  onAllDayEventDrop,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
   // Group all-day events by day
   const eventsByDay: Record<string, CalendarEventType[]> = {};
@@ -106,8 +109,23 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
               key={index}
               className={cn(
                 "relative border-l border-purple-100 dark:border-white/5 min-h-[28px] py-1 px-0.5 flex flex-col gap-0.5 cursor-pointer transition-colors",
-                "hover:bg-purple-100/40 dark:hover:bg-white/5"
+                "hover:bg-purple-100/40 dark:hover:bg-white/5",
+                dragOverDay === dayStr && "bg-purple-200/50 dark:bg-white/10"
               )}
+              onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayStr); }}
+              onDragLeave={() => setDragOverDay(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverDay(null);
+                const raw = e.dataTransfer.getData('application/json');
+                if (!raw) return;
+                try {
+                  const data = JSON.parse(raw);
+                  if (data._allDayDrag && onAllDayEventDrop) {
+                    onAllDayEventDrop(data, currentDate);
+                  }
+                } catch {}
+              }}
               onClick={(e) => {
                 if (
                   (e.target as HTMLElement).closest(
@@ -122,6 +140,12 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
                 <div
                   key={event.id}
                   className="calendar-event-wrapper"
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.setData('application/json', JSON.stringify({ ...event, _allDayDrag: true }));
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!isBulkMode) {

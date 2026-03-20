@@ -296,9 +296,6 @@ export function useCalendarSync(): UseCalendarSyncReturn {
             id: `${calendar.id}_${ge.id}`,
             calendarId: calendar.id,
             externalId: ge.id,
-            // For recurring instances, store the series/parent ID so callers can
-            // delete the whole series (not just one instance) when needed.
-            googleSeriesId: ge.recurringEventId || undefined,
             title: ge.summary || 'Untitled Event',
             description: ge.description || '',
             location: ge.location || '',
@@ -321,13 +318,6 @@ export function useCalendarSync(): UseCalendarSyncReturn {
 
       // Replace cached synced events for this calendar inside the current sync window.
       await calendarService.replaceSyncedEventsForCalendar(user.uid, calendar.id, events);
-
-      // Update any locally-created calendar_events whose time changed in Google
-      // (e.g. the user dragged the event directly in Google Calendar).
-      calendarService.syncLocalEventsFromGoogle(
-        user.uid,
-        events.map(e => ({ externalId: e.externalId, startTime: e.startTime, endTime: e.endTime }))
-      ).catch(err => logger.error('useCalendarSync', 'syncLocalEventsFromGoogle failed', { error: err }));
 
       // Update last sync time on calendar
       await calendarService.updateConnectedCalendar(user.uid, calendar.id, {

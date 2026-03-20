@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Calendar,
   ChevronDown,
@@ -363,6 +364,16 @@ const CalendarDropdown: React.FC = () => {
   }, [getGroupCalendars, templateAsCalendars]);
   const sortedGroupIds = useMemo(() => sortedGroups.map(g => g.id), [sortedGroups]);
 
+  const handleToggleGroup = useCallback(
+    (groupId: string, makeVisible: boolean) => {
+      const groupCalendars = getGroupCalendarsWithTemplates(groupId);
+      groupCalendars.forEach(cal => {
+        handleToggleCalendar(cal.id, makeVisible);
+      });
+    },
+    [getGroupCalendarsWithTemplates, handleToggleCalendar]
+  );
+
   // dnd-kit sensors (pointer with activation distance to avoid blocking clicks)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -471,7 +482,7 @@ const CalendarDropdown: React.FC = () => {
           align="end"
           sideOffset={8}
           className={cn(
-            'w-[320px] p-0 rounded-2xl border border-border/60',
+            'w-[320px] max-w-[calc(100vw-12px)] p-0 rounded-2xl border border-border/60',
             'bg-popover/95 backdrop-blur-xl shadow-xl',
             'dark:bg-popover/90'
           )}
@@ -542,7 +553,7 @@ const CalendarDropdown: React.FC = () => {
                 )}
 
                 {/* Calendar Groups */}
-                <div className="max-h-[50vh] overflow-y-auto">
+                <ScrollArea className="max-h-[50vh]">
                   <div className="py-1.5">
                     {groupsLoading ? (
                       <div className="px-4 py-8 text-center">
@@ -594,6 +605,7 @@ const CalendarDropdown: React.FC = () => {
                                   onAddCalendar={handleAddCalendar}
                                   onToggleCalendar={handleToggleCalendar}
                                   onDeleteCalendar={deleteCalendar}
+                                  onToggleGroup={(makeVisible) => handleToggleGroup(group.id, makeVisible)}
                                   dragHandleProps={dragHandleProps}
                                   isDragging={isDragging}
                                   isDropTarget={overGroupId === group.id && activeCalendar?.groupId !== group.id}
@@ -618,73 +630,77 @@ const CalendarDropdown: React.FC = () => {
                       </DndContext>
                     )}
                   </div>
-                </div>
+                </ScrollArea>
 
                 <Separator className="opacity-50" />
 
                 {/* Footer Actions */}
-                <div className="p-2 flex items-center gap-1 flex-wrap">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setAddCalendarGroupId(undefined);
-                      setAddCalendarOpen(true);
-                    }}
-                  >
-                    <Plus size={13} />
-                    Add Calendar
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={handleCreateGroup}
-                  >
-                    <FolderPlus size={13} />
-                    New Group
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => setTemplateManagerOpen(true)}
-                  >
-                    <FileText size={13} />
-                    Templates
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => setMergeDialogOpen(true)}
-                  >
-                    <FolderInput size={13} />
-                    Merge
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                    onClick={handleSync}
-                    disabled={syncState.status === 'syncing'}
-                  >
-                    <motion.div
-                      animate={syncState.status === 'syncing' ? { rotate: 360 } : {}}
-                      transition={
-                        syncState.status === 'syncing'
-                          ? { repeat: Infinity, duration: 1, ease: 'linear' }
-                          : {}
-                      }
+                <div className="p-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setAddCalendarGroupId(undefined);
+                        setAddCalendarOpen(true);
+                      }}
                     >
-                      <RefreshCw size={13} />
-                    </motion.div>
-                  </Button>
+                      <Plus size={13} />
+                      Add Calendar
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={handleCreateGroup}
+                    >
+                      <FolderPlus size={13} />
+                      New Group
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => setTemplateManagerOpen(true)}
+                    >
+                      <FileText size={13} />
+                      Templates
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => setMergeDialogOpen(true)}
+                    >
+                      <FolderInput size={13} />
+                      Merge
+                    </Button>
+                  </div>
+
+                  <div className="flex justify-end mt-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={handleSync}
+                      disabled={syncState.status === 'syncing'}
+                    >
+                      <motion.div
+                        animate={syncState.status === 'syncing' ? { rotate: 360 } : {}}
+                        transition={
+                          syncState.status === 'syncing'
+                            ? { repeat: Infinity, duration: 1, ease: 'linear' }
+                            : {}
+                        }
+                      >
+                        <RefreshCw size={13} />
+                      </motion.div>
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             )}

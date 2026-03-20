@@ -22,9 +22,6 @@ export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 // Export Group Meets handlers
 export { onGroupMeetUpdated, confirmGroupMeetSlot } from './group-meets';
 
-// Export Realtime Data proxy (keeps API keys server-side)
-export { realtimeDataProxy } from './realtime-data-proxy';
-
 // Export Google Calendar OAuth handlers
 export {
   getGoogleCalendarAuthUrl,

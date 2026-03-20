@@ -55,6 +55,7 @@ interface GroupSectionProps {
   onToggleCalendar: (calendarId: string, isActive: boolean) => void;
   onDeleteCalendar: (calendarId: string) => void;
   onMoveCalendar?: (calendarId: string) => void;
+  onToggleGroup?: (makeVisible: boolean) => void;
   dragHandleProps?: Record<string, any>;
   isDragging?: boolean;
   isDropTarget?: boolean;
@@ -71,6 +72,7 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   onToggleCalendar,
   onDeleteCalendar,
   onMoveCalendar,
+  onToggleGroup,
   dragHandleProps,
   isDragging = false,
   isDropTarget = false,
@@ -78,6 +80,8 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   const IconComponent = GROUP_ICONS[group.icon] || Folder;
   const hiddenCalendarIds = useCalendarFilterStore((state) => state.hiddenCalendarIds);
   const activeCount = calendars.filter(c => !hiddenCalendarIds.has(c.id)).length;
+  const allActive = calendars.length > 0 && activeCount === calendars.length;
+  const someActive = activeCount > 0 && activeCount < calendars.length;
 
   return (
     <motion.div
@@ -140,6 +144,27 @@ const GroupSection: React.FC<GroupSectionProps> = ({
             </span>
           )}
         </button>
+
+        {/* Group Visibility Toggle */}
+        {calendars.length > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleGroup?.(!allActive);
+            }}
+            className="flex-shrink-0 p-0.5 rounded transition-opacity opacity-70 hover:opacity-100"
+            title={allActive ? 'Hide all calendars in group' : 'Show all calendars in group'}
+          >
+            <div
+              className="w-3 h-3 rounded-full border-2 transition-all"
+              style={{
+                backgroundColor: allActive ? group.color : someActive ? `${group.color}55` : 'transparent',
+                borderColor: allActive || someActive ? group.color : undefined,
+                borderStyle: 'solid',
+              }}
+            />
+          </button>
+        )}
 
         {/* Group Actions */}
         <div className="flex items-center gap-0.5 flex-shrink-0">

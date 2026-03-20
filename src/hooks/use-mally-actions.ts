@@ -16,6 +16,7 @@ import { useDateStore } from "@/lib/stores/date-store";
 import { logger } from "@/lib/logger";
 import { SidebarPage } from "@/lib/stores/types";
 import { useGoogleCalendar } from "@/hooks/use-google-calendar";
+import { useGoogleSyncBridgeContext } from "@/contexts/GoogleSyncBridgeContext";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
@@ -43,7 +44,6 @@ import { useVideoConferencing } from "@/hooks/use-video-conferencing";
 import { useEmailNotifications } from "@/hooks/use-email-notifications";
 import { useAuth } from "@/contexts/AuthContext.unified";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
-import { useGoogleSyncBridgeContext } from "@/contexts/GoogleSyncBridgeContext";
 import * as calendarService from "@/lib/services/calendarService";
 import { CalendarTemplate, CalendarTemplateEvent } from "@/types/calendar";
 
@@ -90,7 +90,7 @@ export function useMallyActions() {
   // Pomodoro
   const {
     startTimer, pauseTimer, resetTimer,
-    setWorkDuration, setBreakTime, setFocusTarget,
+    setFocusTime, setBreakTime, setFocusTarget,
     getInstance: getPomodoroInstance,
   } = usePomodoroStore();
 
@@ -391,7 +391,7 @@ export function useMallyActions() {
           const result = await addEvent(formattedEvent as any);
           if (!result?.success) return false;
 
-          // Sync to Google Calendar via the bridge (respects which specific Google calendar was chosen)
+          // Auto-sync to Google Calendar if enabled
           const eventWithId = { ...formattedEvent, id: result.data?.id || formattedEvent.id } as any;
           if (bridge) {
             try {
@@ -403,7 +403,6 @@ export function useMallyActions() {
               logger.warn('MallyActions', 'Google Calendar sync failed', { error: err });
             }
           } else if (syncEnabled && (formattedEvent as any).source !== 'google') {
-            // Fallback if bridge context is not mounted
             try {
               const googleId = await pushEventToGoogle(eventWithId);
               if (googleId && result.data?.id) {
@@ -710,7 +709,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_timer': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.workDuration) setWorkDuration(data.workDuration);
+          if (data.focusTime) setFocusTime(data.focusTime);
           if (data.breakTime) setBreakTime(data.breakTime);
           toast.success('Timer settings updated');
           return true;
@@ -1404,7 +1403,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_settings': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.workDuration) setWorkDuration(data.workDuration);
+          if (data.focusTime) setFocusTime(data.focusTime);
           if (data.breakTime) setBreakTime(data.breakTime);
           if (data.focusTarget) setFocusTarget(data.focusTarget);
           toast.success('Pomodoro settings updated');
@@ -1969,7 +1968,7 @@ export function useMallyActions() {
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
     addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
     addReminder, updateReminder, deleteReminder, toggleReminderActive,
-    startTimer, pauseTimer, resetTimer, setWorkDuration, setBreakTime, setFocusTarget,
+    startTimer, pauseTimer, resetTimer, setFocusTime, setBreakTime, setFocusTarget,
     templates, applyTemplate, useTemplate, createTemplate, deleteTemplate,
     sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,

@@ -16,6 +16,7 @@ interface EventFormProps {
   initialTime?: {
     date: Date;
     startTime: string;
+    isAllDay?: boolean;
   };
   todoData?: any;
   onSave?: (event: any) => void;
@@ -79,6 +80,17 @@ const EventForm: React.FC<EventFormProps> = ({
           endsAt: endsAt.toISOString(),
           isLocked: false,
         };
+
+        // If opening from the all-day section, mark as all-day
+        if (initialTime.isAllDay) {
+          event = {
+            ...event,
+            isAllDay: true,
+            description: '',
+            startsAt: new Date(`${startDate}T00:00:00`).toISOString(),
+            endsAt: new Date(`${startDate}T23:59:00`).toISOString(),
+          };
+        }
 
         // If we have todo data, add it
         if (todoData) {

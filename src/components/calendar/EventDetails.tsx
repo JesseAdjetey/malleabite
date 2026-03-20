@@ -83,7 +83,7 @@ interface EventDetailsProps {
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const { selectedEvent } = useEventStore();
 
-  const { updateEvent, removeEvent, deleteSyncedGoogleEvent } = useEventCRUD() as any;
+  const { updateEvent, removeEvent } = useEventCRUD();
   const { addRecurrenceException } = useCalendarEvents();
   const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();
   const { toggleTodo, deleteTodo } = useTodos();
@@ -99,17 +99,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     if (!selectedEvent) return;
 
     try {
-      const synced = selectedEvent.id?.startsWith('synced_');
-
-      if (synced) {
-        // Synced events can't use addRecurrenceException (they're in syncedEvents, not calendar_events).
-        // Use scope-aware deletion: 'single' removes just this instance, 'all'/'thisAndFuture' removes the series.
-        await deleteSyncedGoogleEvent(selectedEvent, scope);
-        setShowRecurringDeleteDialog(false);
-        onClose();
-        return;
-      }
-
       const parentId = selectedEvent.recurrenceParentId ||
         (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
       const instanceDate = selectedEvent.id.includes('_')
@@ -198,18 +187,11 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     }
   })();
 
-  // Synced events have IDs like "synced_XXXXX" — don't let the "_" fool the
-  // recurring check below (all synced event IDs contain "_").
-  const isSyncedEvent = Boolean(selectedEvent.id?.startsWith('synced_'));
-
-  // Check if this is a recurring event or instance.
-  // For synced Google events, googleSeriesId is set on recurring instances (from ge.recurringEventId).
+  // Check if this is a recurring event or instance
   const isRecurringEvent = Boolean(
     selectedEvent.isRecurring ||
     selectedEvent.recurrenceParentId ||
-    selectedEvent.googleSeriesId ||  // Synced recurring instances always have this set
-    // Only use the "_" heuristic for non-synced events (recurring instances have IDs like "parentId_date")
-    (!isSyncedEvent && selectedEvent.id && selectedEvent.id.includes('_'))
+    (selectedEvent.id && selectedEvent.id.includes('_'))
   );
 
   const handleDeleteClick = () => {
@@ -236,11 +218,6 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       if (links.length > 0) {
         await deleteWithSync('event', selectedEvent.id, 'unlink');
         toast.success("Event deleted · linked items kept");
-      } else if (isSyncedEvent) {
-        // Synced events live in users/{uid}/syncedEvents, not calendar_events.
-        // Pass the full event object so deleteEventWithSync can delete from the
-        // right Firestore collection and also push the delete to Google Calendar.
-        await removeEvent(selectedEvent);
       } else {
         await removeEvent(selectedEvent.id);
         toast.success("Event deleted");

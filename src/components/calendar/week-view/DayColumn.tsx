@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from "react";
-import { cn } from "@/lib/utils";
 import { getHours, isCurrentDay } from "@/lib/getTime";
+import { cn } from "@/lib/utils";
 import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import CalendarEvent from "../CalendarEvent";
@@ -10,7 +10,6 @@ import EventContextMenu from "../EventContextMenu";
 import CurrentTimeIndicator from "./CurrentTimeIndicator";
 import { calculateEventHeight, calculateEventPosition, getTimeInfo } from "../event-utils/touch-handlers";
 import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overlap";
-import { useEventResize } from "@/hooks/use-event-resize";
 
 interface DayColumnProps {
   currentDate: dayjs.Dayjs;
@@ -24,15 +23,14 @@ interface DayColumnProps {
   isBulkMode?: boolean;
   isSelected?: (eventId: string) => boolean;
   onToggleSelection?: (eventId: string) => void;
+  onShiftClickEvent?: (eventId: string) => void;
+  draggingBulkEventId?: string | null;
   // Context menu handlers
   onDeleteEvent?: (eventId: string) => void;
   onDuplicateEvent?: (event: CalendarEventType) => void;
   onColorChange?: (eventId: string, color: string) => void;
   onAddAlarm?: (event: CalendarEventType) => void;
   onAddTodo?: (event: CalendarEventType) => void;
-  onEventResize?: (event: CalendarEventType, newStartsAt: string, newEndsAt: string) => Promise<void>;
-  onShiftClickEvent?: (eventId: string) => void;
-  draggingBulkEventId?: string | null;
 }
 
 const DayColumn: React.FC<DayColumnProps> = ({
@@ -47,44 +45,16 @@ const DayColumn: React.FC<DayColumnProps> = ({
   isBulkMode = false,
   isSelected = () => false,
   onToggleSelection = () => { },
+  onShiftClickEvent,
+  draggingBulkEventId,
   onDeleteEvent,
   onDuplicateEvent,
   onColorChange,
   onAddAlarm,
   onAddTodo,
-  onEventResize,
-  onShiftClickEvent,
-  draggingBulkEventId,
 }) => {
   const hourHeight = 80; // The height in pixels of each hour cell
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
-  const [resizePreview, setResizePreview] = useState<{ eventId: string; height: number; label: string } | null>(null);
-
-  const [, { handleResizeStart }] = useEventResize({
-    minutesPerPixel: 60 / hourHeight,
-    snapInterval: 15,
-    minDuration: 15,
-    onResize: (eventId, newStart, newEnd) => {
-      const newHeight = calculateEventHeight(
-        dayjs(newStart).format('HH:mm'),
-        dayjs(newEnd).format('HH:mm'),
-        hourHeight
-      );
-      const mins = dayjs(newEnd).diff(dayjs(newStart), 'minute');
-      const label = mins >= 60
-        ? `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ''}`
-        : `${mins}m`;
-      setResizePreview({ eventId, height: Math.max(newHeight, 20), label });
-    },
-    onResizeEnd: async (eventId, newStart, newEnd) => {
-      setResizePreview(null);
-      const event = dayEvents.find(e => e.id === eventId);
-      if (!event) return false;
-      await onEventResize?.(event, newStart.toISOString(), newEnd.toISOString());
-      return true;
-    },
-    onResizeCancel: () => setResizePreview(null),
-  });
 
   // Calculate event positions for overlapping events
   const eventPositions = useMemo(() => calculateEventPositions(dayEvents), [dayEvents]);
@@ -138,15 +108,12 @@ const DayColumn: React.FC<DayColumnProps> = ({
         const position = eventPositions.get(event.id);
         const overlapStyle = getEventStyle(position);
 
-        const isResizingThis = resizePreview?.eventId === event.id;
-        const displayHeight = isResizingThis ? resizePreview!.height : eventHeight;
-
         return (
           <div
             key={event.id}
             data-event-id={event.id}
             className={cn(
-              "absolute z-10 group/event transition-opacity",
+              "absolute z-10 transition-opacity",
               draggingBulkEventId &&
                 isSelected(event.id) &&
                 event.id !== draggingBulkEventId &&
@@ -154,33 +121,21 @@ const DayColumn: React.FC<DayColumnProps> = ({
             )}
             style={{
               top: `${topPosition}px`,
-              height: `${displayHeight}px`,
+              height: `${eventHeight}px`,
               left: overlapStyle.left,
               width: overlapStyle.width,
             }}
-            onClickCapture={(e) => {
-              // Capture phase fires before inner handlers — intercept Shift+Click
-              // before CalendarEvent's onClick can open the detail dialog.
+            onClick={(e) => {
+              e.stopPropagation();
               if (e.shiftKey && !isBulkMode) {
-                e.stopPropagation();
                 onShiftClickEvent?.(event.id);
                 return;
               }
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
               if (!isBulkMode) {
                 openEventSummary(event);
               }
             }}
           >
-            {/* Duration tooltip shown during active resize */}
-            {isResizingThis && (
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 rounded-full bg-foreground text-background text-xs font-medium whitespace-nowrap pointer-events-none">
-                {resizePreview!.label}
-              </div>
-            )}
-
             {isBulkMode ? (
               <SelectableCalendarEvent
                 event={event}
@@ -200,7 +155,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
                 onAddAlarm={onAddAlarm}
                 onAddTodo={onAddTodo}
               >
-                <div className="h-full relative">
+                <div className="h-full">
                   <CalendarEvent
                     event={event}
                     color={event.color}
@@ -213,23 +168,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
                     onClick={() => openEventSummary(event)}
                     onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
                   />
-                  {/* Bottom resize handle — visible on hover, hidden for locked events */}
-                  {!event.isLocked && (
-                    <div
-                      className="absolute bottom-0 left-0 right-0 h-3 z-20 cursor-ns-resize flex items-end justify-center pb-0.5 opacity-0 group-hover/event:opacity-100 transition-opacity"
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        handleResizeStart(e, event.id, 'bottom', new Date(event.startsAt), new Date(event.endsAt));
-                      }}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                        handleResizeStart(e, event.id, 'bottom', new Date(event.startsAt), new Date(event.endsAt));
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="w-8 h-1 rounded-full bg-white/70" />
-                    </div>
-                  )}
                 </div>
               </EventContextMenu>
             )}

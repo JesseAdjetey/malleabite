@@ -40,7 +40,6 @@ function syncedToCalendarEvent(synced: SyncedCalendarEvent): CalendarEventType {
     calendarId: synced.calendarId,
     source: synced.source === 'google' ? 'google' : 'malleabite',
     googleEventId: synced.source === 'google' ? synced.externalId : undefined,
-    googleSeriesId: synced.googleSeriesId,
     isLocked: true, // Synced events are read-only in the local calendar
     attendees: synced.attendees?.map(a => ({
       email: a.email,

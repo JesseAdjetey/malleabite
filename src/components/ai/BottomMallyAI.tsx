@@ -1941,7 +1941,6 @@ RULES:
               <img src="/logo-quadrant.svg" alt="" className="h-5 w-5 object-contain select-none" draggable={false} />
             ) : (
               <>
-                {/* Floating logo icon */}
                 <motion.img
                   src="/logo-quadrant.svg"
                   alt=""
@@ -1950,8 +1949,6 @@ RULES:
                   transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
                   draggable={false}
                 />
-
-                {/* Shimmer sweep — always running, signals "alive" */}
                 <span className="pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden" aria-hidden>
                   <motion.span
                     className="absolute top-0 bottom-0 w-[50%]"

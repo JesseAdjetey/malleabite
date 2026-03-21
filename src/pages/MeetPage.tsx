@@ -277,6 +277,24 @@ const MeetPage: React.FC = () => {
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+  // Running intersection: slots where the organizer AND all previous respondents are free.
+  // Each new participant sees only the times that already work for everyone before them.
+  const sievedSlots = useMemo(() => {
+    if (!session) return [];
+    const responded = session.participants.filter(p => p.responded);
+    if (responded.length === 0) return session.organizerFreeSlots;
+
+    const filtered = session.organizerFreeSlots.filter(slot =>
+      responded.every(p =>
+        p.availableSlots.some(s => s.start === slot.start && s.end === slot.end)
+      )
+    );
+    // If there's no overlap at all yet, fall back to the full organizer list
+    return filtered.length > 0 ? filtered : session.organizerFreeSlots;
+  }, [session]);
+
+  const previousRespondentCount = session?.participants.filter(p => p.responded).length ?? 0;
+
   // If already signed in when landing — handle organizer then show calendar picker
   useEffect(() => {
     if (user && session && step === 'identity') {
@@ -315,7 +333,7 @@ const MeetPage: React.FC = () => {
       const freeSlots = await fetchFreeSlotsFromFirestore(
         user.uid,
         session.window,
-        session.organizerFreeSlots,
+        sievedSlots,
         selectedCalendarIds
       );
       if (freeSlots !== null && freeSlots.length > 0) {
@@ -365,7 +383,7 @@ const MeetPage: React.FC = () => {
         const freeSlots = await fetchFreeSlotsFromGoogleCalendar(
           accessToken,
           session.window,
-          session.organizerFreeSlots
+          sievedSlots
         );
         setSelected(freeSlots);
         setAutoFilled(true);
@@ -461,27 +479,38 @@ const MeetPage: React.FC = () => {
     );
   }
 
-  if (session.status === 'confirmed' && session.confirmedSlot) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="text-center max-w-sm space-y-4">
-          <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
-            <Check className="h-8 w-8 text-green-500" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">{session.title}</h1>
-            <p className="text-sm text-muted-foreground mt-1">This meeting has been confirmed</p>
-          </div>
-          <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm space-y-1">
-            <p className="font-semibold">{dayjs(session.confirmedSlot.start).format('dddd, MMMM D')}</p>
-            <p className="text-muted-foreground">
-              {dayjs(session.confirmedSlot.start).format('h:mma')} – {dayjs(session.confirmedSlot.end).format('h:mma')}
-              <span className="ml-1 text-xs">({timezone})</span>
-            </p>
+  // For confirmed sessions: if the visiting user is a known participant who already responded,
+  // show the confirmed screen. New invitees (not yet in participants) can still submit.
+  if (session.status === 'confirmed' && session.confirmedSlot && step !== 'done') {
+    const isKnownParticipant = session.participants.some(
+      p => p.responded && (
+        (user && (p.userId === user.uid || p.email.toLowerCase() === user.email?.toLowerCase()))
+      )
+    );
+    // Only block with confirmed screen if user is a known respondent or organizer
+    if (!user || user.uid === session.organizerId || isKnownParticipant) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center px-4">
+          <div className="text-center max-w-sm space-y-4">
+            <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
+              <Check className="h-8 w-8 text-green-500" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">{session.title}</h1>
+              <p className="text-sm text-muted-foreground mt-1">This meeting has been confirmed</p>
+            </div>
+            <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm space-y-1">
+              <p className="font-semibold">{dayjs(session.confirmedSlot.start).format('dddd, MMMM D')}</p>
+              <p className="text-muted-foreground">
+                {dayjs(session.confirmedSlot.start).format('h:mma')} – {dayjs(session.confirmedSlot.end).format('h:mma')}
+                <span className="ml-1 text-xs">({timezone})</span>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
+    // Fall through — new invitee can still submit their availability
   }
 
   if (step === 'done') {
@@ -728,6 +757,17 @@ const MeetPage: React.FC = () => {
             )}
 
             <div>
+              {/* Context banner: let the new participant know the slots are pre-filtered */}
+              {previousRespondentCount > 0 && (
+                <div className="flex items-start gap-2 rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2.5 mb-3">
+                  <Users size={13} className="text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-blue-300 leading-relaxed">
+                    Showing <span className="font-semibold">{sievedSlots.length} times</span> that already work for{' '}
+                    {previousRespondentCount === 1 ? 'the 1 person' : `all ${previousRespondentCount} people`} who responded before you.
+                  </p>
+                </div>
+              )}
+
               {!autoFilled && (
                 <>
                   <p className="text-sm font-semibold mb-1">When are you free?</p>
@@ -747,7 +787,7 @@ const MeetPage: React.FC = () => {
                 </p>
               )}
               <AvailabilityGrid
-                organizerFreeSlots={session.organizerFreeSlots}
+                organizerFreeSlots={sievedSlots}
                 selected={selected}
                 onToggle={toggleSlot}
                 timezone={timezone}

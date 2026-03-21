@@ -13,12 +13,13 @@ import {
 } from '@/components/ui/select';
 import {
   Copy, Plus, Clock, Loader2, Link2, Power, Trash2, Users,
-  Calendar, ChevronRight, Share2, MessageCircle, Mail, X, Check,
+  Calendar, ChevronRight, Share2, MessageCircle, Mail, X, Check, Sparkles,
 } from 'lucide-react';
 import { useAppointmentScheduling, BookingPageFormData } from '@/hooks/use-appointment-scheduling';
 import { useGroupMeets, CreateGroupMeetData } from '@/hooks/use-group-meets';
 import { GroupMeetSession, GroupMeetSlot } from '@/lib/stores/types';
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
 
@@ -95,6 +96,7 @@ const GroupMeetItem: React.FC<{
 }> = ({ session, isOrganizer, onConfirm, onShare, onAddParticipant }) => {
   const [expanded, setExpanded] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showSlotPicker, setShowSlotPicker] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
 
@@ -131,6 +133,10 @@ const GroupMeetItem: React.FC<{
             {session.status === 'confirmed' && session.confirmedSlot ? (
               <span className="text-green-500 font-medium">
                 · {dayjs(session.confirmedSlot.start).format('ddd D MMM, h:mma')}
+              </span>
+            ) : session.autoConfirm && session.confirmedSlot ? (
+              <span className="text-purple-400 font-medium">
+                · Auto: {dayjs(session.confirmedSlot.start).format('ddd D MMM, h:mma')}
               </span>
             ) : (
               <span className={statusColor}>
@@ -183,27 +189,66 @@ const GroupMeetItem: React.FC<{
             </div>
           )}
 
-          {/* Actions */}
-          {session.status === 'collecting' && (
-            <div className="flex flex-wrap gap-1.5">
-              {isOrganizer && !showInvite && (
-                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => setShowInvite(true)}>
-                  <Plus className="h-3 w-3" /> Invite
-                </Button>
-              )}
-              {isOrganizer && (
-                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={onShare}>
-                  <Share2 className="h-3 w-3" /> Share link
-                </Button>
-              )}
-              {isOrganizer && session.proposedSlots.length > 0 && (
-                <Button size="sm" className="h-7 px-2 text-xs" onClick={() => onConfirm(session.proposedSlots[0])}>
-                  Confirm best slot
-                </Button>
-              )}
+          {/* Invite + Share — visible to all members of the session */}
+          <div className="flex flex-wrap gap-1.5">
+            {!showInvite && (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setShowInvite(true); setShowSlotPicker(false); }}>
+                <Plus className="h-3 w-3" /> Invite
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={onShare}>
+              <Share2 className="h-3 w-3" /> Share link
+            </Button>
+            {/* Pick time — organizer only */}
+            {isOrganizer && session.status === 'collecting' && session.proposedSlots.length > 0 && !showSlotPicker && (
+              <Button size="sm" className="h-7 px-2 text-xs" onClick={() => { setShowSlotPicker(true); setShowInvite(false); }}>
+                Pick time ({session.proposedSlots.length})
+              </Button>
+            )}
+          </div>
+
+          {/* Slot picker — organizer only, while collecting */}
+          {isOrganizer && session.status === 'collecting' && showSlotPicker && (
+            <div className="space-y-1 mt-0.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground font-medium">Select a time to confirm:</p>
+                <button onClick={() => setShowSlotPicker(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {session.proposedSlots.slice(0, 6).map(slot => {
+                const rc = session.participants.filter(p => p.responded).length;
+                const allFree = rc > 0 && slot.votes === rc;
+                return (
+                  <button
+                    key={slot.start}
+                    onClick={() => { onConfirm(slot); setShowSlotPicker(false); }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left border transition-colors ${
+                      allFree
+                        ? 'border-green-500/40 bg-green-500/5 hover:bg-green-500/10 text-foreground'
+                        : 'border-border/40 hover:bg-muted/60 text-muted-foreground'
+                    }`}
+                  >
+                    <span className="flex-1">{dayjs(slot.start).format('ddd D MMM, h:mma')}</span>
+                    <span className={`text-[10px] font-semibold px-1 rounded ${allFree ? 'text-green-500' : 'text-amber-500'}`}>
+                      {slot.votes}/{rc}
+                    </span>
+                    {allFree && <Check className="h-3 w-3 text-green-500 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           )}
 
+          {/* Auto-pick indicator — updates live as more people respond */}
+          {session.autoConfirm && session.status === 'collecting' && session.confirmedSlot && (
+            <div className="flex items-center gap-1.5 text-xs text-purple-400">
+              <Sparkles className="h-3 w-3 shrink-0" />
+              Auto-pick · {dayjs(session.confirmedSlot.start).format('ddd MMM D, h:mma')}
+            </div>
+          )}
+
+          {/* Manually confirmed */}
           {session.status === 'confirmed' && session.confirmedSlot && (
             <div className="flex items-center gap-1.5 text-xs text-green-500 font-medium">
               <Check className="h-3.5 w-3.5" />
@@ -447,6 +492,8 @@ const BookingModule: React.FC<BookingModuleProps> = ({
   isDragging = false,
   instanceId,
 }) => {
+  const { user } = useAuth();
+
   const {
     bookingPages,
     loading: pagesLoading,
@@ -512,7 +559,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
           <div className="flex justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : !hasContent && !createMode ? (
+        ) : !hasContent && !createMode && !shareSessionId ? (
           <div className="text-center py-4">
             <Calendar className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground mb-3">No bookings yet</p>
@@ -565,7 +612,7 @@ const BookingModule: React.FC<BookingModuleProps> = ({
               <GroupMeetItem
                 key={session.id}
                 session={session}
-                isOrganizer={true}
+                isOrganizer={user?.uid === session.organizerId}
                 onConfirm={slot => confirmSlot(session.id, slot)}
                 onShare={() => { setShareSessionId(session.id); setShareTitle(session.title); }}
                 onAddParticipant={(name, email) => addParticipantToSession(session.id, { name, email })}

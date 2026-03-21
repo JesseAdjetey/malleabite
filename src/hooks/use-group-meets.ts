@@ -217,7 +217,7 @@ export function useGroupMeets(moduleInstanceId?: string) {
     try {
       const organizerFreeSlots = await computeOrganizerFreeSlots(user.uid, data.window, data.duration, data.calendarIds);
 
-      const participants: GroupMeetParticipant[] = data.participants.map((p, i) => ({
+      const participants: GroupMeetParticipant[] = data.participants.map((p) => ({
         id: crypto.randomUUID(),
         email: p.email.toLowerCase().trim(),
         name: p.name.trim(),
@@ -412,17 +412,24 @@ export function useGroupMeetSession(sessionId: string | undefined) {
       const updatedSession = { ...data, participants };
       const proposed = resolveSlots(updatedSession);
 
-      const allResponded = participants.every(p => p.responded);
-      const shouldAutoConfirm = data.autoConfirm && allResponded && proposed.length > 0;
+      // Pick the best slot: prefer one where ALL respondents are free, else highest-voted
+      const respondedCount = participants.filter(p => p.responded).length;
+      const bestForAll = proposed.filter(s => s.votes === respondedCount);
+      const autoSlot = proposed.length > 0 ? (bestForAll.length > 0 ? bestForAll[0] : proposed[0]) : null;
+
+      // Auto-confirm: continuously track the best overlapping slot as each person responds,
+      // but keep status='collecting' so the organizer can always invite more people.
+      // Only a manual confirmSlot() call from the organizer sets status='confirmed'.
+      const shouldAutoUpdate = data.autoConfirm && autoSlot !== null;
 
       await updateDoc(sessionRef, {
         participants,
         proposedSlots: proposed,
-        ...(shouldAutoConfirm ? { confirmedSlot: proposed[0], status: 'confirmed' } : {}),
+        ...(shouldAutoUpdate ? { confirmedSlot: autoSlot } : {}),
         updatedAt: new Date().toISOString(),
       });
 
-      return { success: true, autoConfirmed: shouldAutoConfirm, confirmedSlot: shouldAutoConfirm ? proposed[0] : null };
+      return { success: true, autoConfirmed: shouldAutoUpdate, confirmedSlot: shouldAutoUpdate ? autoSlot : null };
     } catch (err) {
       console.error('Failed to submit availability:', err);
       return { success: false };

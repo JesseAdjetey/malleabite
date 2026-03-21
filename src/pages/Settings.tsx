@@ -1,13 +1,12 @@
 
 import React, { useState } from 'react';
 import UserProfile from '@/components/UserProfile';
-import FocusTimeBlocks from '@/components/calendar/FocusTimeBlocks';
 import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
+import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -24,7 +23,7 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
+type SettingsSection = 'main' | 'profile' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -173,13 +172,6 @@ const Settings = () => {
           <GroupedListHeader>Preferences</GroupedListHeader>
           <GroupedList className="mb-2">
             <GroupedListItem
-              icon={<Clock className="h-4 w-4 text-blue-500" />}
-              iconBg="bg-blue-500/15"
-              label="Focus Time"
-              sublabel="Set your productive hours"
-              onClick={() => goTo('focus')}
-            />
-            <GroupedListItem
               icon={<Palette className="h-4 w-4 text-purple-500" />}
               iconBg="bg-purple-500/15"
               label="Appearance"
@@ -247,19 +239,6 @@ const Settings = () => {
           <BackButton title="Profile" />
           <SectionTitle>Profile</SectionTitle>
           <UserProfile />
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  // Focus Time Section
-  if (activeSection === 'focus') {
-    return (
-      <PageWrapper>
-        <div className="px-4 pt-6 max-w-lg mx-auto">
-          <BackButton title="Focus Time" />
-          <SectionTitle>Focus Time</SectionTitle>
-          <FocusTimeBlocks />
         </div>
       </PageWrapper>
     );

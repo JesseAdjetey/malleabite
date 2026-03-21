@@ -24,8 +24,6 @@ import { Switch } from "@/components/ui/switch";
 import { useConflictDetection } from '@/hooks/use-conflict-detection';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import ConflictWarning from './ConflictWarning';
-import { useFocusTimeCheck } from './FocusTimeBlocks';
-import { Shield } from 'lucide-react';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 import { useCalendarGroups } from '@/hooks/use-calendar-groups';
@@ -92,7 +90,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const { events } = useCalendarEvents();
   const { calendars: connectedCalendars } = useCalendarGroups();
   const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
-  const { isInFocusTime, getFocusBlockAtTime } = useFocusTimeCheck();
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
 
   // Use either the event or initialEvent prop, whichever is provided
@@ -126,15 +123,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   // Detect conflicts with the preview event
   const conflictDetection = useConflictDetection(events, previewEvent);
 
-  // Check if event is during focus time
-  const focusTimeCheck = React.useMemo(() => {
-    if (!previewEvent) return null;
-    const inFocusTime = isInFocusTime(previewEvent.startsAt);
-    if (inFocusTime) {
-      return getFocusBlockAtTime(previewEvent.startsAt);
-    }
-    return null;
-  }, [previewEvent, isInFocusTime, getFocusBlockAtTime]);
 
   useEffect(() => {
     if (eventData) {
@@ -606,28 +594,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           </div>
         )}
 
-        {/* Focus Time Warning */}
-        {focusTimeCheck && previewEvent && (
-          <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-amber-600 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                  During Protected Focus Time
-                </h4>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mb-2">
-                  This event is scheduled during "{focusTimeCheck.label}" (
-                  {focusTimeCheck.startHour.toString().padStart(2, '0')}:00 -{' '}
-                  {focusTimeCheck.endHour.toString().padStart(2, '0')}:00).
-                  Consider rescheduling to maintain your productivity.
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  💡 Tip: Focus time is reserved for deep work and concentration
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex justify-end pt-4 border-t border-border">
           <Button

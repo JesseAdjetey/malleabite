@@ -252,7 +252,7 @@ const MobileOverflowMenu: React.FC<{
           <div className="absolute right-0 top-full mt-1 z-[71] min-w-[180px] bg-popover/95 backdrop-blur-xl border border-border rounded-xl shadow-xl overflow-hidden">
             <button
               onClick={() => { cycleTheme(); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors"
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
             >
               <ThemeIcon className="h-4 w-4" />
               Theme: {themeLabel}

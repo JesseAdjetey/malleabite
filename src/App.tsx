@@ -21,6 +21,7 @@ import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
+import { TranslationProvider } from '@/i18n/TranslationProvider';
 import '@/styles/ai-animations.css';
 
 // Lazy load pages for better performance
@@ -185,15 +186,17 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <HeyMallyProvider>
-          <ToastProvider>
-            <Router>
-              <EventDataProvider>
-                <AppRoutes />
-              </EventDataProvider>
-            </Router>
-          </ToastProvider>
-        </HeyMallyProvider>
+        <TranslationProvider>
+          <HeyMallyProvider>
+            <ToastProvider>
+              <Router>
+                <EventDataProvider>
+                  <AppRoutes />
+                </EventDataProvider>
+              </Router>
+            </ToastProvider>
+          </HeyMallyProvider>
+        </TranslationProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

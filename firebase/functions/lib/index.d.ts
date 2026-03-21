@@ -16,3 +16,9 @@ export declare const transcribeAudio: import("firebase-functions/v2/https").Http
  * Helper to create calendar event directly (for testing/bypass)
  */
 export declare const createCalendarEvent: import("firebase-functions/v2/https").HttpsFunction;
+/**
+ * Translate an array of English texts to a target language using Gemini.
+ * Body: { texts: string[], targetLang: string }
+ * Returns: { translations: { [source]: translated } }
+ */
+export declare const translateText: import("firebase-functions/v2/https").HttpsFunction;

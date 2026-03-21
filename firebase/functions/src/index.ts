@@ -1278,3 +1278,81 @@ export const createCalendarEvent = onRequest(
     }
   }
 );
+
+/**
+ * Translate an array of English texts to a target language using Gemini.
+ * Body: { texts: string[], targetLang: string }
+ * Returns: { translations: { [source]: translated } }
+ */
+export const translateText = onRequest(
+  {
+    cors: [
+      'http://localhost:8080',
+      'http://localhost:8081',
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://malleabite-97d35.web.app',
+      'https://malleabite-97d35.firebaseapp.com',
+      'https://malleabite.vercel.app',
+      /\.vercel\.app$/,
+    ],
+    region: 'us-central1',
+    secrets: [geminiApiKey],
+  },
+  async (req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.set('Access-Control-Max-Age', '3600');
+      res.status(204).send('');
+      return;
+    }
+
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const { texts, targetLang } = req.body;
+    if (!Array.isArray(texts) || !targetLang) {
+      res.status(400).json({ error: 'Missing texts array or targetLang' });
+      return;
+    }
+
+    // Limit batch size to prevent abuse
+    const batch = texts.slice(0, 50);
+
+    try {
+      const apiKey = geminiApiKey.value();
+      if (!apiKey) {
+        res.status(500).json({ error: 'Translation service unavailable' });
+        return;
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const prompt = `Translate the following UI texts from English to ${targetLang}. Return ONLY a valid JSON object mapping each original English text to its translation. Keep the translations natural and concise — these are UI labels, buttons, and short phrases. Do not add explanations.\n\nTexts to translate:\n${JSON.stringify(batch)}`;
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('[translateText] Could not parse Gemini response:', responseText);
+        res.status(500).json({ error: 'Translation parsing failed' });
+        return;
+      }
+
+      const translations = JSON.parse(jsonMatch[0]);
+      res.json({ translations });
+    } catch (error) {
+      console.error('[translateText] Error:', error);
+      res.status(500).json({ error: 'Translation failed' });
+    }
+  }
+);

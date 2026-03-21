@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
+import './i18n/config'; // Initialize i18next before app renders
 import "./index.css"
 import { registerServiceWorker, unregisterServiceWorker } from './lib/sw-registration';
 import { initSentry } from './lib/sentry';

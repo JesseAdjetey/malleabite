@@ -7,7 +7,7 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
+import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -19,12 +19,14 @@ import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useSettingsStore } from '@/lib/stores/settings-store';
+import { useAutoTranslateSafe } from '@/i18n/TranslationProvider';
+import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/i18n/config';
 import { GroupedList, GroupedListHeader, GroupedListItem } from '@/components/ui/grouped-list';
 import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language';
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -41,6 +43,10 @@ const Settings = () => {
   const { subscription } = useSubscription();
   const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
+  const { currentLang, setLanguage } = useAutoTranslateSafe();
+
+  const getCurrentLangLabel = () =>
+    SUPPORTED_LANGUAGES.find((l) => l.code === currentLang)?.label || 'English';
 
   const getThemeLabel = () => {
     switch (theme) {
@@ -185,6 +191,13 @@ const Settings = () => {
               label="Appearance"
               rightElement={<span className="text-caption1 text-muted-foreground">{getThemeLabel()}</span>}
               onClick={() => goTo('appearance')}
+            />
+            <GroupedListItem
+              icon={<Globe className="h-4 w-4 text-sky-500" />}
+              iconBg="bg-sky-500/15"
+              label="Language"
+              rightElement={<span className="text-caption1 text-muted-foreground">{getCurrentLangLabel()}</span>}
+              onClick={() => goTo('language')}
             />
             <GroupedListItem
               icon={<Mic className="h-4 w-4 text-green-500" />}
@@ -488,7 +501,51 @@ const Settings = () => {
     );
   }
 
+  // Language Section
+  if (activeSection === 'language') {
+    return (
+      <PageWrapper>
+        <div className="px-4 pt-6 max-w-lg mx-auto">
+          <BackButton title="Language" />
+          <SectionTitle>Language</SectionTitle>
+
+          <p className="text-subheadline text-muted-foreground mb-4 px-1">
+            Choose your preferred language. The app will automatically translate all content.
+          </p>
+
+          <GroupedList>
+            {SUPPORTED_LANGUAGES.map((lang, i) => (
+              <button
+                key={lang.code}
+                onClick={() => { haptics.light(); setLanguage(lang.code as LanguageCode); }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-muted/60",
+                  i < SUPPORTED_LANGUAGES.length - 1 && "border-b border-separator/30"
+                )}
+              >
+                <span className="text-lg" data-no-translate>{getFlagEmoji(lang.flag)}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-subheadline font-medium" data-no-translate>{lang.label}</span>
+                </div>
+                {currentLang === lang.code && (
+                  <span className="text-primary font-semibold text-caption1">✓</span>
+                )}
+              </button>
+            ))}
+          </GroupedList>
+        </div>
+      </PageWrapper>
+    );
+  }
+
   return null;
 };
+
+/** Convert country code to flag emoji (e.g., "US" → 🇺🇸) */
+function getFlagEmoji(countryCode: string): string {
+  return [...countryCode.toUpperCase()]
+    .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+    .join('');
+}
 
 export default Settings;

@@ -36,7 +36,7 @@ interface AddCalendarFlowProps {
   onOpenChange: (open: boolean) => void;
   groups: CalendarGroup[];
   defaultGroupId?: string;
-  onOpenTemplates: () => void;
+  onOpenTemplates: (groupId?: string) => void;
   onComplete: (result: {
     source: CalendarSource;
     selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
@@ -124,12 +124,15 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
     return () => clearTimeout(safetyTimer);
   }, [discoveryStatus]);
 
-  // Keep targetGroupId in sync if groups load after mount or defaultGroupId changes
+  // Keep targetGroupId in sync when the dialog opens or defaultGroupId changes.
+  // This handles the case where AddCalendarFlow is already mounted (with a stale
+  // targetGroupId) when a different group's + button is clicked.
   useEffect(() => {
-    if (!targetGroupId && groups.length > 0) {
-      setTargetGroupId(defaultGroupId || groups[0].id);
+    if (open) {
+      setTargetGroupId(defaultGroupId || groups[0]?.id || '');
     }
-  }, [groups, defaultGroupId, targetGroupId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultGroupId]);
 
   // Reset on close
   const handleOpenChange = (isOpen: boolean) => {
@@ -148,8 +151,17 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
 
   // Step 1: Select source
   const handleOpenTemplates = () => {
+    // Prefer the explicitly-passed defaultGroupId (from a group's + button) over the
+    // targetGroupId state, which may be stale if groups weren't loaded at mount time.
+    const groupId = defaultGroupId || (targetGroupId !== '' ? targetGroupId : undefined);
     handleOpenChange(false);
-    onOpenTemplates();
+    // Defer opening TemplateManager so AddCalendarFlow's exit animation and focus trap
+    // fully release before the next dialog mounts. Without this delay both dialogs exist
+    // in the DOM simultaneously and Radix's outgoing focus trap blocks all clicks in the
+    // incoming dialog.
+    // 300ms > shadcn Dialog's duration-200 exit animation, ensuring the outgoing
+    // focus trap fully releases before TemplateManager mounts.
+    setTimeout(() => onOpenTemplates(groupId), 300);
   };
 
   const handleSelectSource = async (source: CalendarSource) => {

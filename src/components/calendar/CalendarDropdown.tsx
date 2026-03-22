@@ -175,6 +175,7 @@ const CalendarDropdown: React.FC = () => {
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
   const [addCalendarGroupId, setAddCalendarGroupId] = useState<string | undefined>();
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [templateDefaultGroupId, setTemplateDefaultGroupId] = useState<string | undefined>();
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [activeCalendar, setActiveCalendar] = useState<ConnectedCalendar | null>(null);
   const [overGroupId, setOverGroupId] = useState<string | null>(null);
@@ -484,7 +485,8 @@ const CalendarDropdown: React.FC = () => {
           className={cn(
             'w-[320px] max-w-[calc(100vw-12px)] p-0 rounded-2xl border border-border/60',
             'bg-popover/95 backdrop-blur-xl shadow-xl',
-            'dark:bg-popover/90'
+            'dark:bg-popover/90',
+            'max-h-[calc(100vh-80px)] flex flex-col overflow-hidden'
           )}
         >
           <AnimatePresence>
@@ -493,6 +495,7 @@ const CalendarDropdown: React.FC = () => {
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={springs.gentle}
+                className="flex flex-col min-h-0 flex-1 overflow-hidden"
               >
                 {/* Header / User Info */}
                 <div className="px-4 pt-4 pb-2">
@@ -553,7 +556,7 @@ const CalendarDropdown: React.FC = () => {
                 )}
 
                 {/* Calendar Groups */}
-                <ScrollArea className="max-h-[50vh]">
+                <ScrollArea className="flex-1 min-h-0">
                   <div className="py-1.5">
                     {groupsLoading ? (
                       <div className="px-4 py-8 text-center">
@@ -723,14 +726,21 @@ const CalendarDropdown: React.FC = () => {
         onOpenChange={setAddCalendarOpen}
         groups={groups}
         defaultGroupId={addCalendarGroupId}
-        onOpenTemplates={() => setTemplateManagerOpen(true)}
+        onOpenTemplates={(groupId) => {
+          setTemplateDefaultGroupId(groupId);
+          setTemplateManagerOpen(true);
+        }}
         onComplete={handleAddCalendarComplete}
       />
 
       {/* Template Manager Dialog */}
       <TemplateManager
         open={templateManagerOpen}
-        onOpenChange={setTemplateManagerOpen}
+        onOpenChange={(v) => {
+          setTemplateManagerOpen(v);
+          if (!v) setTemplateDefaultGroupId(undefined);
+        }}
+        defaultGroupId={templateDefaultGroupId}
       />
 
       {/* Merge Calendars Dialog */}

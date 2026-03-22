@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ModuleContainer from './ModuleContainer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -276,8 +276,6 @@ const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone,
   // Deduplicate by ID to avoid showing the same calendar twice (two sync paths can both add same calendar)
   const rawCalendars = useCalendarFilterStore(s => s.accounts);
   const allCalendars = rawCalendars.filter((cal, idx, arr) => arr.findIndex(c => c.id === cal.id) === idx);
-  const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
-
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('30');
   const [window, setWindow] = useState('week');
@@ -285,10 +283,16 @@ const NewGroupMeetForm: React.FC<NewGroupMeetFormProps> = ({ instanceId, onDone,
   const [autoConfirm, setAutoConfirm] = useState(false);
   const [participants, setParticipants] = useState<{ name: string; email: string }[]>([]);
   const [creating, setCreating] = useState(false);
-  // Default: calendars currently toggled ON in the calendar dropdown
-  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(
-    () => getVisibleCalendarIds()
-  );
+  // Start with [] so calendarIds=undefined (all events queried) before calendars load.
+  // Once allCalendars loads, pre-select every calendar so all events are checked by default.
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
+  const calendarInitialized = useRef(false);
+  useEffect(() => {
+    if (!calendarInitialized.current && allCalendars.length > 0) {
+      calendarInitialized.current = true;
+      setSelectedCalendarIds(allCalendars.map(c => c.id));
+    }
+  }, [allCalendars]);
 
   const toggleCalendar = (id: string) => {
     setSelectedCalendarIds(prev =>

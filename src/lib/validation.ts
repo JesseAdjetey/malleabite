@@ -29,13 +29,13 @@ export const eventSchema = z.object({
   }),
   
   startsAt: z.string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (use HH:MM)'),
-  
+    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$|^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, 'Invalid time format (use HH:MM or ISO)'),
+
   endsAt: z.string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (use HH:MM)'),
+    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$|^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, 'Invalid time format (use HH:MM or ISO)'),
   
   color: z.string()
-    .regex(/^(#[0-9A-Fa-f]{6}|bg-[\w-]+)$/, 'Invalid color format')
+    .regex(/^(#[0-9A-Fa-f]{6}|bg-[\w/-]+)$/, 'Invalid color format')
     .optional(),
   
   isLocked: z.boolean().optional(),
@@ -43,12 +43,16 @@ export const eventSchema = z.object({
   hasAlarm: z.boolean().optional(),
   hasReminder: z.boolean().optional(),
 }).refine((data) => {
-  // Validate that end time is after start time
-  const [startHour, startMin] = data.startsAt.split(':').map(Number);
-  const [endHour, endMin] = data.endsAt.split(':').map(Number);
-  const startMinutes = startHour * 60 + startMin;
-  const endMinutes = endHour * 60 + endMin;
-  return endMinutes > startMinutes;
+  // Validate that end time is after start time (handles both HH:MM and ISO)
+  const toMinutes = (s: string) => {
+    if (s.includes('T')) {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    }
+    const [h, m] = s.split(':').map(Number);
+    return h * 60 + m;
+  };
+  return toMinutes(data.endsAt) > toMinutes(data.startsAt);
 }, {
   message: 'End time must be after start time',
   path: ['endsAt']

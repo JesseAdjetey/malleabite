@@ -15,7 +15,7 @@ import {
   handleDragOver,
   RecurringDropResult,
 } from "./calendar/week-view/DragDropHandlers";
-import { formatMinutesAsTime, getTimeInMinutes } from "./calendar/event-utils/touch-handlers";
+import { formatMinutesAsTime, getTimeInMinutes, getTimeInfo } from "./calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
 import { useEventCRUD } from "@/hooks/use-event-crud";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -350,7 +350,8 @@ const WeekView = () => {
     const grouped = new Map<string, CalendarEventType[]>();
 
     timedDisplayEvents.forEach((event) => {
-      const dayKey = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
+      const rawDate = event.date || (event.startsAt ? dayjs(event.startsAt).format("YYYY-MM-DD") : '');
+      const dayKey = rawDate instanceof Date ? dayjs(rawDate).format("YYYY-MM-DD") : rawDate as string;
       if (!dayKey) return;
 
       const list = grouped.get(dayKey);
@@ -463,6 +464,69 @@ const WeekView = () => {
       const descriptionParts = (data.description || '').split('|');
       const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (data.description || '');
 
+      // ── BULK DRAG MODE: move all selected events by the same time+day delta ──
+      if (isBulkMode && selectedIds.has(data.id)) {
+        // Day delta: how many whole days the dragged event shifted
+        const oldDay = dayjs(data.date || data.startsAt).startOf('day');
+        const dayDelta = day.startOf('day').diff(oldDay, 'day');
+        // Time-of-day delta in minutes
+        const timeDeltaMinutes = totalMinutes - oldStartMinutes;
+
+        const updatePromises: Promise<any>[] = [];
+
+        for (const selectedId of selectedIds) {
+          // Find the event in current display data (includes recurring instances)
+          const selEvent = displayEvents.find(e => e.id === selectedId)
+            ?? events.find(e => e.id === selectedId);
+          if (!selEvent) continue;
+
+          const selTimeInfo = getTimeInfo(selEvent.description, selEvent.startsAt, selEvent.endsAt);
+          const selStartMin = getTimeInMinutes(selTimeInfo.start);
+          const selEndMin = getTimeInMinutes(selTimeInfo.end);
+          const selDuration = Math.max(selEndMin - selStartMin, 15);
+
+          // Apply the same time-of-day and day deltas
+          const newSelStartMin = Math.max(0, Math.min(23 * 60 + 45, selStartMin + timeDeltaMinutes));
+          const newSelEndMin = newSelStartMin + selDuration;
+          const newSelStartStr = formatMinutesAsTime(newSelStartMin);
+          const newSelEndStr = formatMinutesAsTime(newSelEndMin);
+
+          const newSelDay = dayjs(selEvent.date || selEvent.startsAt).startOf('day').add(dayDelta, 'day');
+
+          const selDescParts = (selEvent.description || '').split('|');
+          const selDescText = selDescParts.length > 1 ? selDescParts[1].trim() : (selEvent.description || '');
+
+          // For recurring instances use the parent ID; for regular events use the event's own ID
+          const baseEvent = selEvent.recurrenceParentId
+            ? (events.find(e => e.id === selEvent.recurrenceParentId) ?? selEvent)
+            : selEvent;
+
+          const updatedSel: CalendarEventType = {
+            ...baseEvent,
+            date: newSelDay.format('YYYY-MM-DD'),
+            description: `${newSelStartStr} - ${newSelEndStr} | ${selDescText}`,
+            startsAt: newSelDay
+              .hour(parseInt(newSelStartStr.split(':')[0]))
+              .minute(parseInt(newSelStartStr.split(':')[1]))
+              .toISOString(),
+            endsAt: newSelDay
+              .hour(parseInt(newSelEndStr.split(':')[0]))
+              .minute(parseInt(newSelEndStr.split(':')[1]))
+              .toISOString(),
+          };
+
+          updatePromises.push(updateEvent(updatedSel));
+        }
+
+        Promise.all(updatePromises)
+          .then(() => toast.success(`Moved ${updatePromises.length} event${updatePromises.length !== 1 ? 's' : ''}`))
+          .catch(err => {
+            console.error('Bulk move error:', err);
+            toast.error('Some events could not be moved');
+          });
+        return;
+      }
+
       // ── Template Mode: route drags to draft store, not Firestore ──
       if (isTemplateMode && data.id && data._isDraft) {
         const updatedDraft: CalendarEventType = {
@@ -480,6 +544,37 @@ const WeekView = () => {
       // In template mode, block moving real (non-draft) events
       if (isTemplateMode) {
         toast.info("Exit template mode to move calendar events.");
+        return;
+      }
+
+      // DUPLICATE MODE: Alt/Option held → create a copy (checked before recurring
+      // so that Alt+drag on imported/recurring events always duplicates, never moves)
+      if (e.altKey) {
+        const duplicateEvent: CalendarEventType = {
+          id: nanoid(),
+          title: data.title,
+          date: day.format('YYYY-MM-DD'),
+          description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+          color: data.color || 'bg-purple-500/70',
+          startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
+          endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
+          isRecurring: false,
+          isTodo: data.isTodo,
+          hasAlarm: data.hasAlarm,
+          hasReminder: data.hasReminder,
+          // Preserve calendar association so the duplicate syncs to the right
+          // Google calendar — but deliberately omit googleEventId so a fresh
+          // Google event is created instead of overwriting the original.
+          calendarId: data.calendarId,
+          participants: data.participants,
+        };
+        addEvent(duplicateEvent).then((response: { success: boolean }) => {
+          if (response.success) {
+            toast.success(`Event duplicated to ${day.format("MMM D")} at ${newStartTime}`);
+          } else {
+            toast.error("Failed to duplicate event");
+          }
+        });
         return;
       }
 
@@ -503,31 +598,6 @@ const WeekView = () => {
         return;
       }
 
-      // DUPLICATE MODE: Ctrl held → create a copy
-      if (e.ctrlKey) {
-        const duplicateEvent: CalendarEventType = {
-          id: nanoid(),
-          title: data.title,
-          date: day.format('YYYY-MM-DD'),
-          description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
-          color: data.color || 'bg-purple-500/70',
-          startsAt: day.hour(parseInt(newStartTime.split(':')[0])).minute(parseInt(newStartTime.split(':')[1])).toISOString(),
-          endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
-          isRecurring: false,
-          isTodo: data.isTodo,
-          hasAlarm: data.hasAlarm,
-          hasReminder: data.hasReminder,
-        };
-        addEvent(duplicateEvent).then(response => {
-          if (response.success) {
-            toast.success(`Event duplicated to ${day.format("MMM D")} at ${newStartTime}`);
-          } else {
-            toast.error("Failed to duplicate event");
-          }
-        });
-        return;
-      }
-
       // MOVE MODE: update the existing event (never add)
       if (!data.id) {
         toast.error("Failed to move event: missing ID");
@@ -544,13 +614,20 @@ const WeekView = () => {
         endsAt: day.hour(parseInt(newEndTime.split(':')[0])).minute(parseInt(newEndTime.split(':')[1])).toISOString(),
       };
 
+      // Optimistic update: move the event in local state immediately so there's
+      // no visible snap-back between drag-end and the async Firestore/Google write.
+      const originalSnapshot: CalendarEventType = { ...data, id: realEventId };
+      useEventStore.getState().updateEvent(updatedEvent);
+
       updateEvent(updatedEvent).then(response => {
         if (response?.success !== false) {
           toast.success(`Event moved to ${day.format("MMM D")} at ${newStartTime}`);
         } else {
+          useEventStore.getState().updateEvent(originalSnapshot); // revert
           toast.error("Failed to move event");
         }
       }).catch(err => {
+        useEventStore.getState().updateEvent(originalSnapshot); // revert
         console.error("Error moving event:", err);
         toast.error("Failed to move event");
       });
@@ -644,6 +721,48 @@ const WeekView = () => {
     openEventSummary(event);
     toast.info("Edit the event to add an alarm");
   };
+
+  const handleResizeEvent = useCallback(async (event: CalendarEventType, newStart: Date, newEnd: Date) => {
+    const newStartTime = dayjs(newStart).format('HH:mm');
+    const newEndTime = dayjs(newEnd).format('HH:mm');
+    const descriptionParts = (event.description || '').split('|');
+    const descriptionText = descriptionParts.length > 1 ? descriptionParts[1].trim() : (event.description || '');
+
+    // Recurring instance → show the recurring edit dialog (same flow as drag-drop)
+    const isRecurringInstance = event.isRecurring || event.recurrenceParentId ||
+      (!event.id.startsWith('synced_') && event.id.includes('_'));
+
+    if (isRecurringInstance) {
+      const parentId = event.recurrenceParentId ||
+        (event.id.includes('_') ? event.id.split('_')[0] : event.id);
+      const originalDate = event.id.includes('_')
+        ? event.id.split('_')[1]
+        : dayjs(event.startsAt as string).format('YYYY-MM-DD');
+      const newEvent: CalendarEventType = {
+        id: nanoid(),
+        title: event.title,
+        date: (event.date ? dayjs(event.date).format('YYYY-MM-DD') : dayjs(newStart).format('YYYY-MM-DD')),
+        description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+        color: event.color || 'bg-purple-500/70',
+        startsAt: newStart.toISOString(),
+        endsAt: newEnd.toISOString(),
+        isRecurring: false,
+        calendarId: event.calendarId,
+      };
+      handleRecurringEventDrop({ isRecurring: true, parentId, originalDate, newEvent });
+      return;
+    }
+
+    const updatedEvent: CalendarEventType = {
+      ...event,
+      description: `${newStartTime} - ${newEndTime} | ${descriptionText}`,
+      startsAt: newStart.toISOString(),
+      endsAt: newEnd.toISOString(),
+    };
+    // Optimistic update: apply new size immediately so there's no snap-back flicker
+    useEventStore.getState().updateEvent(updatedEvent);
+    await updateEvent(updatedEvent);
+  }, [updateEvent, handleRecurringEventDrop]);
 
   const handleAddTodoFromEvent = async (event: CalendarEventType) => {
     const todoId = await handleCreateTodoFromEvent(event);
@@ -739,6 +858,7 @@ const WeekView = () => {
                   onColorChange={handleColorChange}
                   onAddAlarm={handleAddAlarmToEvent}
                   onAddTodo={handleAddTodoFromEvent}
+                  onResizeEvent={handleResizeEvent}
                 />
               );
             })}

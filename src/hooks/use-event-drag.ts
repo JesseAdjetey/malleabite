@@ -16,7 +16,7 @@ export function useEventDrag(event: any, isLocked: boolean = false, color: strin
     
     setIsDragging(true);
     e.dataTransfer.setData('application/json', JSON.stringify(getDragData(event, isLocked, color)));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const handleDragEnd = () => {

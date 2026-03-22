@@ -10,6 +10,7 @@ import EventContextMenu from "../EventContextMenu";
 import CurrentTimeIndicator from "./CurrentTimeIndicator";
 import { calculateEventHeight, calculateEventPosition, getTimeInfo } from "../event-utils/touch-handlers";
 import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overlap";
+import { useEventResize } from "@/hooks/use-event-resize";
 
 interface DayColumnProps {
   currentDate: dayjs.Dayjs;
@@ -25,6 +26,7 @@ interface DayColumnProps {
   onToggleSelection?: (eventId: string) => void;
   onShiftClickEvent?: (eventId: string) => void;
   draggingBulkEventId?: string | null;
+  onResizeEvent?: (event: CalendarEventType, newStart: Date, newEnd: Date) => void;
   // Context menu handlers
   onDeleteEvent?: (eventId: string) => void;
   onDuplicateEvent?: (event: CalendarEventType) => void;
@@ -47,24 +49,51 @@ const DayColumn: React.FC<DayColumnProps> = ({
   onToggleSelection = () => { },
   onShiftClickEvent,
   draggingBulkEventId,
+  onResizeEvent,
   onDeleteEvent,
   onDuplicateEvent,
   onColorChange,
   onAddAlarm,
   onAddTodo,
 }) => {
-  const hourHeight = 80; // The height in pixels of each hour cell
+  const hourHeight = 80; // px per hour
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+
+  // Live resize preview: track the event being resized and its new times
+  const [liveResize, setLiveResize] = useState<{
+    eventId: string;
+    newStart: Date;
+    newEnd: Date;
+  } | null>(null);
 
   // Calculate event positions for overlapping events
   const eventPositions = useMemo(() => calculateEventPositions(dayEvents), [dayEvents]);
+
+  const [, resizeHandlers] = useEventResize({
+    minutesPerPixel: 60 / hourHeight, // 0.75 min per pixel (80px = 1 hour = 60 min)
+    snapInterval: 15,
+    minDuration: 15,
+    onResize: (_eventId, newStart, newEnd) => {
+      setLiveResize({ eventId: _eventId, newStart, newEnd });
+    },
+    onResizeEnd: async (eventId, newStart, newEnd) => {
+      setLiveResize(null);
+      const event = dayEvents.find(e => e.id === eventId);
+      if (event && onResizeEvent) {
+        onResizeEvent(event, newStart, newEnd);
+      }
+      return true;
+    },
+    onResizeCancel: () => {
+      setLiveResize(null);
+    },
+  });
 
   const handleDragEnter = (hourIndex: number) => {
     setDragOverHour(hourIndex);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear if leaving the column entirely
     const relatedTarget = e.relatedTarget as HTMLElement;
     if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
       setDragOverHour(null);
@@ -101,19 +130,48 @@ const DayColumn: React.FC<DayColumnProps> = ({
       {/* Events displayed at their exact positions */}
       {dayEvents.map(event => {
         const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
-        const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
-        const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
+
+        // Use live resize preview for the event currently being resized
+        let topPosition: number;
+        let eventHeight: number;
+        if (liveResize?.eventId === event.id) {
+          const liveStartStr = dayjs(liveResize.newStart).format('HH:mm');
+          const liveEndStr = dayjs(liveResize.newEnd).format('HH:mm');
+          topPosition = calculateEventPosition(liveStartStr, hourHeight);
+          eventHeight = calculateEventHeight(liveStartStr, liveEndStr, hourHeight);
+        } else {
+          topPosition = calculateEventPosition(timeInfo.start, hourHeight);
+          eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
+        }
 
         // Get overlap position for side-by-side display
         const position = eventPositions.get(event.id);
         const overlapStyle = getEventStyle(position);
+
+        // Resolve start/end dates for the resize handle
+        const startDate = event.startsAt
+          ? new Date(event.startsAt)
+          : dayjs(currentDate)
+              .hour(parseInt(timeInfo.start.split(':')[0]))
+              .minute(parseInt(timeInfo.start.split(':')[1]))
+              .toDate();
+        const endDate = event.endsAt
+          ? new Date(event.endsAt)
+          : dayjs(currentDate)
+              .hour(parseInt(timeInfo.end.split(':')[0]))
+              .minute(parseInt(timeInfo.end.split(':')[1]))
+              .toDate();
+
+        const isBeingResized = liveResize?.eventId === event.id;
 
         return (
           <div
             key={event.id}
             data-event-id={event.id}
             className={cn(
-              "absolute z-10 transition-opacity",
+              "absolute z-10",
+              // Only apply opacity transition when NOT resizing (avoids lag during live resize)
+              !isBeingResized && "transition-opacity",
               draggingBulkEventId &&
                 isSelected(event.id) &&
                 event.id !== draggingBulkEventId &&
@@ -155,7 +213,29 @@ const DayColumn: React.FC<DayColumnProps> = ({
                 onAddAlarm={onAddAlarm}
                 onAddTodo={onAddTodo}
               >
-                <div className="h-full">
+                <div className="h-full relative">
+                  {/* Top resize handle — adjusts start time */}
+                  {!event.isLocked && !isBulkMode && (
+                    <div
+                      className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize z-20 flex items-start justify-center pt-0.5 group/rht"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        resizeHandlers.handleResizeStart(e, event.id, 'top', startDate, endDate);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        resizeHandlers.handleResizeStart(e, event.id, 'top', startDate, endDate);
+                      }}
+                    >
+                      <div className="w-8 h-1 rounded-full bg-white/50 opacity-0 group-hover/rht:opacity-100 transition-opacity" />
+                    </div>
+                  )}
+
                   <CalendarEvent
                     event={event}
                     color={event.color}
@@ -165,9 +245,32 @@ const DayColumn: React.FC<DayColumnProps> = ({
                     hasTodo={event.isTodo}
                     participants={event.participants}
                     isOverlapping={position?.isOverlapping}
-                    onClick={() => openEventSummary(event)}
                     onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
                   />
+
+                  {/* Bottom resize handle — adjusts end time */}
+                  {!event.isLocked && !isBulkMode && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize z-20 flex items-end justify-center pb-0.5 group/rh"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        resizeHandlers.handleResizeStart(e, event.id, 'bottom', startDate, endDate);
+                      }}
+                      onClick={(e) => {
+                        // Prevent any click on the resize handle from opening the event card
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                        resizeHandlers.handleResizeStart(e, event.id, 'bottom', startDate, endDate);
+                      }}
+                    >
+                      {/* Grip indicator */}
+                      <div className="w-8 h-1 rounded-full bg-white/50 opacity-0 group-hover/rh:opacity-100 transition-opacity" />
+                    </div>
+                  )}
                 </div>
               </EventContextMenu>
             )}

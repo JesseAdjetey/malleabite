@@ -59,23 +59,36 @@ export function useEventCRUD() {
 
   const updateEventWithSync = useCallback(
     async (event: CalendarEventType) => {
-      const response = await updateEvent(event);
-
-      if (response.success && bridge) {
-        try {
-          if (event.googleEventId) {
+      // Google Calendar events: push via bridge + update local state.
+      // Bypasses Firestore to avoid permission errors on imported/synced events.
+      if (event.googleEventId) {
+        if (bridge) {
+          try {
             const synced = await bridge.pushUpdateToGoogle(event);
             if (!synced) {
               toast.warning('Changes saved locally but could not sync to Google Calendar.');
             }
+          } catch (err) {
+            logger.error('useEventCRUD', 'Google write-back failed for update', { error: err });
+            toast.warning('Changes saved locally but could not sync to Google Calendar.');
+          }
+        }
+        // Update Zustand store directly so the UI reflects the change immediately
+        useEventStore.getState().updateEvent(event);
+        return { success: true };
+      }
+
+      // Non-Google events: standard Firestore path
+      const response = await updateEvent(event);
+
+      if (response.success && bridge) {
+        try {
+          // Event being assigned to a Google calendar for the first time — create it there
+          const googleEventId = await bridge.pushCreateToGoogle(event);
+          if (googleEventId) {
+            await updateEvent({ ...event, googleEventId });
           } else {
-            // Event is being moved to a Google calendar but doesn't have a Google ID yet — create it
-            const googleEventId = await bridge.pushCreateToGoogle(event);
-            if (googleEventId) {
-              await updateEvent({ ...event, googleEventId });
-            } else {
-              toast.warning('Changes saved locally but could not sync to Google Calendar.');
-            }
+            toast.warning('Changes saved locally but could not sync to Google Calendar.');
           }
         } catch (err) {
           logger.error('useEventCRUD', 'Google write-back failed for update', { error: err });

@@ -6,7 +6,7 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus } from 'lucide-react';
+import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';

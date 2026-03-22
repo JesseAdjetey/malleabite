@@ -18,6 +18,8 @@ import { GroupMeetSession, GroupMeetParticipant, GroupMeetSlot } from '@/lib/sto
 import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+dayjs.extend(isSameOrBefore);
 
 export interface CreateGroupMeetData {
   title: string;

@@ -8,8 +8,8 @@ import { useCalendarEvents } from "@/hooks/use-calendar-events";
 
 export const handleDragOver = (e: React.DragEvent) => {
   e.preventDefault();
-  // Show copy cursor when Ctrl is held
-  e.dataTransfer.dropEffect = e.ctrlKey ? 'copy' : 'move';
+  // Show copy cursor when Alt/Option is held
+  e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move';
 };
 
 // Result type for recurring event actions
@@ -32,8 +32,8 @@ export const handleDrop = (
 ) => {
   e.preventDefault();
   
-  // Check if Ctrl was held during drop (duplicate mode)
-  const isDuplicateMode = e.ctrlKey;
+  // Check if Alt/Option was held during drop (duplicate mode)
+  const isDuplicateMode = e.altKey;
   
   try {
     // Get the drag data
@@ -174,7 +174,7 @@ export const handleDrop = (
       return;
     }
     
-    // DUPLICATE MODE: If Ctrl is held, create a copy instead of moving
+    // DUPLICATE MODE: If Alt/Option is held, create a copy instead of moving
     if (isDuplicateMode && addEventFn) {
       const duplicateEvent: CalendarEventType = {
         id: nanoid(), // New ID for the duplicate

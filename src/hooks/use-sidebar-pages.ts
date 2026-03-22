@@ -35,19 +35,28 @@ export function useSidebarPages() {
   const { user } = useAuth();
   const { createList } = useTodoLists();
   const shouldPersistActivePageRef = useRef(false);
+  const activePageIdRef = useRef<string | null>(null);
+  const isCreatingDefaultPageRef = useRef(false);
 
   const getActivePageStorageKey = useCallback((uid: string) => `sidebar_active_page:${uid}`, []);
   const getSidebarPreferencesRef = useCallback((uid: string) => doc(db, `users/${uid}/sidebarPreferences`, 'settings'), []);
 
   const setActivePageIdSilent = useCallback((pageId: string | null) => {
     shouldPersistActivePageRef.current = false;
+    activePageIdRef.current = pageId;
     setActivePageIdState(pageId);
   }, []);
 
   const setActivePageId = useCallback((pageId: string | null) => {
     shouldPersistActivePageRef.current = true;
+    activePageIdRef.current = pageId;
     setActivePageIdState(pageId);
   }, []);
+
+  // Keep activePageIdRef in sync with state
+  useEffect(() => {
+    activePageIdRef.current = activePageId;
+  }, [activePageId]);
 
   // Restore last active page when user changes / logs in
   useEffect(() => {
@@ -122,15 +131,17 @@ export function useSidebarPages() {
   // Ensure default page exists
   const ensureDefaultPage = useCallback(async () => {
     if (!user?.uid) return null;
+    // Prevent concurrent calls from creating multiple pages
+    if (isCreatingDefaultPageRef.current) return null;
 
+    isCreatingDefaultPageRef.current = true;
     try {
-      // Check if default page exists
-      const pagesQuery = query(
+      // Check if any pages exist (not just isDefault ones — avoids duplicates when isDefault is unset)
+      const allPagesQuery = query(
         collection(db, 'sidebar_pages'),
-        where('userId', '==', user.uid),
-        where('isDefault', '==', true)
+        where('userId', '==', user.uid)
       );
-      const snapshot = await getDocs(pagesQuery);
+      const snapshot = await getDocs(allPagesQuery);
 
       if (snapshot.empty) {
         // Create default page
@@ -151,6 +162,8 @@ export function useSidebarPages() {
     } catch (err) {
       console.error('Error ensuring default page:', err);
       return null;
+    } finally {
+      isCreatingDefaultPageRef.current = false;
     }
   }, [user?.uid]);
 
@@ -203,7 +216,8 @@ export function useSidebarPages() {
       setPages(pagesData);
 
       // Keep current active page when valid; otherwise restore persisted/default
-      const activeStillExists = !!activePageId && pagesData.some(p => p.id === activePageId);
+      const currentActivePageId = activePageIdRef.current;
+      const activeStillExists = !!currentActivePageId && pagesData.some(p => p.id === currentActivePageId);
       if (!activeStillExists) {
         let persistedPageId: string | null = null;
         try {
@@ -230,7 +244,9 @@ export function useSidebarPages() {
     });
 
     return () => unsubscribe();
-  }, [user?.uid, ensureDefaultPage, activePageId, getActivePageStorageKey, setActivePageId, setActivePageIdSilent]);
+  // activePageId intentionally excluded — we use activePageIdRef to avoid restarting the listener on every page switch
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, ensureDefaultPage, getActivePageStorageKey, setActivePageIdSilent]);
 
   // Create a new page
   const createPage = async (title: string, icon?: string): Promise<{ success: boolean; pageId?: string }> => {

@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext.firebase';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, Mail, Calendar, Shield, Clock } from 'lucide-react';
+import { LogOut, Mail, Calendar, Clock } from 'lucide-react';
 
 const UserProfile = () => {
   const { user, signOut } = useAuth();
@@ -106,11 +106,6 @@ const UserProfile = () => {
           value={getCreatedAt()} 
         />
         
-        <InfoRow 
-          icon={Shield} 
-          label="Backend" 
-          value="Firebase" 
-        />
       </div>
 
       {/* Sign Out Button */}

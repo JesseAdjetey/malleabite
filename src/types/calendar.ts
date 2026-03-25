@@ -180,7 +180,8 @@ export interface CalendarTemplate {
   description?: string;
   events: CalendarTemplateEvent[];
   targetCalendarId?: string;   // Which calendar to apply events to
-  targetGroupId?: string;      // Which group this template belongs to
+  targetGroupId?: string;      // DEPRECATED: use groupIds instead (kept for backward compat)
+  groupIds?: string[];         // Groups this template is linked to (supports multiple)
   isActive: boolean;           // Currently applied to calendar
   createdAt: string;
   updatedAt: string;

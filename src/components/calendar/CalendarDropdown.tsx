@@ -142,30 +142,41 @@ const CalendarDropdown: React.FC = () => {
   // Load templates (for showing as toggleable calendars in groups)
   const { templates } = useTemplateEventsLoader();
 
-  // Convert active templates into virtual ConnectedCalendar entries
-  // so they appear alongside real calendars in the sidebar
+  // Convert templates into virtual ConnectedCalendar entries so they appear
+  // alongside real calendars in the sidebar. A template can belong to multiple
+  // groups — one entry is created per linked group (same id, different groupId).
   const templateAsCalendars = useMemo((): ConnectedCalendar[] => {
-    return templates.map((tmpl) => {
-      const calId = templateCalendarId(tmpl.id);
-      // Put template in its target group, or first group if none assigned
-      const groupId = tmpl.targetGroupId || groups[0]?.id || '';
-      return {
-        id: calId,
-        source: 'google' as any, // placeholder type
-        sourceCalendarId: `template:${tmpl.id}`,
-        groupId,
-        accountEmail: '',
-        accountName: 'Template',
-        name: `📋 ${tmpl.name}`,
-        color: tmpl.events[0]?.color || '#8B5CF6',
-        isActive: tmpl.isActive,
-        order: 900 + templates.indexOf(tmpl), // sort after real calendars
-        syncEnabled: false,
-        syncInterval: 0,
-        createdAt: tmpl.createdAt,
-        updatedAt: tmpl.updatedAt,
-      } satisfies ConnectedCalendar;
+    const result: ConnectedCalendar[] = [];
+    templates.forEach((tmpl, idx) => {
+      // Resolve linked groups: prefer groupIds[], fall back to targetGroupId for
+      // backward compat with existing data.
+      const linkedGroupIds: string[] =
+        tmpl.groupIds?.length
+          ? tmpl.groupIds
+          : tmpl.targetGroupId
+            ? [tmpl.targetGroupId]
+            : [];
+      const uniqueGroupIds = [...new Set(linkedGroupIds)];
+      uniqueGroupIds.forEach(gid => {
+        result.push({
+          id: templateCalendarId(tmpl.id), // same ID across groups for event-visibility compat
+          source: 'google' as any,
+          sourceCalendarId: `template:${tmpl.id}`,
+          groupId: gid,
+          accountEmail: '',
+          accountName: 'Template',
+          name: `📋 ${tmpl.name}`,
+          color: tmpl.events[0]?.color || '#8B5CF6',
+          isActive: tmpl.isActive,
+          order: 900 + idx,
+          syncEnabled: false,
+          syncInterval: 0,
+          createdAt: tmpl.createdAt,
+          updatedAt: tmpl.updatedAt,
+        } satisfies ConnectedCalendar);
+      });
     });
+    return result;
   }, [templates, groups]);
 
   // Local UI state
@@ -287,28 +298,28 @@ const CalendarDropdown: React.FC = () => {
 
   const handleToggleCalendar = useCallback(
     async (calendarId: string, isActive: boolean) => {
-      // Immediately & idempotently set the filter store for instant visual feedback.
-      // Using setCalendarVisible (not toggleVisibility) prevents double-toggle if
-      // the bridge effect re-runs before preferences are saved.
-      useCalendarFilterStore.getState().setCalendarVisible(calendarId, isActive);
-
-      // Explicitly SET visibility preference to match the desired state.
-      // Using an explicit set (not toggle) prevents desync when the preference
-      // list doesn't match ConnectedCalendar.isActive (which caused Personal
-      // calendar to have inverse toggle behavior).
+      // Read current visible list BEFORE mutating the store.
+      // If we read after setCalendarVisible, turning off the last visible calendar
+      // produces an empty list which triggers the "show all" fallback — causing
+      // every other calendar to switch on unexpectedly.
       const storeState = useCalendarFilterStore.getState();
       let currentVisible = storeState.getVisibleCalendarIds();
 
       if (currentVisible.length === 0) {
+        // No explicit preference set yet — treat all known accounts as visible.
         currentVisible = storeState.accounts.map((a) => a.id);
       }
-      
+
       const updated = isActive
         ? currentVisible.includes(calendarId)
           ? currentVisible
           : [...currentVisible, calendarId]
         : currentVisible.filter(id => id !== calendarId);
-      
+
+      // Apply immediate visual feedback AFTER computing the correct new list.
+      // setCalendarVisible is idempotent so it's safe if the bridge re-runs.
+      useCalendarFilterStore.getState().setCalendarVisible(calendarId, isActive);
+
       await setVisibleCalendars(updated);
 
       // Check if this is a template calendar
@@ -421,8 +432,20 @@ const CalendarDropdown: React.FC = () => {
         if (calendar.id.startsWith(TEMPLATE_CALENDAR_PREFIX)) {
           const templateId = calendar.id.replace(TEMPLATE_CALENDAR_PREFIX, '');
           if (user?.uid) {
+            // Move: remove from source group, add to target group
+            const tmpl = templates.find(t => t.id === templateId);
+            const currentGroupIds: string[] = tmpl?.groupIds?.length
+              ? tmpl.groupIds
+              : tmpl?.targetGroupId ? [tmpl.targetGroupId] : [];
+            const movedGroupIds = [
+              ...currentGroupIds.filter(id => id !== calendar.groupId),
+              targetGroupId,
+            ];
             import('@/lib/services/calendarService').then(svc =>
-              svc.updateCalendarTemplate(user.uid, templateId, { targetGroupId })
+              svc.updateCalendarTemplate(user.uid, templateId, {
+                groupIds: movedGroupIds,
+                targetGroupId,
+              })
             );
           }
         } else {
@@ -441,7 +464,7 @@ const CalendarDropdown: React.FC = () => {
       const reordered = arrayMove(sortedGroups, oldIndex, newIndex);
       reorderGroups(reordered.map(g => g.id));
     },
-    [sortedGroups, reorderGroups, moveCalendar, user?.uid]
+    [sortedGroups, reorderGroups, moveCalendar, user?.uid, templates]
   );
 
   // User display
@@ -607,7 +630,34 @@ const CalendarDropdown: React.FC = () => {
                                   onDeleteGroup={handleDeleteGroup}
                                   onAddCalendar={handleAddCalendar}
                                   onToggleCalendar={handleToggleCalendar}
-                                  onDeleteCalendar={deleteCalendar}
+                                  onDeleteCalendar={async (calendarId) => {
+                                    if (calendarId.startsWith(TEMPLATE_CALENDAR_PREFIX)) {
+                                      // "Remove" only unlinks the template from this group —
+                                      // it stays in the Templates list and any other groups.
+                                      const templateId = calendarId.replace(TEMPLATE_CALENDAR_PREFIX, '');
+                                      if (user?.uid && templateId) {
+                                        try {
+                                          const tmpl = templates.find(t => t.id === templateId);
+                                          if (tmpl) {
+                                            const currentGroupIds: string[] = tmpl.groupIds?.length
+                                              ? tmpl.groupIds
+                                              : tmpl.targetGroupId ? [tmpl.targetGroupId] : [];
+                                            const newGroupIds = currentGroupIds.filter(id => id !== group.id);
+                                            await import('@/lib/services/calendarService').then(svc =>
+                                              svc.updateCalendarTemplate(user.uid, templateId, {
+                                                groupIds: newGroupIds,
+                                                targetGroupId: newGroupIds[0],
+                                              })
+                                            );
+                                          }
+                                        } catch (err) {
+                                          console.error('Failed to unlink template from group', err);
+                                        }
+                                      }
+                                      return;
+                                    }
+                                    deleteCalendar(calendarId);
+                                  }}
                                   onToggleGroup={(makeVisible) => handleToggleGroup(group.id, makeVisible)}
                                   dragHandleProps={dragHandleProps}
                                   isDragging={isDragging}
@@ -667,7 +717,10 @@ const CalendarDropdown: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       className="justify-start text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => setTemplateManagerOpen(true)}
+                      onClick={() => {
+                        setOpen(false);
+                        setTemplateManagerOpen(true);
+                      }}
                     >
                       <FileText size={13} />
                       Templates
@@ -727,6 +780,7 @@ const CalendarDropdown: React.FC = () => {
         groups={groups}
         defaultGroupId={addCalendarGroupId}
         onOpenTemplates={(groupId) => {
+          setOpen(false);
           setTemplateDefaultGroupId(groupId);
           setTemplateManagerOpen(true);
         }}

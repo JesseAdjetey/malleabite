@@ -58,6 +58,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
 
   // Inline delete confirmation — stores the template ID pending confirmation
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
 
   // Single-dialog view switching (list → group-picker) to avoid stacked dialog focus traps
   const [view, setView] = useState<View>('list');
@@ -176,8 +177,21 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
   const applyToGroup = async (template: CalendarTemplate, groupId: string) => {
     if (!user?.uid) return;
 
-    const calendar = calendars.find(c => c.groupId === groupId && c.isActive);
-    const calendarId = calendar?.id || undefined;
+    const groupName = groups.find(g => g.id === groupId)?.name || 'the group';
+
+    // Prefer an active calendar in the group; fall back to any calendar in the group.
+    // Without a matching calendar, calendarId is undefined and events land in Personal.
+    const calendar =
+      calendars.find(c => c.groupId === groupId && c.isActive) ??
+      calendars.find(c => c.groupId === groupId);
+    const calendarId = calendar?.id;
+
+    if (!calendar) {
+      toast.warning(
+        `"${groupName}" has no calendars yet — events will appear in Personal. Add a calendar to "${groupName}" to keep them organised.`,
+        { duration: 6000 }
+      );
+    }
 
     const today = dayjs();
     const startOfWeek = today.startOf('week');
@@ -216,11 +230,36 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
       created++;
     }
 
-    const groupName = groups.find(g => g.id === groupId)?.name || 'the group';
+    // Dismiss the per-event "Event created successfully!" toasts from persistEvent
+    // so only the summary toast is visible.
+    toast.dismiss();
+
     if (created > 0) {
       toast.success(`Applied ${created} event${created !== 1 ? 's' : ''} from "${template.name}" to ${groupName}`);
     } else {
       toast.info('No events to apply from this template');
+    }
+
+    // Link this template to the group so it appears in the group's sidebar.
+    // Supports multiple groups — adds to groupIds[] without replacing existing ones.
+    const currentGroupIds: string[] = template.groupIds?.length
+      ? template.groupIds
+      : template.targetGroupId ? [template.targetGroupId] : [];
+    if (!currentGroupIds.includes(groupId)) {
+      const newGroupIds = [...currentGroupIds, groupId];
+      try {
+        await calendarService.updateCalendarTemplate(user.uid, template.id, {
+          groupIds: newGroupIds,
+          targetGroupId: groupId,
+        });
+        setTemplates(prev => prev.map(t =>
+          t.id === template.id
+            ? { ...t, groupIds: newGroupIds, targetGroupId: groupId }
+            : t
+        ));
+      } catch {
+        // Non-critical — events were created successfully
+      }
     }
   };
 
@@ -230,7 +269,15 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
     if (defaultGroupId) {
       // Group already known — apply and close so the user sees clear feedback
       // (staying on the list with no visible change feels like nothing happened)
-      await applyToGroup(template, defaultGroupId);
+      setApplying(true);
+      try {
+        await applyToGroup(template, defaultGroupId);
+      } catch (err) {
+        toast.error('Failed to apply template. Please try again.');
+        setApplying(false);
+        return;
+      }
+      setApplying(false);
       handleOpenChange(false);
       return;
     }
@@ -249,20 +296,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
     if (!applyingTemplate || !selectedGroupId || !user?.uid) return;
 
     await applyToGroup(applyingTemplate, selectedGroupId);
-
-    // Remember the selected group on the template for next time
-    if (applyingTemplate.targetGroupId !== selectedGroupId) {
-      try {
-        await calendarService.updateCalendarTemplate(user.uid, applyingTemplate.id, {
-          targetGroupId: selectedGroupId,
-        });
-        setTemplates(prev => prev.map(t =>
-          t.id === applyingTemplate.id ? { ...t, targetGroupId: selectedGroupId } : t
-        ));
-      } catch {
-        // Non-critical
-      }
-    }
+    // Note: applyToGroup already updates groupIds[] and targetGroupId — no extra update needed here.
 
     setApplyingTemplate(null);
     setSelectedGroupId(null);
@@ -380,8 +414,9 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
                             {/* Clickable content area */}
                             <button
                               type="button"
-                              className="flex items-start gap-3 flex-1 min-w-0 text-left"
-                              onClick={() => !isPendingDelete && handleApplyClick(tmpl)}
+                              className="flex items-start gap-3 flex-1 min-w-0 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={applying}
+                              onClick={() => !isPendingDelete && !applying && handleApplyClick(tmpl)}
                               title={defaultGroupId ? 'Click to add to calendar' : 'Click to choose group'}
                             >
                               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -440,6 +475,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7 text-primary/60 hover:text-primary"
+                                  disabled={applying}
                                   onClick={() => handleApplyClick(tmpl)}
                                   title="Add to calendar"
                                 >

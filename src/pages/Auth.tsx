@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,6 +99,7 @@ const ThemeToggle = () => {
 
 const Auth = () => {
   const { user, signIn, signUp, signInWithGoogle, loading, error, clearError } = useAuth();
+  const [searchParams] = useSearchParams();
   const [isSignUp, setIsSignUp] = useState(false);
   const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [email, setEmail] = useState('');
@@ -177,7 +178,7 @@ const Auth = () => {
   };
 
   if (user) {
-    return <Navigate to="/" />;
+    return <Navigate to={searchParams.get('redirect') ?? '/'} />;
   }
 
   return (

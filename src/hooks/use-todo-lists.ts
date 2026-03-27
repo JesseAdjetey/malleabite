@@ -366,3 +366,57 @@ export function useTodoLists() {
     getTodosForList
   };
 }
+
+// Standalone toggle — works regardless of who owns the item (for collaborative lists)
+export async function directToggleTodo(todo: TodoItem): Promise<{ success: boolean }> {
+  try {
+    const now = new Date().toISOString();
+    await updateDoc(doc(db, 'todo_items', todo.id), {
+      completed: !todo.completed,
+      completedAt: !todo.completed ? now : null,
+    });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+// Standalone delete — works regardless of who owns the item (for collaborative lists)
+export async function directDeleteTodo(todoId: string): Promise<{ success: boolean }> {
+  try {
+    await deleteDoc(doc(db, 'todo_items', todoId));
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+// Real-time listener for a shared list's todos (queries by listId, not userId).
+// Used by collaborators who don't own the todo items.
+export function useSharedListTodos(listId: string | undefined): TodoItem[] {
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+
+  useEffect(() => {
+    if (!listId) return;
+
+    const q = query(
+      collection(db, 'todo_items'),
+      where('listId', '==', listId)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as TodoItem))
+          .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+        setTodos(items);
+      },
+      () => setTodos([]) // permission denied — fail silently
+    );
+
+    return () => unsub();
+  }, [listId]);
+
+  return todos;
+}

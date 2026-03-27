@@ -47,6 +47,11 @@ export interface ModuleInstance {
   pageId?: string; // Reference to which page this module belongs to
   listId?: string; // For todo modules - reference to the specific todo list
   instanceId?: string; // Unique ID for stateful modules (e.g. Pomodoro) to scope state per-instance
+  // Collaboration fields
+  sharedFromInstanceId?: string; // If this is a shared copy, points to owner's module instance ID
+  sharedListId?: string; // For shared todo modules - the owner's list ID
+  sharedRole?: 'viewer' | 'editor'; // Role granted to current user on this shared module
+  sharedOwnerName?: string; // Display name of the module owner (for UI)
 }
 
 /** Generate a unique module ID */

@@ -13,14 +13,20 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEventStore } from "@/lib/store";
-import { useTodoLists } from "@/hooks/use-todo-lists";
+import { useTodoLists, useSharedListTodos, directToggleTodo, directDeleteTodo } from "@/hooks/use-todo-lists";
 import { useAuth } from "@/contexts/AuthContext.firebase";
+import { useModuleShare } from "@/hooks/use-module-sharing";
 import { useEisenhower } from "@/hooks/use-eisenhower";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useMirrorSync } from "@/hooks/use-mirror-sync";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { CalendarEventType } from "@/lib/stores/types";
 
+
+interface MoveTarget {
+  id: string;
+  title: string;
+}
 
 interface TodoModuleEnhancedProps {
   title: string;
@@ -29,7 +35,14 @@ interface TodoModuleEnhancedProps {
   isMinimized?: boolean;
   onMinimize?: () => void;
   isDragging?: boolean;
-  listId?: string; // Specific list ID for this module
+  listId?: string;
+  // Collaboration props
+  moduleId?: string;
+  sharedFromInstanceId?: string;
+  sharedRole?: 'viewer' | 'editor';
+  moveTargets?: MoveTarget[];
+  onMoveToPage?: (pageId: string) => void;
+  onShare?: () => void;
 }
 
 const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
@@ -40,7 +53,20 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   onMinimize,
   isDragging,
   listId: moduleListId,
+  moduleId,
+  sharedFromInstanceId,
+  sharedRole,
+  moveTargets,
+  onMoveToPage,
+  onShare,
 }) => {
+  // Get real-time role + collaboration state.
+  // Invitee → check sharedFromInstanceId; Owner → check their own moduleId.
+  const isSharedModule = !!sharedFromInstanceId;
+  const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
+  const isViewOnly = isSharedModule && liveRole === 'viewer';
+  // Use listId-based querying when the module is collaborative (invitee OR owner with collaborators)
+  const isCollaborativeModule = isSharedModule || isLiveShared;
   const [newItem, setNewItem] = useState("");
   const [submitStatus, setSubmitStatus] = useState<{
     success?: boolean;
@@ -58,6 +84,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     toggleTodo,
     deleteTodo,
     updateList,
+    moveTodo,
   } = useTodoLists();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
@@ -72,9 +99,15 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     }
   }, []);
   
+  // For collaborative modules (invitee OR owner with collaborators): query by listId
+  // so all participants' todos are visible regardless of who created them.
+  const sharedTodos = useSharedListTodos(isCollaborativeModule ? moduleListId : undefined);
+
   // Use module-specific list
   const activeList = lists.find(l => l.id === moduleListId);
-  const activeTodos = moduleListId ? getTodosForList(moduleListId) : [];
+  const activeTodos = isCollaborativeModule
+    ? sharedTodos
+    : moduleListId ? getTodosForList(moduleListId) : [];
   const { user } = useAuth();
 
   // Sync title changes to the todo list
@@ -120,8 +153,12 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   };
 
   const handleToggleWithSync = async (item: any) => {
-    await toggleTodo(item.id);
-    // S2: Propagate completion to linked events
+    // For collaborative modules use direct Firestore call (item may be owned by another user)
+    if (isCollaborativeModule) {
+      await directToggleTodo(item);
+    } else {
+      await toggleTodo(item.id);
+    }
     await syncTodoCompletion(item.id, !item.completed);
   };
 
@@ -135,6 +172,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       source: "todo-module",
       completed: item.completed,
       collectionName: "todo_items" as const,
+      listId: moduleListId,
     };
 
     e.dataTransfer.setData("application/json", JSON.stringify(todoData));
@@ -165,6 +203,18 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
       const data = JSON.parse(dataString);
       console.log("📥 Todo module received drop:", data);
+
+      // Handle todo items dragged from another todo list
+      if (data.source === "todo-module" && moduleListId && data.listId !== moduleListId) {
+        const result = await moveTodo(data.id, moduleListId);
+        if (!result?.success) {
+          toast.error("Failed to move todo");
+        }
+        return;
+      }
+
+      // Ignore drops of todo items onto the same list
+      if (data.source === "todo-module") return;
 
       // Handle drops from Eisenhower module
       if (data.source === "eisenhower" && moduleListId) {
@@ -221,15 +271,20 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     }
   };
 
+  const containerProps = {
+    title,
+    onRemove,
+    onTitleChange: isViewOnly ? undefined : onTitleChange,
+    isMinimized,
+    onMinimize,
+    moveTargets,
+    onMoveToPage,
+    onShare,
+  };
+
   if (isMinimized) {
     return (
-      <ModuleContainer
-        title={title}
-        onRemove={onRemove}
-        onTitleChange={onTitleChange}
-        isMinimized={isMinimized}
-        onMinimize={onMinimize}
-      >
+      <ModuleContainer {...containerProps}>
         <div className="text-center text-sm text-muted-foreground py-2">
           {loading ? "Loading..." : `${activeTodos.length} todo items`}
         </div>
@@ -239,13 +294,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   if (!user) {
     return (
-      <ModuleContainer
-        title={title}
-        onRemove={onRemove}
-        onTitleChange={onTitleChange}
-        isMinimized={isMinimized}
-        onMinimize={onMinimize}
-      >
+      <ModuleContainer {...containerProps}>
         <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
           Sign in to use todos
         </div>
@@ -254,22 +303,30 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   }
 
   return (
-    <ModuleContainer
-      title={title}
-      onRemove={onRemove}
-      onTitleChange={onTitleChange}
-      isMinimized={isMinimized}
-      onMinimize={onMinimize}
-    >
+    <ModuleContainer {...containerProps}>
+      {/* Shared module indicator */}
+      {isSharedModule && (
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className={cn(
+            "text-xs px-2 py-0.5 rounded-full font-medium",
+            isViewOnly
+              ? "bg-muted text-muted-foreground"
+              : "bg-primary/15 text-primary"
+          )}>
+            {isViewOnly ? 'View only' : 'Shared — Editor'}
+          </span>
+        </div>
+      )}
+
       {/* Droppable area for Eisenhower items */}
-      <div 
+      <div
         className={cn(
           "transition-all duration-150 rounded-lg",
-          isDragOver && "ring-2 ring-primary/50 bg-primary/10"
+          isDragOver && !isViewOnly && "ring-2 ring-primary/50 bg-primary/10"
         )}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
+        onDrop={isViewOnly ? undefined : handleDrop}
+        onDragOver={isViewOnly ? undefined : handleDragOver}
+        onDragLeave={isViewOnly ? undefined : handleDragLeave}
       >
         {/* Todo Items */}
         <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
@@ -302,13 +359,13 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
               onDragEnd={handleDragEnd}
             >
               <div
-                className="cursor-pointer flex-shrink-0"
-                onClick={() => handleToggleWithSync(item)}
+                className={cn("flex-shrink-0", !isViewOnly && "cursor-pointer")}
+                onClick={isViewOnly ? undefined : () => handleToggleWithSync(item)}
               >
                 {item.completed ? (
                   <CheckCircle size={18} className="text-primary" />
                 ) : (
-                  <Circle size={18} className="text-primary/60" />
+                  <Circle size={18} className={isViewOnly ? "text-primary/30" : "text-primary/60"} />
                 )}
               </div>
               <span
@@ -321,12 +378,14 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
               {item.isCalendarEvent && (
                 <Calendar size={14} className="text-primary/70 flex-shrink-0" />
               )}
-              <button
-                onClick={() => deleteTodo(item.id)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all"
-              >
-                <Trash2 size={14} className="text-red-400" />
-              </button>
+              {!isViewOnly && (
+                <button
+                  onClick={() => isCollaborativeModule ? directDeleteTodo(item.id) : deleteTodo(item.id)}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all"
+                >
+                  <Trash2 size={14} className="text-red-400" />
+                </button>
+              )}
             </div>
           ))
         )}
@@ -351,23 +410,25 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         </div>
       )}
 
-      {/* Add Todo Input */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newItem}
-          onChange={(e) => setNewItem(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className="glass-input w-full text-sm"
-          placeholder="Add a task..."
-        />
-        <button
-          onClick={handleAddItem}
-          className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm"
-        >
-          Add
-        </button>
-      </div>
+      {/* Add Todo Input — hidden for view-only shared modules */}
+      {!isViewOnly && (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="glass-input w-full text-sm"
+            placeholder="Add a task..."
+          />
+          <button
+            onClick={handleAddItem}
+            className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm"
+          >
+            Add
+          </button>
+        </div>
+      )}
       </div> {/* Close droppable area */}
     </ModuleContainer>
   );

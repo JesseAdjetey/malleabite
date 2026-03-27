@@ -10,8 +10,12 @@ import {
   ContextMenuItem,
   ContextMenuLabel,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import ManageAccessSheet from '../modules/sharing/ManageAccessSheet';
 
 interface ModuleMoveTarget {
   id: string;
@@ -28,8 +32,8 @@ interface ModuleGridProps {
   pageIndex: number;
 }
 
-const ModuleGrid: React.FC<ModuleGridProps> = ({ 
-  modules, 
+const ModuleGrid: React.FC<ModuleGridProps> = ({
+  modules,
   onRemoveModule,
   onUpdateModuleTitle,
   onReorderModules,
@@ -37,26 +41,34 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   moveTargets,
   pageIndex
 }) => {
-  // Module dimensions - reduced width for better fit in sidebar
-  const MODULE_WIDTH = 280; // Reduced from 320 to 280
-  
-  // Use our custom hook for responsive layout with lower breakpoint
+  const MODULE_WIDTH = 280;
   const { isTwoColumn, containerRef } = useSidebarLayout({
-    columnBreakpoint: 620 // Reduced from 700 to trigger two columns more easily
+    columnBreakpoint: 620
   });
 
-  // State for tracking drag operations
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Custom cursor effect
-  const cursorRef = useRef<HTMLDivElement>(null);
-  
-  // Access the toggleModuleMinimized function from the store
+  // Share sheet state — keep module data stable while the Sheet animates out,
+  // then fully unmount after the animation. This prevents Firestore SDK internal
+  // state errors that occur when onSnapshot listeners are destroyed mid-flight.
+  const [shareSheet, setShareSheet] = useState<{ module: ModuleInstance; open: boolean } | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openShareSheet = (module: ModuleInstance) => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setShareSheet({ module, open: true });
+  };
+
+  const closeShareSheet = () => {
+    // Animate out first (open → false), then unmount after animation (~300ms)
+    setShareSheet(prev => prev ? { ...prev, open: false } : null);
+    closeTimerRef.current = setTimeout(() => setShareSheet(null), 350);
+  };
+
   const { toggleModuleMinimized } = useSidebarStore();
 
   useEffect(() => {
-    // Create the custom cursor element
     const cursor = document.createElement('div');
     cursor.id = 'custom-cursor';
     document.body.appendChild(cursor);
@@ -68,18 +80,11 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
       }
     };
 
-    const handleHoverStart = () => {
-      cursor.classList.add('expanded');
-    };
+    const handleHoverStart = () => cursor.classList.add('expanded');
+    const handleHoverEnd = () => cursor.classList.remove('expanded');
 
-    const handleHoverEnd = () => {
-      cursor.classList.remove('expanded');
-    };
-
-    // Add listeners to document
     document.addEventListener('mousemove', handleMouseMove);
 
-    // Attach hover listeners to all module containers and calendar elements
     const gradientElements = document.querySelectorAll('.gradient-border');
     gradientElements.forEach(el => {
       el.addEventListener('mouseenter', handleHoverStart);
@@ -96,50 +101,39 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
         document.body.removeChild(cursor);
       }
     };
-  }, [modules.length]); // Re-run when modules change
+  }, [modules.length]);
 
-  // Handle drag start
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
+  const handleDragStart = (index: number) => setDraggedIndex(index);
 
-  // Handle drag over
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedIndex === null) return;
     setDragOverIndex(index);
   };
 
-  // Handle drop
   const handleDrop = (targetIndex: number) => {
     if (draggedIndex === null) return;
-    
-    // Only perform reorder if indexes are different
     if (draggedIndex !== targetIndex) {
       onReorderModules(draggedIndex, targetIndex);
     }
-    
-    // Reset drag states
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
 
-  // Handle drag end (cleanup)
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
 
-  // Handle toggle minimize for a module
   const handleToggleMinimize = (index: number) => {
     toggleModuleMinimized(pageIndex, index);
   };
 
+
   return (
     <div className="flex flex-col">
-      {/* Module Grid */}
-      <div 
-        ref={containerRef} 
+      <div
+        ref={containerRef}
         className={`${isTwoColumn ? 'grid grid-cols-2 gap-4 justify-items-center' : 'flex flex-col items-center'}`}
       >
         {modules.map((module, index) => (
@@ -151,8 +145,8 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={() => handleDrop(index)}
                 onDragEnd={handleDragEnd}
-                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''} 
-                      ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
+                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''}
+                  ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
               >
                 <ModuleRenderer
                   module={module}
@@ -162,28 +156,69 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   onTitleChange={(title) => onUpdateModuleTitle(index, title)}
                   onToggleMinimize={() => handleToggleMinimize(index)}
                   isDragging={draggedIndex === index}
+                  moveTargets={moveTargets}
+                  onMoveToPage={(pageId) => onMoveModule(index, pageId)}
+                  onShare={() => openShareSheet(module)}
                 />
               </div>
             </ContextMenuTrigger>
+
             <ContextMenuContent>
               <ContextMenuLabel>{module.title}</ContextMenuLabel>
               <ContextMenuSeparator />
-              {moveTargets.length > 0 ? (
-                moveTargets.map((target) => (
-                  <ContextMenuItem
-                    key={target.id}
-                    onSelect={() => onMoveModule(index, target.id)}
-                  >
-                    Move to {target.title}
-                  </ContextMenuItem>
-                ))
-              ) : (
-                <ContextMenuItem disabled>No other pages available</ContextMenuItem>
+              <ContextMenuItem onSelect={() => {
+                // Rename: ModuleContainer handles inline edit via its own state;
+                // we can't trigger it directly from here, so we use a custom event
+                const el = document.querySelector(`[data-module-id="${module.id}"] .module-rename-trigger`) as HTMLElement;
+                el?.click();
+              }}>
+                Rename
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => handleToggleMinimize(index)}>
+                {module.minimized ? 'Expand' : 'Minimize'}
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              {moveTargets.length > 0 && (
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>Transfer to page</ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {moveTargets.map((target) => (
+                      <ContextMenuItem
+                        key={target.id}
+                        onSelect={() => onMoveModule(index, target.id)}
+                      >
+                        {target.title}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
               )}
+              <ContextMenuItem onSelect={() => openShareSheet(module)}>
+                Share / Manage Access
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onSelect={() => onRemoveModule(index)}
+                className="text-destructive focus:text-destructive"
+              >
+                Delete
+              </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         ))}
       </div>
+
+      {shareSheet && (
+        <ManageAccessSheet
+          moduleInstanceId={shareSheet.module.sharedFromInstanceId ?? shareSheet.module.id}
+          moduleType={shareSheet.module.type}
+          moduleTitle={shareSheet.module.title}
+          listId={shareSheet.module.listId}
+          isOwnModule={!shareSheet.module.sharedFromInstanceId}
+          open={shareSheet.open}
+          onClose={closeShareSheet}
+        />
+      )}
     </div>
   );
 };

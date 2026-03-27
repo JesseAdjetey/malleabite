@@ -19,6 +19,7 @@ import { useSubscription } from '@/hooks/use-subscription';
 import { Crown } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
 import { useThemeStore, type Theme } from '@/lib/stores/theme-store';
+import NotificationBell from './NotificationBell';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -215,6 +216,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
               </Button>
             )}
+            <NotificationBell />
             {!isMobile && <SettingsNav />}
 
             {/* Mobile: overflow menu */}

@@ -41,6 +41,12 @@ export const COLLECTIONS = {
   POMODORO_SESSIONS: 'pomodoro_sessions',
   MODULE_INSTANCES: 'module_instances',
   ENTITY_LINKS: 'entity_links',
+  MODULE_SHARES: 'module_shares',
+  MODULE_INVITES: 'module_invites',
+  NOTIFICATIONS: 'notifications',
+  TODO_LISTS: 'todo_lists',
+  TODO_ITEMS: 'todo_items',
+  SHARE_TOKENS: 'share_tokens',
 } as const;
 
 // Base interfaces for Firestore documents

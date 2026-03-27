@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import {
   Calendar,
   ChevronDown,
@@ -509,7 +509,8 @@ const CalendarDropdown: React.FC = () => {
             'w-[320px] max-w-[calc(100vw-12px)] p-0 rounded-2xl border border-border/60',
             'bg-popover/95 backdrop-blur-xl shadow-xl',
             'dark:bg-popover/90',
-            'max-h-[calc(100vh-80px)] flex flex-col overflow-hidden'
+            'flex flex-col overflow-hidden',
+            '[max-height:min(calc(100svh-80px),600px)]'
           )}
         >
           <AnimatePresence>
@@ -579,7 +580,7 @@ const CalendarDropdown: React.FC = () => {
                 )}
 
                 {/* Calendar Groups */}
-                <ScrollArea className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 overflow-y-auto">
                   <div className="py-1.5">
                     {groupsLoading ? (
                       <div className="px-4 py-8 text-center">
@@ -683,7 +684,7 @@ const CalendarDropdown: React.FC = () => {
                       </DndContext>
                     )}
                   </div>
-                </ScrollArea>
+                </div>
 
                 <Separator className="opacity-50" />
 

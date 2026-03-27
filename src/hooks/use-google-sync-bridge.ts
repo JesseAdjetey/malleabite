@@ -111,6 +111,14 @@ export function useGoogleSyncBridge() {
   const calendarsRef = useRef(calendars);
   calendarsRef.current = calendars;
 
+  // Derived flag: true once at least one active, sync-enabled Google calendar exists.
+  // Adding this as a dep ensures the polling effect re-fires after Firestore first
+  // loads the connected calendars (Firestore is async, so `calendars` starts empty
+  // at mount — without this dep, the poll timer never starts).
+  const hasGoogleCalendars = calendars.some(
+    (c) => c.source === 'google' && c.isActive && c.syncEnabled
+  );
+
   // ─── Reconnect ──────────────────────────────────────────────────────────
 
   /**
@@ -290,17 +298,18 @@ export function useGoogleSyncBridge() {
   // ─── Polling (Google → Malleabite) ─────────────────────────────────────
 
   useEffect(() => {
-    if (!user?.uid) return;
+    // hasGoogleCalendars gates this effect so it re-fires once Firestore
+    // finishes loading (calendars is always [] on mount due to async fetch).
+    if (!user?.uid || !hasGoogleCalendars) return;
 
-    // Read from the ref so this effect only depends on user.uid,
-    // NOT on the calendars array (which changes on every Firestore write).
+    // Read from the ref so this effect doesn't restart on every Firestore write
+    // (e.g. lastSyncAt timestamp updates).  The poll function reads the ref each tick.
     const getGoogleCalendars = () =>
       calendarsRef.current.filter(
         (c) => c.source === 'google' && c.isActive && c.syncEnabled
       );
 
     const googleCalendars = getGoogleCalendars();
-    if (googleCalendars.length === 0) return;
 
     // Use the shortest sync interval among all active Google calendars
     const minIntervalMinutes = Math.max(
@@ -365,10 +374,11 @@ export function useGoogleSyncBridge() {
         pollTimerRef.current = null;
       }
     };
-    // Only restart the effect when the user changes — NOT when calendars update.
-    // The poll function reads from calendarsRef.current each tick.
+    // Restart when user or hasGoogleCalendars changes (false→true on first Firestore load).
+    // Individual calendar field updates (e.g. lastSyncAt) don't flip hasGoogleCalendars,
+    // so the interval is NOT restarted on every sync write.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, syncCalendar]);
+  }, [user?.uid, syncCalendar, hasGoogleCalendars]);
 
   return {
     pushCreateToGoogle,

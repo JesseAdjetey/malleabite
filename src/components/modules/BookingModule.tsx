@@ -567,8 +567,8 @@ const BookingModule: React.FC<BookingModuleProps> = ({
           <div className="text-center py-4">
             <Calendar className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground mb-3">No bookings yet</p>
-            <div className="flex gap-2 justify-center">
-              <Button size="sm" variant="outline" onClick={() => setCreateMode('page')}>
+            <div className="flex gap-2 justify-center flex-wrap">
+              <Button size="sm" variant="outline" className="text-foreground" onClick={() => setCreateMode('page')}>
                 <Link2 className="h-3.5 w-3.5 mr-1" /> Booking page
               </Button>
               <Button size="sm" onClick={() => setCreateMode('group_meet')}>

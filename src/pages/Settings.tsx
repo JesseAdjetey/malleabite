@@ -6,7 +6,7 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus, Globe } from 'lucide-react';
+import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -25,7 +25,19 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language';
+
+const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, x: 30 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: -30 }}
+    transition={springs.page}
+    className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
+  >
+    {children}
+  </motion.div>
+);
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -82,19 +94,6 @@ const Settings = () => {
     haptics.light();
     setActiveSection(section);
   };
-
-  // Page wrapper with transition
-  const PageWrapper = ({ children }: { children: React.ReactNode }) => (
-    <motion.div
-      initial={{ opacity: 0, x: 30 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -30 }}
-      transition={springs.page}
-      className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
-    >
-      {children}
-    </motion.div>
-  );
 
   // iOS-style back button
   const BackButton = ({ title }: { title: string }) => (
@@ -454,25 +453,11 @@ const Settings = () => {
               onClick={() => navigate('/patterns')}
             />
             <GroupedListItem
-              icon={<FolderPlus className="h-4 w-4 text-green-500" />}
-              iconBg="bg-green-500/15"
-              label="Archive & Start Fresh"
-              sublabel="Save and clear your calendar"
-              onClick={() => navigate('/snapshots')}
-            />
-            <GroupedListItem
               icon={<BarChart3 className="h-4 w-4 text-teal-500" />}
               iconBg="bg-teal-500/15"
               label="Analytics"
               sublabel="View productivity insights"
               onClick={() => navigate('/analytics')}
-            />
-            <GroupedListItem
-              icon={<FolderPlus className="h-4 w-4 text-orange-500" />}
-              iconBg="bg-orange-500/15"
-              label="Calendar Archives"
-              sublabel="Access archived calendars"
-              onClick={() => navigate('/calendar-archives')}
             />
           </GroupedList>
         </div>

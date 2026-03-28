@@ -224,7 +224,10 @@ const ManageAccessSheet: React.FC<ManageAccessSheetProps> = ({
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col gap-0 p-0">
+      <SheetContent
+        side="right"
+        className="top-3 bottom-3 right-3 h-auto w-full sm:max-w-md flex flex-col gap-0 p-0 rounded-2xl shadow-2xl border border-border/60"
+      >
         <SheetHeader className="px-6 py-4 border-b border-border">
           <SheetTitle className="text-base">
             Manage Access

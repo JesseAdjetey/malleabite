@@ -1,9 +1,10 @@
-import React, { useRef } from 'react';
-import { useSidebarPages } from '@/hooks/use-sidebar-pages';
+import React, { useRef, useState } from 'react';
+import { useSidebarPages, useSharedPageModules } from '@/hooks/use-sidebar-pages';
 import { ModuleType } from '@/lib/store';
 import ModuleSelector from '../modules/ModuleSelector';
 import PageHeader from './PageHeader';
 import ModuleGrid from './ModuleGrid';
+import ManagePageAccessSheet from './sharing/ManagePageAccessSheet';
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,19 @@ const SideBar = () => {
   } = useSidebarPages();
 
   const sidebarContentRef = useRef<HTMLDivElement>(null);
+  const [pageShareSheetOpen, setPageShareSheetOpen] = useState(false);
+
+  const isSharedPage = !!activePage?.sharedFromPageId;
+  // Structural lock: all shared pages (viewer + editor) can't rename/delete/reorder modules
+  const isStructureReadOnly = isSharedPage;
+  // Content lock: only viewers can't edit module content (todos etc.)
+  const isContentReadOnly = activePage?.sharedRole === 'viewer';
+
+  // For shared pages: listen to owner's page modules in real-time
+  const { modules: sharedModules } = useSharedPageModules(activePage?.sharedFromPageId);
+
+  // Modules to render — owner's live data for shared pages, own data otherwise
+  const modulesToRender = isSharedPage ? sharedModules : (activePage?.modules ?? []);
 
   // Find current page index for navigation
   const currentPageIndex = pages.findIndex(p => p.id === activePageId);
@@ -114,6 +128,9 @@ const SideBar = () => {
         canGoToPrevPage={currentPageIndex > 0}
         canGoToNextPage={currentPageIndex < pages.length - 1}
         canDeletePage={pages.length > 1}
+        onShare={!isSharedPage ? () => setPageShareSheetOpen(true) : undefined}
+        isSharedPage={isSharedPage}
+        sharedOwnerName={activePage?.sharedOwnerName}
       />
 
       {/* Page modules with responsive grid */}
@@ -121,11 +138,12 @@ const SideBar = () => {
         ref={sidebarContentRef}
         className="flex-1 overflow-y-auto p-4 pt-0"
       >
-        <ModuleSelector onSelect={handleAddModule} />
+        {/* Hide module selector for shared pages — owner controls page structure */}
+        {!isSharedPage && <ModuleSelector onSelect={handleAddModule} />}
 
         {/* Module container */}
         <ModuleGrid
-          modules={activePage?.modules || []}
+          modules={modulesToRender}
           onRemoveModule={handleRemoveModule}
           onUpdateModuleTitle={handleUpdateModuleTitle}
           onReorderModules={handleReorderModules}
@@ -134,6 +152,8 @@ const SideBar = () => {
             .filter(p => p.id !== activePageId)
             .map(p => ({ id: p.id, title: p.title }))}
           pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
+          isReadOnly={isStructureReadOnly}
+          contentReadOnly={isContentReadOnly}
         />
       </div>
 
@@ -162,6 +182,17 @@ const SideBar = () => {
           </button>
         </div>
       </div>
+
+      {/* Page share sheet — owner only */}
+      {!isSharedPage && activePageId && (
+        <ManagePageAccessSheet
+          pageId={activePageId}
+          pageTitle={activePage?.title ?? 'Untitled'}
+          modules={activePage?.modules ?? []}
+          open={pageShareSheetOpen}
+          onClose={() => setPageShareSheetOpen(false)}
+        />
+      )}
     </div>
   );
 };

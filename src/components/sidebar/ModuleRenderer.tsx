@@ -24,6 +24,8 @@ interface ModuleRendererProps {
   moveTargets?: MoveTarget[];
   onMoveToPage?: (pageId: string) => void;
   onShare?: () => void;
+  isReadOnly?: boolean;
+  contentReadOnly?: boolean;
 }
 
 const ModuleRenderer: React.FC<ModuleRendererProps> = ({
@@ -37,6 +39,8 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   moveTargets = [],
   onMoveToPage,
   onShare,
+  isReadOnly = false,
+  contentReadOnly = false,
 }) => {
   const moduleStyle = {
     width: `${moduleWidth}px`,
@@ -45,15 +49,19 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
 
   const moduleProps = {
     title: module.title,
-    onRemove,
-    onTitleChange,
+    onRemove: isReadOnly ? undefined : onRemove,
+    onTitleChange: isReadOnly ? undefined : onTitleChange,
     onMinimize: onToggleMinimize,
     isMinimized: module.minimized,
     isDragging,
     listId: module.listId,
-    moveTargets,
-    onMoveToPage,
-    onShare,
+    moveTargets: isReadOnly ? [] : moveTargets,
+    onMoveToPage: isReadOnly ? undefined : onMoveToPage,
+    onShare: isReadOnly ? undefined : onShare,
+    // isReadOnly on ModuleContainer controls the kebab menu visibility (structural)
+    // contentReadOnly is passed separately for module content editing
+    isReadOnly,
+    contentReadOnly,
   };
 
   const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;

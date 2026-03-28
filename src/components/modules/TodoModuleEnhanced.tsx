@@ -43,6 +43,8 @@ interface TodoModuleEnhancedProps {
   moveTargets?: MoveTarget[];
   onMoveToPage?: (pageId: string) => void;
   onShare?: () => void;
+  isReadOnly?: boolean;
+  contentReadOnly?: boolean;
 }
 
 const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
@@ -59,12 +61,14 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   moveTargets,
   onMoveToPage,
   onShare,
+  contentReadOnly = false,
 }) => {
   // Get real-time role + collaboration state.
   // Invitee → check sharedFromInstanceId; Owner → check their own moduleId.
   const isSharedModule = !!sharedFromInstanceId;
   const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
-  const isViewOnly = isSharedModule && liveRole === 'viewer';
+  // isViewOnly: module-level viewer OR page-level viewer (contentReadOnly)
+  const isViewOnly = contentReadOnly || (isSharedModule && liveRole === 'viewer');
   // Use listId-based querying when the module is collaborative (invitee OR owner with collaborators)
   const isCollaborativeModule = isSharedModule || isLiveShared;
   const [newItem, setNewItem] = useState("");

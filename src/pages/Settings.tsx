@@ -6,7 +6,7 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, Clock, FileUp, ChevronLeft, Crown, CreditCard, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, FolderPlus, Globe } from 'lucide-react';
+import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -453,25 +453,11 @@ const Settings = () => {
               onClick={() => navigate('/patterns')}
             />
             <GroupedListItem
-              icon={<FolderPlus className="h-4 w-4 text-green-500" />}
-              iconBg="bg-green-500/15"
-              label="Archive & Start Fresh"
-              sublabel="Save and clear your calendar"
-              onClick={() => navigate('/snapshots')}
-            />
-            <GroupedListItem
               icon={<BarChart3 className="h-4 w-4 text-teal-500" />}
               iconBg="bg-teal-500/15"
               label="Analytics"
               sublabel="View productivity insights"
               onClick={() => navigate('/analytics')}
-            />
-            <GroupedListItem
-              icon={<FolderPlus className="h-4 w-4 text-orange-500" />}
-              iconBg="bg-orange-500/15"
-              label="Calendar Archives"
-              sublabel="Access archived calendars"
-              onClick={() => navigate('/calendar-archives')}
             />
           </GroupedList>
         </div>

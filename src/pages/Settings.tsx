@@ -25,7 +25,19 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language';
+
+const PageWrapper = ({ children }: { children: React.ReactNode }) => (
+  <motion.div
+    initial={{ opacity: 0, x: 30 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: -30 }}
+    transition={springs.page}
+    className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
+  >
+    {children}
+  </motion.div>
+);
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
@@ -82,19 +94,6 @@ const Settings = () => {
     haptics.light();
     setActiveSection(section);
   };
-
-  // Page wrapper with transition
-  const PageWrapper = ({ children }: { children: React.ReactNode }) => (
-    <motion.div
-      initial={{ opacity: 0, x: 30 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -30 }}
-      transition={springs.page}
-      className="min-h-screen bg-background pb-24 overflow-y-auto overflow-x-hidden"
-    >
-      {children}
-    </motion.div>
-  );
 
   // iOS-style back button
   const BackButton = ({ title }: { title: string }) => (

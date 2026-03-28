@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAlarms, Alarm } from './use-alarms';
 import { useReminders, Reminder } from './use-reminders';
+import { useCountdownEvents } from './use-countdown-events';
 import { toast } from 'sonner';
 import { Timestamp } from 'firebase/firestore';
 import { isNative } from '@/lib/platform';
@@ -27,6 +28,7 @@ export const REMINDER_SOUNDS = [
 export function useNotificationManager() {
     const { alarms, updateAlarm } = useAlarms();
     const { reminders, toggleReminderActive } = useReminders();
+    const countdowns = useCountdownEvents();
     const triggeredAlarmsRef = useRef<Set<string>>(new Set());
     const triggeredRemindersRef = useRef<Set<string>>(new Set());
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -333,6 +335,7 @@ export function useNotificationManager() {
                     }
                 });
             }
+
         };
 
         // Check immediately on mount
@@ -348,6 +351,41 @@ export function useNotificationManager() {
             clearInterval(interval);
         };
     }, [alarms, reminders, shouldTriggerAlarm, shouldTriggerReminder, triggerAlarm, triggerReminder]);
+
+    // Countdown reminders — separate effect so countdown clock updates don't re-trigger the alarm loop
+    const countdownsRef = useRef(countdowns);
+    countdownsRef.current = countdowns;
+    useEffect(() => {
+        if (isNative) return;
+        const checkCountdowns = () => {
+            countdownsRef.current.forEach(({ event, days, hours }) => {
+                const intervalMinutes = event.countdownReminderIntervalDays
+                    ? event.countdownReminderIntervalDays * 24 * 60
+                    : 2 * 24 * 60;
+                const storageKey = `countdown_last_notified_${event.id}`;
+                const lastNotified = localStorage.getItem(storageKey);
+                const nowMs = Date.now();
+
+                if (!lastNotified) {
+                    localStorage.setItem(storageKey, String(nowMs));
+                    return;
+                }
+
+                const minutesSinceLast = (nowMs - Number(lastNotified)) / 60000;
+                if (minutesSinceLast >= intervalMinutes) {
+                    const timeLabel = days > 0 ? `${days} day${days !== 1 ? 's' : ''}` : `${hours} hour${hours !== 1 ? 's' : ''}`;
+                    toast.message(`${timeLabel} until ${event.title}`, {
+                        description: 'Countdown reminder',
+                        duration: 8000,
+                    });
+                    localStorage.setItem(storageKey, String(nowMs));
+                }
+            });
+        };
+
+        const interval = setInterval(checkCountdowns, 60000);
+        return () => clearInterval(interval);
+    }, []); // stable — reads countdowns via ref
 
     return null;
 }

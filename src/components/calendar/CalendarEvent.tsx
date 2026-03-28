@@ -1,5 +1,6 @@
 
 import React, { useCallback, useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useEventDrag } from "@/hooks/use-event-drag";
 import EventIndicators from "./event-components/EventIndicators";
@@ -99,18 +100,22 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   const bgClass = isHexColor ? 'bg-purple-500' : color; // Fallback for hex colors
 
   return (
-    <div
+    <motion.div
       ref={combinedRef}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: isDragging ? 0.7 : 1, scale: 1 }}
+      transition={{ type: "spring", damping: 24, stiffness: 300 }}
+      whileHover={!isDragging && !compact ? { scale: 1.012, transition: { type: "spring", damping: 22, stiffness: 450 } } : undefined}
+      whileTap={!isLocked && !compact ? { scale: 0.97, transition: { type: "spring", damping: 22, stiffness: 500 } } : undefined}
+      style={{ willChange: 'transform, opacity', minHeight: compact ? 'auto' : '100%', ...bgStyle }}
       className={cn(
         "calendar-event group relative rounded-sm sm:rounded overflow-hidden",
         bgClass,
         !isLocked && "cursor-move",
-        isDragging && "opacity-70",
         compact ? "h-auto" : "h-full",
         isSpotlit && "event-spotlight",
         isOverlapping && "event-collision-glow"
       )}
-      style={{ minHeight: compact ? 'auto' : '100%', ...bgStyle }}
       onClick={onClick}
       draggable={!isLocked}
       onDragStart={handleDragStart}
@@ -192,7 +197,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
           </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

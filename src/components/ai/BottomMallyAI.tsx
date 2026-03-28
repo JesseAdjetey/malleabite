@@ -827,6 +827,7 @@ CAPABILITIES — you can:
 - Add modules to specific pages, create/switch pages, and move modules between pages
 - Create goals with category and frequency
 - Search the web, check weather, stock prices, flight status
+- Enable or disable the countdown feature on any event using action enable_countdown. Params: eventId (string), enabled (boolean), reminderIntervalDays (number, optional — can be a fraction e.g. 0.5 for 12 hours, 0.0208 for 30 minutes). If user says "count down to X" or "set a countdown for X", find the event by title then call enable_countdown.
 
 RULES:
 - Be conversational, warm, and concise (1-3 sentences per response)
@@ -1900,13 +1901,13 @@ RULES:
         )}
       </AnimatePresence>
 
-      {/* Minimized floating icon — mobile: small glass box, desktop: centered pill */}
+      {/* Minimized floating icon — desktop only: centered pill (mobile hides icon, use Hey Mally or nav) */}
       <AnimatePresence>
-        {isMinimized && (
+        {isMinimized && !isMobile && (
           <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", damping: 24, stiffness: 340, delay: 0.12 } }}
+            exit={{ opacity: 0, y: 10, scale: 0.92, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
             drag={isMobile ? false : "x"}
             dragConstraints={isMobile ? undefined : {
               left: -(window.innerWidth / 2 - 60),
@@ -1976,9 +1977,9 @@ RULES:
         {!isMinimized && (
           <motion.div
             ref={containerRef}
-            initial={{ opacity: 0, y: 60 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 60 }}
+            initial={{ opacity: 0, y: 40, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", damping: 28, stiffness: 300 } }}
+            exit={{ opacity: 0, y: 50, scale: 0.97, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
             className={cn(
               "fixed z-50 flex flex-col",
               "left-0 right-0",
@@ -2015,7 +2016,7 @@ RULES:
 
             {/* Minimize button - top right, shifted closer */}
             <button
-              onClick={() => setIsMinimized(true)}
+              onClick={() => { setIsMinimized(true); setIsExpanded(false); }}
               className="absolute top-3 right-8 p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors z-10"
               title="Minimize"
             >

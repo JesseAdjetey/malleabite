@@ -1,6 +1,8 @@
 
 import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { wrapTransition } from '@/lib/animations';
 import { ToastProvider } from "@/hooks/toast-context";
 import { Toaster } from "@/components/ui/toaster";
 import ThemeProvider from '@/components/ThemeProvider';
@@ -19,6 +21,7 @@ import { useNotificationManager } from '@/hooks/use-notification-manager';
 import { isNative, isAndroid, isIOS } from '@/lib/platform';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
+import { CountdownPanel } from '@/components/countdown/CountdownPanel';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
 import { TranslationProvider } from '@/i18n/TranslationProvider';
@@ -60,27 +63,41 @@ const AppRoutes = () => {
   return (
     <ThemeProvider isAuthPage={isAuthPage}>
       <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-          <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-          <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-          <Route path="/quick-schedule" element={<ProtectedRoute><QuickSchedulePage /></ProtectedRoute>} />
-          <Route path="/patterns" element={<ProtectedRoute><PatternsPage /></ProtectedRoute>} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-<Route path="/analytics/advanced" element={<ProtectedRoute><AdvancedAnalytics /></ProtectedRoute>} />
-          <Route path="/book/:bookingPageId" element={<BookingPage />} />
-          <Route path="/meet/:sessionId" element={<MeetPage />} />
-          <Route path="/join/:token" element={<JoinPage />} />
-          <Route path="/legal/privacy" element={<PrivacyPolicy />} />
-          <Route path="/legal/terms" element={<TermsOfService />} />
-        </Routes>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={location.pathname}
+            {...wrapTransition}
+            style={{
+              width: '100%',
+              minHeight: '100%',
+              background: 'hsl(var(--background))',
+              willChange: 'opacity, filter',
+            }}
+          >
+            <Routes location={location}>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+              <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+              <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
+              <Route path="/quick-schedule" element={<ProtectedRoute><QuickSchedulePage /></ProtectedRoute>} />
+              <Route path="/patterns" element={<ProtectedRoute><PatternsPage /></ProtectedRoute>} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+              <Route path="/analytics/advanced" element={<ProtectedRoute><AdvancedAnalytics /></ProtectedRoute>} />
+              <Route path="/book/:bookingPageId" element={<BookingPage />} />
+              <Route path="/meet/:sessionId" element={<MeetPage />} />
+              <Route path="/join/:token" element={<JoinPage />} />
+              <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+              <Route path="/legal/terms" element={<TermsOfService />} />
+            </Routes>
+          </motion.div>
+        </AnimatePresence>
       </Suspense>
       {!isAuthPage && <PendingMeetHandler />}
       {!isAuthPage && <BottomMallyAI />}
+      {!isAuthPage && <CountdownPanel />}
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}

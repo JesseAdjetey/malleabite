@@ -9,7 +9,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -72,6 +72,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
   const [isLocked, setIsLocked] = useState(false);
   const [isTodo, setIsTodo] = useState(false);
+  const [countdownEnabled, setCountdownEnabled] = useState(false);
+  const [countdownReminderIntervalDays, setCountdownReminderIntervalDays] = useState(2);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [hasAlarm, setHasAlarm] = useState(false);
@@ -170,6 +172,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
       setIsLocked(eventData.isLocked || false);
       setIsTodo(eventData.isTodo || false);
+      setCountdownEnabled(eventData.countdownEnabled || false);
+      setCountdownReminderIntervalDays(eventData.countdownReminderIntervalDays ?? 2);
       setHasAlarm(eventData.hasAlarm || false);
       setHasReminder(eventData.hasReminder || false);
       setSelectedColor(eventData.color || EVENT_COLORS[0].value);
@@ -247,6 +251,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       description: fullDescription,
       isLocked,
       isTodo,
+      countdownEnabled,
+      countdownReminderIntervalDays: countdownEnabled ? countdownReminderIntervalDays : undefined,
       hasAlarm,
       hasReminder,
       date: formattedDate,
@@ -284,20 +290,20 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   };
 
   const handleCreateTodo = async () => {
-    if (!eventData && !selectedDate) {
-      toast.error("Please fill out the event details first");
+    if (!title.trim()) {
+      toast.error("Please enter an event title first");
       return;
     }
 
     try {
-      // Create a properly formed event object to pass to the handler
+      // Use existing saved event or build one from current form state
       const eventToCreate = eventData || {
         id: crypto.randomUUID(),
-        title: title,
-        description: `${startTime} - ${endTime} | ${description}`,
-        date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined,
+        title: title.trim(),
+        description: description,
+        date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
         startsAt: selectedDate ? new Date(selectedDate).toISOString() : new Date().toISOString(),
-        endsAt: selectedDate ? new Date(selectedDate).toISOString() : new Date().toISOString(),
+        endsAt: selectedDate ? new Date(new Date(selectedDate).getTime() + 3600000).toISOString() : new Date(Date.now() + 3600000).toISOString(),
         color: selectedColor || EVENT_COLORS[0].value,
       };
 
@@ -582,6 +588,44 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             checked={isLocked}
             onCheckedChange={setIsLocked}
           />
+        </div>
+
+        {/* Countdown Toggle */}
+        <div className="rounded-md border mb-4">
+          <div className="flex items-center justify-between space-x-2 p-3">
+            <div className="flex items-center space-x-2">
+              <Timer className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="countdownEnabled">Countdown</Label>
+            </div>
+            <Switch
+              id="countdownEnabled"
+              checked={countdownEnabled}
+              onCheckedChange={setCountdownEnabled}
+            />
+          </div>
+          {countdownEnabled && (
+            <div className="px-3 pb-3 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Remind every</span>
+              <Select
+                value={String(countdownReminderIntervalDays)}
+                onValueChange={(v) => setCountdownReminderIntervalDays(Number(v))}
+              >
+                <SelectTrigger className="w-32 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={String(30/1440)}>30 minutes</SelectItem>
+                  <SelectItem value={String(1/24)}>1 hour</SelectItem>
+                  <SelectItem value={String(3/24)}>3 hours</SelectItem>
+                  <SelectItem value={String(6/24)}>6 hours</SelectItem>
+                  <SelectItem value="1">1 day</SelectItem>
+                  <SelectItem value="2">2 days</SelectItem>
+                  <SelectItem value="3">3 days</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Conflict Warning - Show if there are any conflicts */}

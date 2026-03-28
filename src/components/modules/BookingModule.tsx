@@ -192,11 +192,11 @@ const GroupMeetItem: React.FC<{
           {/* Invite + Share — visible to all members of the session */}
           <div className="flex flex-wrap gap-1.5">
             {!showInvite && (
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setShowInvite(true); setShowSlotPicker(false); }}>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 text-foreground border-border" onClick={() => { setShowInvite(true); setShowSlotPicker(false); }}>
                 <Plus className="h-3 w-3" /> Invite
               </Button>
             )}
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={onShare}>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 text-foreground border-border" onClick={onShare}>
               <Share2 className="h-3 w-3" /> Share link
             </Button>
             {/* Pick time — organizer only */}

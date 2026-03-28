@@ -149,6 +149,10 @@ export type CalendarEventType = {
   isArchived?: boolean;
   folderName?: string;
   userId?: string;
+
+  // Countdown feature
+  countdownEnabled?: boolean;
+  countdownReminderIntervalDays?: number; // How often to send reminders (default: 2)
 };
 
 // Event attendee type

@@ -159,6 +159,10 @@ export function useCalendarEvents() {
       // Archiving support
       isArchived: isArchived,
       folderName: data.folderName || undefined,
+
+      // Countdown
+      countdownEnabled: data.countdownEnabled || false,
+      countdownReminderIntervalDays: data.countdownReminderIntervalDays ?? undefined,
     };
   };
 
@@ -387,6 +391,10 @@ export function useCalendarEvents() {
 
         // Archiving
         isArchived: false,
+
+        // Countdown
+        countdownEnabled: event.countdownEnabled || false,
+        countdownReminderIntervalDays: event.countdownReminderIntervalDays ?? null,
       };
 
       // OPTIMISTIC UPDATE: Add to local state immediately for instant UI feedback

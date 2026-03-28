@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useSidebarStore } from '@/lib/store';
 import ModuleRenderer from './ModuleRenderer';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
@@ -139,14 +140,16 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
         {modules.map((module, index) => (
           <ContextMenu key={module.id}>
             <ContextMenuTrigger asChild>
-              <div
+              <motion.div
                 draggable
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={() => handleDrop(index)}
                 onDragEnd={handleDragEnd}
-                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''}
-                  ${draggedIndex === index ? 'opacity-50' : 'opacity-100'}`}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: draggedIndex === index ? 0.5 : 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", damping: 22, stiffness: 200, delay: index * 0.05 }}
+                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''}`}
               >
                 <ModuleRenderer
                   module={module}
@@ -160,7 +163,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   onMoveToPage={(pageId) => onMoveModule(index, pageId)}
                   onShare={() => openShareSheet(module)}
                 />
-              </div>
+              </motion.div>
             </ContextMenuTrigger>
 
             <ContextMenuContent>

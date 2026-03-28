@@ -34,11 +34,16 @@ export function useCalendarFilterBridge() {
   useEffect(() => {
     if (groupsLoading) return;
 
-    const { accounts, addAccount, removeAccount, updateAccount } = filterStore.getState();
+    const { accounts, addAccount, removeAccount, updateAccount, setCalendarVisible } = filterStore.getState();
 
     // Build a set of current connected calendar IDs
     const connectedIds = new Set(calendars.map(c => c.id));
     const existingIds = new Set(accounts.map(a => a.id));
+
+    // Snapshot current preferences so newly added accounts get the right
+    // visibility immediately — without waiting for the visibility useEffect to run.
+    const visibleSet = new Set(visibleCalendars);
+    const hasPrefs = visibleCalendars.length > 0 || prevVisibleRef.current.length > 0;
 
     // Add new calendars that aren't in the filter store yet
     calendars.forEach((cal: ConnectedCalendar) => {
@@ -52,8 +57,14 @@ export function useCalendarFilterBridge() {
           isGoogle: cal.source === 'google',
         };
         addAccount(account);
+        // Apply saved preferences to this new account immediately if available.
+        // Without this, we'd have to wait for the visibility useEffect to re-run.
+        if (!prefsLoading && hasPrefs) {
+          setCalendarVisible(cal.id, visibleSet.has(cal.id));
+        }
       } else {
-        // Update existing account (name, color may have changed)
+        // Update existing account metadata (name, color) — never touch visibility here.
+        // Visibility is owned exclusively by the preferences useEffect below.
         updateAccount(cal.id, {
           name: cal.name,
           color: cal.color,
@@ -72,7 +83,7 @@ export function useCalendarFilterBridge() {
     });
 
     prevCalendarIdsRef.current = Array.from(connectedIds);
-  }, [calendars, groupsLoading, filterStore]);
+  }, [calendars, groupsLoading, visibleCalendars, prefsLoading, filterStore]);
 
   // ─── Sync templates → filter store accounts ───────────────────────────
 
@@ -115,6 +126,13 @@ export function useCalendarFilterBridge() {
   }, [templates, templatesLoading, filterStore]);
 
   // ─── Sync visibility preferences → filter store hidden set ────────────
+  // IMPORTANT: Do NOT add `calendars` to this dependency array.
+  // `toggleCalendar()` updates ConnectedCalendar.isActive in Firestore, which
+  // causes `calendars` to update before the preferences Firestore save completes
+  // (the prefs save has a 300ms debounce). If `calendars` were a dep here, this
+  // effect would re-run with stale preferences and revert the optimistic toggle,
+  // causing the visible flicker (off → on → off) the user sees.
+  // Newly added calendars are handled in the accounts useEffect above.
 
   useEffect(() => {
     if (prefsLoading || groupsLoading) return;
@@ -123,9 +141,9 @@ export function useCalendarFilterBridge() {
     const visibleSet = new Set(visibleCalendars);
     const hadVisibilityPrefsBefore = prevVisibleRef.current.length > 0;
 
-    // Keep legacy behavior on first load (empty => all visible), but if the user
-    // had visibility prefs in this session and now visibleCalendars is empty,
-    // treat that as an explicit "hide all" preference.
+    // Keep legacy behavior on first load (empty prefs + no history => show all).
+    // Once the user has toggled anything in this session, an empty list means
+    // "hide all" — not "no preferences set".
     const hasPreferences = visibleCalendars.length > 0 || hadVisibilityPrefsBefore;
 
     accounts.forEach(account => {
@@ -138,5 +156,6 @@ export function useCalendarFilterBridge() {
     });
 
     prevVisibleRef.current = visibleCalendars;
-  }, [visibleCalendars, calendars, prefsLoading, groupsLoading, filterStore]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleCalendars, prefsLoading, groupsLoading, filterStore]);
 }

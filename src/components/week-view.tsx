@@ -37,6 +37,8 @@ import { WeekAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySe
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { logCalendarPerf } from "@/lib/perf/calendar-perf";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
@@ -84,6 +86,10 @@ const WeekView = () => {
   // Week range ribbon
   const { rangeStart, rangeEnd } = useWeekRangeStore();
   const isMobile = useIsMobile();
+
+  // Navigation direction for slide animations
+  const weekKey = userSelectedDate.startOf('week').format('YYYY-MM-DD');
+  const directionRef = useNavigationDirection(weekKey);
 
   // Track transitions — uses window.innerWidth for initial value to avoid the
   // !!undefined → false false-start from useIsMobile on first render.
@@ -778,7 +784,14 @@ const WeekView = () => {
         <WeekHeader userSelectedDate={userSelectedDate} />
       </div>
 
-      {/* All-Day Events Row */}
+      {/* All-Day Events Row — slides with the week */}
+      <AnimatePresence mode="popLayout" initial={false}>
+      <motion.div
+        key={`allday-${weekKey}`}
+        initial={{ opacity: 0, x: directionRef.current * 40 }}
+        animate={{ opacity: 1, x: 0, transition: { type: "spring", damping: 28, stiffness: 280 } }}
+        exit={{ opacity: 0, x: directionRef.current * -40, transition: { duration: 0.12 } }}
+      >
       <WeekAllDayRow
         weekDays={visibleWeekDays}
         allDayEvents={allDisplayAllDay}
@@ -807,26 +820,33 @@ const WeekView = () => {
         onAddTodo={handleAddTodoFromEvent}
         onLockToggle={toggleEventLock}
       />
+      </motion.div>
+      </AnimatePresence>
 
       <div className="mx-2 mb-2 rounded-2xl overflow-hidden">
         <ScrollArea className="h-[calc(100vh-170px)]">
           {/* Sticky day column labels — matches the grid below for clear mapping */}
           <div
-            className="sticky top-0 z-10 bg-gradient-to-b from-background via-background to-background/80 backdrop-blur-sm px-4 pt-1.5 pb-1 border-b border-purple-100/50 dark:border-white/5"
+            className="sticky top-0 z-10 bg-gradient-to-b from-background via-background to-background/80 backdrop-blur-sm px-4 pt-1.5 pb-1 border-b border-purple-100/50 dark:border-white/5 overflow-hidden"
             style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}
           >
             <div className="w-16" />
-            {visibleWeekDays.map(({ currentDate, today }, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "text-center text-[11px] font-medium",
-                  today ? "text-primary" : "text-muted-foreground/70"
-                )}
-              >
-                {currentDate.format("ddd D")}
-              </div>
-            ))}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {visibleWeekDays.map(({ currentDate, today }, i) => (
+                <motion.div
+                  key={`label-${weekKey}-${i}`}
+                  initial={{ opacity: 0, x: directionRef.current * 30 }}
+                  animate={{ opacity: 1, x: 0, transition: { type: "spring", damping: 28, stiffness: 300, delay: i * 0.022 } }}
+                  exit={{ opacity: 0, x: directionRef.current * -30, transition: { duration: 0.1 } }}
+                  className={cn(
+                    "text-center text-[11px] font-medium",
+                    today ? "text-primary" : "text-muted-foreground/70"
+                  )}
+                >
+                  {currentDate.format("ddd D")}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
           <div className="px-4 py-2" style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}>
@@ -836,7 +856,7 @@ const WeekView = () => {
 
               return (
                 <DayColumn
-                  key={index}
+                  key={`${weekKey}-${index}`}
                   currentDate={currentDate}
                   dayEvents={dayEvents}
                   currentTime={currentTime}

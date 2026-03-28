@@ -7,6 +7,8 @@ import { useViewStore, useDateStore } from "@/lib/store";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { haptics } from "@/lib/haptics";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +57,8 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
 
   const allWeekDays = getWeekDays(userSelectedDate);
   const dayCount = rangeEnd - rangeStart + 1;
+  const weekKey = userSelectedDate.startOf('week').format('YYYY-MM-DD');
+  const directionRef = useNavigationDirection(weekKey);
 
   // Refs for measuring day cell positions
   const dayCellRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -173,27 +177,35 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
         </button>
 
         {/* Visible 3 day cells */}
-        <div className="flex-1 flex justify-around">
-          {mobileDays.map(({ currentDate, today }, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div
-                className={cn(
-                  "h-7 w-7 rounded-full flex items-center justify-center font-semibold text-base",
-                  today ? "bg-primary text-white" : "text-purple-900/80 dark:text-muted-foreground"
-                )}
+        <div className="flex-1 flex justify-around overflow-hidden">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {mobileDays.map(({ currentDate, today }, i) => (
+              <motion.div
+                key={`${weekKey}-${i}`}
+                initial={{ opacity: 0, x: directionRef.current * 32 }}
+                animate={{ opacity: 1, x: 0, transition: { type: "spring", damping: 28, stiffness: 320, delay: i * 0.025 } }}
+                exit={{ opacity: 0, x: directionRef.current * -32, transition: { duration: 0.12 } }}
+                className="flex flex-col items-center"
               >
-                {currentDate.format("DD")}
-              </div>
-              <div
-                className={cn(
-                  "text-[9px]",
-                  today ? "text-primary font-medium" : "text-purple-900/60 dark:text-muted-foreground"
-                )}
-              >
-                {currentDate.format("ddd")}
-              </div>
-            </div>
-          ))}
+                <div
+                  className={cn(
+                    "h-7 w-7 rounded-full flex items-center justify-center font-semibold text-base",
+                    today ? "bg-primary text-white" : "text-purple-900/80 dark:text-muted-foreground"
+                  )}
+                >
+                  {currentDate.format("DD")}
+                </div>
+                <div
+                  className={cn(
+                    "text-[9px]",
+                    today ? "text-primary font-medium" : "text-purple-900/60 dark:text-muted-foreground"
+                  )}
+                >
+                  {currentDate.format("ddd")}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
 
         {/* Right arrow — rolls across weeks */}
@@ -274,13 +286,12 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
         const isRangeEnd = index === rangeEnd;
 
         return (
-          <div
-            key={index}
+          <motion.div
+            key={`${weekKey}-${index}`}
             ref={(el) => { dayCellRefs.current[index] = el; }}
-            className={cn(
-              "relative flex flex-col items-center py-1 px-2 transition-all duration-200",
-              !inRange && "opacity-35"
-            )}
+            initial={{ opacity: 0, x: directionRef.current * 28 }}
+            animate={{ opacity: inRange ? 1 : 0.35, x: 0, transition: { type: "spring", damping: 28, stiffness: 320, delay: index * 0.022 } }}
+            className="relative flex flex-col items-center py-1 px-2"
             style={{ gridColumn: index + 2, gridRow: 1, zIndex: 1 }}
           >
             {/* Left drag handle */}
@@ -327,7 +338,7 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
                 onDoubleClick={resetRange}
               />
             )}
-          </div>
+          </motion.div>
         );
       })}
     </div>

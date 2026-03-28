@@ -385,6 +385,8 @@ export function useMallyActions() {
             isRecurring: data.isRecurring || false,
             recurrenceRule: data.recurrenceRule,
             calendarId: targetCal.id,
+            countdownEnabled: data.countdownEnabled || false,
+            countdownReminderIntervalDays: data.countdownReminderIntervalDays ?? undefined,
           };
 
           const formattedEvent = formatAIEvent(rawEventData);
@@ -441,6 +443,23 @@ export function useMallyActions() {
           if (!data.eventId) { toast.error('No event ID provided'); return false; }
           const result = await removeEvent(data.eventId);
           if (result?.success) { toast.success('Event deleted'); return true; }
+          return false;
+        }
+
+        case 'enable_countdown': {
+          if (!data.eventId) { toast.error('No event ID provided for countdown'); return false; }
+          const existing = events.find(e => e.id === data.eventId);
+          if (!existing) { toast.error('Event not found'); return false; }
+          const updated = {
+            ...existing,
+            countdownEnabled: data.enabled !== false,
+            countdownReminderIntervalDays: data.reminderIntervalDays ?? existing.countdownReminderIntervalDays ?? 2,
+          };
+          const result = await updateEvent(updated);
+          if (result?.success) {
+            toast.success(data.enabled !== false ? `Countdown enabled for "${existing.title}"` : `Countdown disabled for "${existing.title}"`);
+            return true;
+          }
           return false;
         }
 

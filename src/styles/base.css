@@ -35,11 +35,16 @@
 
 /* Body safe-area is handled per-component (MobileNavigation, Mainview, etc.)
    to avoid double-padding. Only left/right are applied globally. */
-body {
+body,
+#root {
   padding-top: 0;
   padding-bottom: 0;
   padding-left: var(--safe-area-inset-left);
   padding-right: var(--safe-area-inset-right);
+  /* Always match the app theme background — prevents raw body colour
+     from showing through during page transitions */
+  background-color: hsl(var(--background));
+  min-height: 100dvh;
 }
 
 /* Light Mode (default) */
@@ -224,18 +229,23 @@ body {
   }
 }
 
-/* Global dark scrollbar styling for desktop - must be outside @layer to override properly */
+/* Scrollbar styling — blends with app theme, desktop only */
 @media (min-width: 769px) {
-* {
-  scrollbar-width: thin !important;
-  scrollbar-color: #4B5563 transparent !important;
-}
+  * {
+    scrollbar-width: thin !important;
+    /* light: soft purple-tinted thumb; dark: subtle white thumb */
+    scrollbar-color: rgba(139, 92, 246, 0.18) transparent !important;
+  }
+
+  html.dark * {
+    scrollbar-color: rgba(255, 255, 255, 0.10) transparent !important;
+  }
 }
 
 @media (min-width: 769px) {
   *::-webkit-scrollbar {
-    width: 8px !important;
-    height: 8px !important;
+    width: 5px !important;
+    height: 5px !important;
   }
 
   *::-webkit-scrollbar-track {
@@ -243,19 +253,20 @@ body {
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #4B5563 !important;
-    border-radius: 4px !important;
+    background-color: rgba(139, 92, 246, 0.18) !important;
+    border-radius: 99px !important;
+    transition: background-color 0.2s ease !important;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #6B7280 !important;
+    background-color: rgba(139, 92, 246, 0.38) !important;
   }
 
   html.dark *::-webkit-scrollbar-thumb {
-    background-color: #374151 !important;
+    background-color: rgba(255, 255, 255, 0.10) !important;
   }
 
   html.dark *::-webkit-scrollbar-thumb:hover {
-    background-color: #4B5563 !important;
+    background-color: rgba(255, 255, 255, 0.22) !important;
   }
 }

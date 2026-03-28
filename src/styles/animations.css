@@ -1,5 +1,19 @@
 
-/* Gradient shift — used for auth page and event form backgrounds */
+/* ── GPU compositing hints ───────────────────────────────────────── */
+.will-change-transform {
+  will-change: transform, opacity;
+}
+
+/* ── Respect reduced-motion preference ──────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Gradient shift — used for auth page and event form backgrounds */
 @keyframes gradient-shift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

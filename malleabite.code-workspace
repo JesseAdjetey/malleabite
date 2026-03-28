@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"name": "malleabite",
+			"path": "."
+		}
+	],
+	"settings": {
+		"postman.settings.dotenv-detection-notification-visibility": false,
+		"css.lint.unknownAtRules": "ignore",
+		"files.exclude": {
+			"**/docs": true
+		}
+	}
+}

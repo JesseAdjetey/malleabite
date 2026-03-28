@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
 import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, MoreHorizontal, Settings, Undo2, Redo2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -149,20 +150,27 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
 
         {/* Today Button */}
-        <button
+        <motion.button
           onClick={handleTodayClick}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", damping: 20, stiffness: 400 }}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-medium flex-shrink-0"
         >
           <span className="text-gray-700 dark:text-gray-300">Today</span>
           <span className="text-muted-foreground/30">|</span>
           <span className="font-semibold text-gray-900 dark:text-gray-100">{dayjs().format('D')}</span>
-        </button>
+        </motion.button>
 
         {/* Date Navigator Box */}
         <div className="flex items-center bg-black/5 dark:bg-white/10 rounded-full px-1.5 py-0.5 flex-shrink-0 min-h-[36px]">
-          <button onClick={handlePrevClick} className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground">
+          <motion.button
+            onClick={handlePrevClick}
+            whileTap={{ scale: 0.82, x: -2 }}
+            transition={{ type: "spring", damping: 20, stiffness: 500 }}
+            className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground"
+          >
             <ChevronLeft size={16} />
-          </button>
+          </motion.button>
 
           <div className="px-2 text-xs font-semibold text-center leading-tight min-w-[70px] text-black dark:text-gray-100">
             {selectedView === 'Week' ? (
@@ -180,9 +188,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             )}
           </div>
 
-          <button onClick={handleNextClick} className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground">
+          <motion.button
+            onClick={handleNextClick}
+            whileTap={{ scale: 0.82, x: 2 }}
+            transition={{ type: "spring", damping: 20, stiffness: 500 }}
+            className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors text-muted-foreground"
+          >
             <ChevronRight size={16} />
-          </button>
+          </motion.button>
         </div>
 
         {/* Calendar Account Dropdown */}
@@ -206,15 +219,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             {/* Desktop: inline tools */}
             {!isMobile && <UndoRedoToolbar />}
             {!isMobile && (
-              <Button
-                variant="ghost"
-                size="sm"
+              <motion.button
                 onClick={cycleTheme}
-                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10"
+                whileTap={{ scale: 0.85, rotate: 15 }}
+                whileHover={{ scale: 1.1 }}
+                transition={{ type: "spring", damping: 18, stiffness: 380 }}
+                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
                 title={`Theme: ${themeLabel}`}
               >
                 <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-              </Button>
+              </motion.button>
             )}
             <NotificationBell />
             {!isMobile && <SettingsNav />}
@@ -248,10 +262,16 @@ const MobileOverflowMenu: React.FC<{
         <MoreHorizontal className="h-4 w-4 text-gray-600 dark:text-gray-300" />
       </Button>
 
+      {open && <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />}
+      <AnimatePresence>
       {open && (
-        <>
-          <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-[71] min-w-[180px] bg-popover/95 backdrop-blur-xl border border-border rounded-xl shadow-xl overflow-hidden">
+          <motion.div
+            key="overflow-menu"
+            initial={{ opacity: 0, scale: 0.9, y: -10, transformOrigin: "top right" }}
+            animate={{ opacity: 1, scale: 1, y: 0, transition: { type: "spring", damping: 24, stiffness: 340 } }}
+            exit={{ opacity: 0, scale: 0.92, y: -8, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+            style={{ transformOrigin: "top right" }}
+            className="absolute right-0 top-full mt-1 z-[71] min-w-[180px] bg-popover/95 backdrop-blur-xl border border-border rounded-xl shadow-xl overflow-hidden">
             <button
               onClick={() => { cycleTheme(); setOpen(false); }}
               className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
@@ -280,9 +300,9 @@ const MobileOverflowMenu: React.FC<{
               <MoreHorizontal className="h-4 w-4" />
               Quick Schedule
             </button>
-          </div>
-        </>
+          </motion.div>
       )}
+      </AnimatePresence>
     </>
   );
 };

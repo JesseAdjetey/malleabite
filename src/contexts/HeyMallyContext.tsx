@@ -179,16 +179,6 @@ export function HeyMallyProvider({ children }: HeyMallyProviderProps) {
     <HeyMallyContext.Provider value={value}>
       {children}
       
-      {/* Listening indicator - subtle dot when wake word detection is active */}
-      {isListening && isWakeWordEnabled && (
-        <div className="fixed bottom-20 left-4 z-50 flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100/80 dark:bg-primary/20 backdrop-blur-sm rounded-full border border-purple-200/60 dark:border-primary/30">
-          <div className="relative">
-            <Mic className="h-3 w-3 text-purple-600 dark:text-primary" />
-            <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 bg-green-500 rounded-full" />
-          </div>
-          <span className="text-[10px] text-purple-600 dark:text-primary font-medium">Hey Mally</span>
-        </div>
-      )}
     </HeyMallyContext.Provider>
   );
 }

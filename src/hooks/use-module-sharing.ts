@@ -58,6 +58,7 @@ export interface ModuleInvite {
   shareMode?: 'collaborative' | 'duplicate'; // collaborative = live shared list, duplicate = independent copy
   status: 'pending' | 'accepted' | 'declined';
   listId?: string;
+  todoSnapshot?: Array<{ text: string; completed: boolean }>; // for duplicate mode
   createdAt: Timestamp;
   expiresAt: Timestamp;
 }
@@ -168,6 +169,22 @@ export async function inviteToModule({
     // Can't look up user — invite still created, in-app notification skipped
   }
 
+  // For duplicate mode, snapshot the current todo items so the recipient gets a copy
+  let todoSnapshot: Array<{ text: string; completed: boolean }> | undefined;
+  if (shareMode === 'duplicate' && listId) {
+    try {
+      const itemsSnap = await getDocs(
+        query(collection(db, 'todo_items'), where('listId', '==', listId))
+      );
+      todoSnapshot = itemsSnap.docs.map(d => ({
+        text: d.data().text as string,
+        completed: d.data().completed as boolean,
+      }));
+    } catch {
+      // Can't read items (shouldn't happen for sender) — proceed without snapshot
+    }
+  }
+
   // Create invite document
   console.log('[inviteToModule] creating invite doc...');
   const inviteRef = await addDoc(collection(db, COLLECTIONS.MODULE_INVITES), {
@@ -183,6 +200,7 @@ export async function inviteToModule({
     shareMode,
     status: 'pending',
     listId: listId ?? null,
+    ...(todoSnapshot ? { todoSnapshot } : {}),
     createdAt: serverTimestamp(),
     expiresAt: Timestamp.fromDate(expiresAt),
   });

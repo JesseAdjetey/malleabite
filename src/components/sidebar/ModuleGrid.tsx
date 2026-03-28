@@ -31,6 +31,8 @@ interface ModuleGridProps {
   onMoveModule: (index: number, targetPageId: string) => void;
   moveTargets: ModuleMoveTarget[];
   pageIndex: number;
+  isReadOnly?: boolean;
+  contentReadOnly?: boolean;
 }
 
 const ModuleGrid: React.FC<ModuleGridProps> = ({
@@ -40,7 +42,9 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   onReorderModules,
   onMoveModule,
   moveTargets,
-  pageIndex
+  pageIndex,
+  isReadOnly = false,
+  contentReadOnly = false,
 }) => {
   const MODULE_WIDTH = 280;
   const { isTwoColumn, containerRef } = useSidebarLayout({
@@ -141,10 +145,10 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
           <ContextMenu key={module.id}>
             <ContextMenuTrigger asChild>
               <motion.div
-                draggable
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDrop={() => handleDrop(index)}
+                draggable={!isReadOnly}
+                onDragStart={() => !isReadOnly && handleDragStart(index)}
+                onDragOver={(e) => !isReadOnly && handleDragOver(e, index)}
+                onDrop={() => !isReadOnly && handleDrop(index)}
                 onDragEnd={handleDragEnd}
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: draggedIndex === index ? 0.5 : 1, y: 0, scale: 1 }}
@@ -162,51 +166,53 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   moveTargets={moveTargets}
                   onMoveToPage={(pageId) => onMoveModule(index, pageId)}
                   onShare={() => openShareSheet(module)}
+                  isReadOnly={isReadOnly}
+                  contentReadOnly={contentReadOnly}
                 />
               </motion.div>
             </ContextMenuTrigger>
 
-            <ContextMenuContent>
-              <ContextMenuLabel>{module.title}</ContextMenuLabel>
-              <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => {
-                // Rename: ModuleContainer handles inline edit via its own state;
-                // we can't trigger it directly from here, so we use a custom event
-                const el = document.querySelector(`[data-module-id="${module.id}"] .module-rename-trigger`) as HTMLElement;
-                el?.click();
-              }}>
-                Rename
-              </ContextMenuItem>
-              <ContextMenuItem onSelect={() => handleToggleMinimize(index)}>
-                {module.minimized ? 'Expand' : 'Minimize'}
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-              {moveTargets.length > 0 && (
-                <ContextMenuSub>
-                  <ContextMenuSubTrigger>Transfer to page</ContextMenuSubTrigger>
-                  <ContextMenuSubContent>
-                    {moveTargets.map((target) => (
-                      <ContextMenuItem
-                        key={target.id}
-                        onSelect={() => onMoveModule(index, target.id)}
-                      >
-                        {target.title}
-                      </ContextMenuItem>
-                    ))}
-                  </ContextMenuSubContent>
-                </ContextMenuSub>
-              )}
-              <ContextMenuItem onSelect={() => openShareSheet(module)}>
-                Share / Manage Access
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                onSelect={() => onRemoveModule(index)}
-                className="text-destructive focus:text-destructive"
-              >
-                Delete
-              </ContextMenuItem>
-            </ContextMenuContent>
+            {!isReadOnly && (
+              <ContextMenuContent>
+                <ContextMenuLabel>{module.title}</ContextMenuLabel>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => {
+                  const el = document.querySelector(`[data-module-id="${module.id}"] .module-rename-trigger`) as HTMLElement;
+                  el?.click();
+                }}>
+                  Rename
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => handleToggleMinimize(index)}>
+                  {module.minimized ? 'Expand' : 'Minimize'}
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                {moveTargets.length > 0 && (
+                  <ContextMenuSub>
+                    <ContextMenuSubTrigger>Transfer to page</ContextMenuSubTrigger>
+                    <ContextMenuSubContent>
+                      {moveTargets.map((target) => (
+                        <ContextMenuItem
+                          key={target.id}
+                          onSelect={() => onMoveModule(index, target.id)}
+                        >
+                          {target.title}
+                        </ContextMenuItem>
+                      ))}
+                    </ContextMenuSubContent>
+                  </ContextMenuSub>
+                )}
+                <ContextMenuItem onSelect={() => openShareSheet(module)}>
+                  Share / Manage Access
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  onSelect={() => onRemoveModule(index)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            )}
           </ContextMenu>
         ))}
       </div>

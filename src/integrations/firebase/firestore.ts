@@ -47,6 +47,8 @@ export const COLLECTIONS = {
   TODO_LISTS: 'todo_lists',
   TODO_ITEMS: 'todo_items',
   SHARE_TOKENS: 'share_tokens',
+  PAGE_SHARES: 'page_shares',
+  PAGE_INVITES: 'page_invites',
 } as const;
 
 // Base interfaces for Firestore documents

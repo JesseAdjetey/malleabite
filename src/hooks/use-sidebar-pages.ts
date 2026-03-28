@@ -248,26 +248,32 @@ export function useSidebarPages() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, ensureDefaultPage, getActivePageStorageKey, setActivePageIdSilent]);
 
-  // Create a new page
-  const createPage = async (title: string, icon?: string): Promise<{ success: boolean; pageId?: string }> => {
+  // Create a new page (optionally with extra fields for shared/duplicate pages)
+  const createPage = async (
+    title: string,
+    icon?: string,
+    extraFields?: Partial<Pick<SidebarPage, 'sharedFromPageId' | 'sharedRole' | 'sharedOwnerName' | 'modules'>>
+  ): Promise<{ success: boolean; pageId?: string }> => {
     if (!user?.uid || !title.trim()) {
       toast.error(!user ? 'User not authenticated' : 'Page title cannot be empty');
       return { success: false };
     }
 
     try {
-      const newPage = {
+      const newPage: Record<string, unknown> = {
         title: title.trim(),
         icon: icon || 'folder',
         userId: user.uid,
         isDefault: false,
-        modules: [],
+        modules: extraFields?.modules ?? [],
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
       };
+      if (extraFields?.sharedFromPageId) newPage.sharedFromPageId = extraFields.sharedFromPageId;
+      if (extraFields?.sharedRole) newPage.sharedRole = extraFields.sharedRole;
+      if (extraFields?.sharedOwnerName) newPage.sharedOwnerName = extraFields.sharedOwnerName;
 
       const docRef = await addDoc(collection(db, 'sidebar_pages'), newPage);
-      toast.success(`Page "${title}" created`);
       return { success: true, pageId: docRef.id };
     } catch (err) {
       console.error('Error creating sidebar page:', err);
@@ -581,4 +587,41 @@ export function useSidebarPages() {
     toggleModuleMinimizedById,
     moveModuleById,
   };
+}
+
+// ── useSharedPageModules ──────────────────────────────────────────────────────
+// Listens to another user's sidebar_pages doc and returns its modules.
+// Used when the active page has sharedFromPageId set (viewer/editor mode).
+export function useSharedPageModules(sharedFromPageId: string | undefined) {
+  const [modules, setModules] = useState<ModuleInstance[]>([]);
+
+  useEffect(() => {
+    if (!sharedFromPageId) {
+      setModules([]);
+      return;
+    }
+
+    let unsub: (() => void) | undefined;
+    const tid = setTimeout(() => {
+      unsub = onSnapshot(
+        doc(db, 'sidebar_pages', sharedFromPageId),
+        (snap) => {
+          if (snap.exists()) {
+            const rawModules: unknown[] = snap.data().modules ?? [];
+            setModules(rawModules.map(ensureModuleId));
+          } else {
+            setModules([]);
+          }
+        },
+        () => setModules([])
+      );
+    }, 0);
+
+    return () => {
+      clearTimeout(tid);
+      unsub?.();
+    };
+  }, [sharedFromPageId]);
+
+  return { modules };
 }

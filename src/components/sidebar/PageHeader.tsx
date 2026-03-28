@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Edit2, Check, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Edit2, Check, Trash2, Users } from 'lucide-react';
 
 interface PageHeaderProps {
   title: string;
@@ -10,6 +10,9 @@ interface PageHeaderProps {
   canGoToPrevPage: boolean;
   canGoToNextPage: boolean;
   canDeletePage?: boolean;
+  onShare?: () => void;
+  isSharedPage?: boolean;
+  sharedOwnerName?: string;
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
@@ -20,7 +23,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   onDeletePage,
   canGoToPrevPage,
   canGoToNextPage,
-  canDeletePage = true
+  canDeletePage = true,
+  onShare,
+  isSharedPage = false,
+  sharedOwnerName,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
@@ -66,7 +72,14 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               <ChevronLeft size={18} />
             </button>
 
-            <h1 className="text-xl font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
+            <div className="flex flex-col items-center">
+              <h1 className="text-xl font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
+              {isSharedPage && sharedOwnerName && (
+                <span className="text-xs text-muted-foreground leading-none">
+                  by {sharedOwnerName}
+                </span>
+              )}
+            </div>
 
             <button
               onClick={onNextPage}
@@ -76,23 +89,35 @@ const PageHeader: React.FC<PageHeaderProps> = ({
               <ChevronRight size={18} />
             </button>
 
-            <button
-              onClick={handleEditTitle}
-              className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 opacity-40 hover:opacity-100 transition-opacity"
-            >
-              <Edit2 size={14} />
-            </button>
+            {!isSharedPage && (
+              <button
+                onClick={handleEditTitle}
+                className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 opacity-40 hover:opacity-100 transition-opacity"
+              >
+                <Edit2 size={14} />
+              </button>
+            )}
             {canDeletePage && onDeletePage && (
               <button
                 onClick={() => {
-                  if (confirm('Are you sure you want to delete this page?')) {
-                    onDeletePage();
-                  }
+                  const msg = isSharedPage
+                    ? 'Remove this shared page from your sidebar?'
+                    : 'Are you sure you want to delete this page?';
+                  if (confirm(msg)) onDeletePage();
                 }}
                 className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-red-500/20 hover:text-red-500 opacity-40 hover:opacity-100 transition-opacity"
-                title="Delete page"
+                title={isSharedPage ? 'Remove from sidebar' : 'Delete page'}
               >
                 <Trash2 size={14} />
+              </button>
+            )}
+            {!isSharedPage && onShare && (
+              <button
+                onClick={onShare}
+                className="p-1 ml-1 rounded-full text-gray-600 dark:text-white hover:bg-purple-500/20 opacity-40 hover:opacity-100 transition-opacity"
+                title="Share page"
+              >
+                <Users size={14} />
               </button>
             )}
           </div>

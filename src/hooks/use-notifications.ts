@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext.firebase';
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'module_invite' | 'module_invite_accepted' | 'module_access_revoked';
+  type: 'module_invite' | 'module_invite_accepted' | 'module_access_revoked' | 'page_invite' | 'page_invite_accepted';
   data: Record<string, any>;
   read: boolean;
   createdAt: Timestamp;

@@ -76,6 +76,10 @@ export interface SidebarPage {
   updatedAt: string;
   userId: string;
   isDefault?: boolean;
+  // Page sharing fields
+  sharedFromPageId?: string;   // points to owner's sidebar_pages/{id}
+  sharedRole?: 'viewer' | 'editor';
+  sharedOwnerName?: string;
 }
 
 export type CalendarEventType = {

@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -39,6 +40,7 @@ interface ModuleContainerProps {
   moveTargets?: MoveTarget[];
   onMoveToPage?: (pageId: string) => void;
   onShare?: () => void;
+  isReadOnly?: boolean;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -51,6 +53,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   moveTargets = [],
   onMoveToPage,
   onShare,
+  isReadOnly = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
@@ -100,7 +103,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           <h3 className="text-lg font-semibold text-primary flex-1 min-w-0 truncate">{title}</h3>
         )}
 
-        {!isEditing && (
+        {!isEditing && !isReadOnly && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -127,16 +130,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                   <DropdownMenuSubTrigger>
                     <span>Transfer to page</span>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {moveTargets.map((target) => (
-                      <DropdownMenuItem
-                        key={target.id}
-                        onSelect={() => onMoveToPage(target.id)}
-                      >
-                        {target.title}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                      {moveTargets.map((target) => (
+                        <DropdownMenuItem
+                          key={target.id}
+                          onSelect={() => onMoveToPage(target.id)}
+                        >
+                          {target.title}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
                 </DropdownMenuSub>
               )}
               {onShare && (

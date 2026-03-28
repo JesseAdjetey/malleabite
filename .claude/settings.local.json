@@ -5,7 +5,8 @@
       "Bash(ls /Users/jesseadjetey/Documents/GitHub/malleabite/*.json /Users/jesseadjetey/Documents/GitHub/malleabite/*.rules)",
       "Bash(ls /Users/jesseadjetey/Documents/GitHub/malleabite/firebase*)",
       "Bash(firebase deploy --only firestore:rules)",
-      "Bash(firebase deploy --only firestore:indexes)"
+      "Bash(firebase deploy --only firestore:indexes)",
+      "Bash(firebase deploy --only firestore:rules,firestore:indexes)"
     ]
   }
 }

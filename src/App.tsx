@@ -39,6 +39,7 @@ const Billing = lazy(() => import('@/pages/Billing'));
 const BookingPage = lazy(() => import('@/pages/BookingPage'));
 const MeetPage = lazy(() => import('@/pages/MeetPage'));
 const AdvancedAnalytics = lazy(() => import('@/pages/AdvancedAnalytics'));
+const JoinPage = lazy(() => import('@/pages/JoinPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -73,6 +74,7 @@ const AppRoutes = () => {
 <Route path="/analytics/advanced" element={<ProtectedRoute><AdvancedAnalytics /></ProtectedRoute>} />
           <Route path="/book/:bookingPageId" element={<BookingPage />} />
           <Route path="/meet/:sessionId" element={<MeetPage />} />
+          <Route path="/join/:token" element={<JoinPage />} />
           <Route path="/legal/privacy" element={<PrivacyPolicy />} />
           <Route path="/legal/terms" element={<TermsOfService />} />
         </Routes>

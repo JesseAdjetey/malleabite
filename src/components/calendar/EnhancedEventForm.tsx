@@ -201,13 +201,11 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     }
   }, [isTemplateMode, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-select the first active calendar whenever none are selected
+  // Auto-select the first active calendar whenever none are selected; default to Personal
   useEffect(() => {
-    if (connectedCalendars.length > 0 && selectedCalendarIds.length === 0) {
+    if (selectedCalendarIds.length === 0) {
       const firstActive = connectedCalendars.find(c => c.isActive && c.id);
-      if (firstActive) {
-        setSelectedCalendarIds([firstActive.id]);
-      }
+      setSelectedCalendarIds([firstActive?.id || PERSONAL_CALENDAR_ID]);
     }
   }, [connectedCalendars, selectedCalendarIds.length]);
 
@@ -473,15 +471,18 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           </>
         )}
 
-        {/* Calendar Selection — multi-select with auto-visible */}
-        {connectedCalendars.length > 0 && (() => {
-          const activeCalendars = connectedCalendars.filter(c => c.isActive && c.id);
-          if (activeCalendars.length === 0) return null;
+        {/* Calendar Selection — always visible; Personal is always an option */}
+        {(() => {
+          const activeConnected = connectedCalendars.filter(c => c.isActive && c.id);
+          const allOptions: { id: string; name: string; color: string; source: string | null }[] = [
+            { id: PERSONAL_CALENDAR_ID, name: 'Personal', color: '#8B5CF6', source: null },
+            ...activeConnected,
+          ];
           return (
             <div className="mb-4">
-              <Label className="mb-1.5 block">Calendars</Label>
+              <Label className="mb-1.5 block">Calendar</Label>
               <div className="flex flex-wrap gap-2">
-                {activeCalendars.map((cal) => {
+                {allOptions.map((cal) => {
                   const isSelected = selectedCalendarIds.includes(cal.id);
                   return (
                     <button

@@ -1,0 +1,20 @@
+Explore the codebase and find:
+
+1. The "add event" dialog / form component - look for where users create new calendar events, particularly any CalendarId or calendar selector UI. Find the full component file.
+
+2. The Google Calendar integration - how events are synced to/from Google Calendar. Find the sync hooks, API calls, and any calendar ID handling.
+
+3. The CalendarDropdown component (mentioned in git status as modified: src/components/calendar/CalendarDropdown.tsx) - read this file fully.
+
+4. The types/calendar.ts file (mentioned in git status as modified) - read this file fully.
+
+5. Any hooks for Google Calendar sync (use-google-calendar, google-calendar, etc.)
+
+6. How todo-to-calendar drag drops create events - particularly DragDropHandlers.ts in the week-view folder
+
+Please read and return the actual file contents for:
+- The add event dialog/form component
+- src/components/calendar/CalendarDropdown.tsx
+- src/types/calendar.ts
+- Any Google Calendar sync hooks
+- The relevant parts of week-view/DragDropHandlers.ts that handle todo drops to calendar

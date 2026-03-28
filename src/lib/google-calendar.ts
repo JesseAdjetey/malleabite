@@ -24,6 +24,8 @@ interface GoogleCalendarEvent {
   start: { dateTime?: string; date?: string; timeZone?: string };
   end: { dateTime?: string; date?: string; timeZone?: string };
   colorId?: string;
+  recurrence?: string[];        // e.g. ["RRULE:FREQ=WEEKLY;BYDAY=MO"]
+  recurringEventId?: string;    // set on instances of a recurring event
 }
 
 interface GoogleCalendarList {
@@ -620,6 +622,13 @@ export function googleEventToMalleabite(
   const startDayjs = dayjs(startRaw);
   const endDayjs = endRaw ? dayjs(endRaw) : startDayjs.add(1, 'hour');
 
+  // A Google event is recurring if it has an RRULE or if it's an instance
+  // of a recurring series (recurringEventId is set on instances).
+  const isRecurring = !!(
+    (event.recurrence && event.recurrence.length > 0) ||
+    event.recurringEventId
+  );
+
   return {
     title: event.summary || 'Untitled Event',
     description: event.description || '',
@@ -634,6 +643,7 @@ export function googleEventToMalleabite(
     hasAlarm: false,
     hasReminder: false,
     isAllDay,
+    isRecurring,
     calendarId: calendarId || 'google',
     source: 'google',
   };

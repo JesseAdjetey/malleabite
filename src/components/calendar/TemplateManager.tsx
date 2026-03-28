@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import {
   Plus,
   Trash2,
@@ -319,7 +319,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-sm max-h-[80vh] overflow-hidden flex flex-col gap-0">
+      <DialogContent className="max-w-sm overflow-hidden flex flex-col gap-0 [max-height:min(calc(100svh-80px),600px)]">
         <DialogHeader>
           <DialogTitle className="text-title3">
             {isGroupPickerView ? 'Add to Calendar' : 'Calendar Templates'}
@@ -331,7 +331,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="space-y-2 py-2">
             {/* ── Group Picker View ── */}
             {isGroupPickerView && (
@@ -512,7 +512,7 @@ const TemplateManager: React.FC<TemplateManagerProps> = ({ open, onOpenChange, d
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="mt-0 pt-3 border-t border-border/50">
           {isGroupPickerView ? (

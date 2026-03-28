@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState } from 'react';
-import { Minus, Edit, Check, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Check, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -12,6 +12,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+interface MoveTarget {
+  id: string;
+  title: string;
+}
 
 interface ModuleContainerProps {
   title: string;
@@ -21,6 +36,9 @@ interface ModuleContainerProps {
   onMinimize?: () => void;
   isMinimized?: boolean;
   isDragging?: boolean;
+  moveTargets?: MoveTarget[];
+  onMoveToPage?: (pageId: string) => void;
+  onShare?: () => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -30,16 +48,13 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   onTitleChange,
   onMinimize,
   isMinimized = false,
-  isDragging = false
+  moveTargets = [],
+  onMoveToPage,
+  onShare,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-
-  const handleEditClick = () => {
-    setEditTitle(title);
-    setIsEditing(true);
-  };
 
   const handleSaveTitle = () => {
     if (editTitle.trim() && onTitleChange) {
@@ -57,8 +72,13 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
     }
   };
 
+  const startRename = () => {
+    setEditTitle(title);
+    setIsEditing(true);
+  };
+
   return (
-    <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all">
+    <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all group/module">
       <div className="module-header flex justify-between items-center mb-3">
         {isEditing ? (
           <div className="flex items-center gap-2 flex-1">
@@ -77,41 +97,76 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             </button>
           </div>
         ) : (
-          <h3 className="text-lg font-semibold text-primary">{title}</h3>
+          <h3 className="text-lg font-semibold text-primary flex-1 min-w-0 truncate">{title}</h3>
         )}
-        <div className="flex gap-1">
-          {onTitleChange && !isMinimized && (
-            <button
-              onClick={handleEditClick}
-              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
-              aria-label="Edit module title"
-            >
-              <Edit size={16} className="flex-shrink-0" />
-            </button>
-          )}
-          {onRemove && (
-            <button
-              onClick={() => setShowDeleteDialog(true)}
-              className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center"
-              aria-label="Remove module"
-            >
-              <Minus size={16} className="flex-shrink-0" />
-            </button>
-          )}
-        </div>
+
+        {!isEditing && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="opacity-0 group-hover/module:opacity-100 hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center flex-shrink-0 ml-1"
+                aria-label="Module options"
+              >
+                <MoreVertical size={16} className="flex-shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {onTitleChange && (
+                <DropdownMenuItem onSelect={startRename}>
+                  Rename
+                </DropdownMenuItem>
+              )}
+              {onMinimize && (
+                <DropdownMenuItem onSelect={onMinimize}>
+                  {isMinimized ? 'Expand' : 'Minimize'}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              {moveTargets.length > 0 && onMoveToPage && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <span>Transfer to page</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {moveTargets.map((target) => (
+                      <DropdownMenuItem
+                        key={target.id}
+                        onSelect={() => onMoveToPage(target.id)}
+                      >
+                        {target.title}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
+              {onShare && (
+                <DropdownMenuItem onSelect={onShare}>
+                  Share / Manage Access
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              {onRemove && (
+                <DropdownMenuItem
+                  onSelect={() => setShowDeleteDialog(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
+
       {!isMinimized && <div className="module-content">{children}</div>}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent className="bg-background border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Delete Module
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete Module</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the "{title}" module? This action cannot be undone.
+              Are you sure you want to delete "{title}"? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -123,7 +178,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Yes, Delete
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

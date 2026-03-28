@@ -23,6 +23,32 @@ if (!isNative && 'serviceWorker' in navigator) {
   }
 }
 
+// ── Suppress Firebase SDK internal assertion errors ────────────────────────────
+// The Firestore SDK (12.x) throws internal assertions when a watch-stream
+// response arrives for a listener that was already unsubscribed (a network-
+// level race condition that is non-fatal). In development, React 18 routes
+// uncaught errors and unhandled rejections to the nearest ErrorBoundary,
+// which would show the "Oops" page. We intercept them in the capture phase
+// (before React's handler) and swallow them silently.
+const isFirebaseInternalAssertion = (err: unknown): boolean => {
+  const msg = (err as Error)?.message ?? String(err ?? '');
+  return msg.includes('INTERNAL ASSERTION FAILED');
+};
+
+window.addEventListener('error', (e) => {
+  if (isFirebaseInternalAssertion(e.error)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+}, { capture: true });
+
+window.addEventListener('unhandledrejection', (e) => {
+  if (isFirebaseInternalAssertion(e.reason)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+}, { capture: true });
+
 // Error boundary for initialization errors
 try {
   const rootElement = document.getElementById("root");

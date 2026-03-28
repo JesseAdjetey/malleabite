@@ -8,6 +8,11 @@ import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
 import BookingModule from '../modules/BookingModule';
 
+interface MoveTarget {
+  id: string;
+  title: string;
+}
+
 interface ModuleRendererProps {
   module: ModuleInstance;
   index: number;
@@ -16,6 +21,9 @@ interface ModuleRendererProps {
   onTitleChange: (title: string) => void;
   onToggleMinimize: () => void;
   isDragging?: boolean;
+  moveTargets?: MoveTarget[];
+  onMoveToPage?: (pageId: string) => void;
+  onShare?: () => void;
 }
 
 const ModuleRenderer: React.FC<ModuleRendererProps> = ({
@@ -25,23 +33,27 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   onRemove,
   onTitleChange,
   onToggleMinimize,
-  isDragging = false
+  isDragging = false,
+  moveTargets = [],
+  onMoveToPage,
+  onShare,
 }) => {
-  // Each module has a fixed width
   const moduleStyle = {
     width: `${moduleWidth}px`,
     maxWidth: '100%'
   };
 
-  // Add common props to each module type
   const moduleProps = {
     title: module.title,
-    onRemove: onRemove,
-    onTitleChange: onTitleChange,
+    onRemove,
+    onTitleChange,
     onMinimize: onToggleMinimize,
     isMinimized: module.minimized,
-    isDragging: isDragging,
-    listId: module.listId
+    isDragging,
+    listId: module.listId,
+    moveTargets,
+    onMoveToPage,
+    onShare,
   };
 
   const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;
@@ -49,38 +61,43 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   switch (module.type) {
     case 'todo':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
-          <TodoModuleEnhanced {...moduleProps} />
+        <div
+          key={module.id}
+          data-module-id={module.id}
+          style={moduleStyle}
+          className={moduleClassName}
+        >
+          <TodoModuleEnhanced {...moduleProps} moduleId={module.id} sharedFromInstanceId={module.sharedFromInstanceId} sharedRole={module.sharedRole} />
         </div>
       );
     case 'pomodoro':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <PomodoroModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
-    case 'alarms': // Updated to use the new RemindersModule
+    case 'alarms':
     case 'reminders':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <RemindersModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'eisenhower':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <EisenhowerModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'invites':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <InvitesModule {...moduleProps} />
         </div>
       );
     case 'booking':
       return (
-        <div key={module.id} style={moduleStyle} className={moduleClassName}>
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <BookingModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );

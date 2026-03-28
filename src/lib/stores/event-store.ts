@@ -127,15 +127,20 @@ export const useEventStore = create<EventStore>()(
           set({ isEventSummaryOpen: false, selectedEvent: null });
         },
         toggleEventLock: (id, isLocked) => {
-          set(state => ({
-            events: state.events.map(event =>
-              event.id === id ? { ...event, isLocked } : event
-            ),
-            // If the updated event is the selected event, update selectedEvent too
-            selectedEvent: state.selectedEvent?.id === id
-              ? { ...state.selectedEvent, isLocked }
-              : state.selectedEvent
-          }));
+          set(state => {
+            // Recurring instances have IDs like "parentId_2026-03-25".
+            // The store only holds the base event, so also match if id starts with "event.id_".
+            const matches = (eventId: string) =>
+              eventId === id || id.startsWith(eventId + '_');
+            return {
+              events: state.events.map(event =>
+                matches(event.id) ? { ...event, isLocked } : event
+              ),
+              selectedEvent: state.selectedEvent && matches(state.selectedEvent.id)
+                ? { ...state.selectedEvent, isLocked }
+                : state.selectedEvent,
+            };
+          });
         }
       }),
       { name: "event_data", skipHydration: true }

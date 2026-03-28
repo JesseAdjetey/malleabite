@@ -8,6 +8,7 @@ interface SidebarStoreType {
   addPage: (title: string) => void;
   setCurrentPage: (index: number) => void;
   addModule: (pageIndex: number, moduleType: ModuleType) => void;
+  addSharedModule: (module: ModuleInstance, pageIndex: number) => void;
   removeModule: (pageIndex: number, moduleIndex: number) => void;
   updatePageTitle: (pageIndex: number, title: string) => void;
   updateModuleTitle: (pageIndex: number, moduleIndex: number, title: string) => void;
@@ -83,6 +84,20 @@ export const useSidebarStore = create<SidebarStoreType>()(
                   { id: generateModuleId(), type: moduleType, title: defaultTitle }
                 ],
                 updatedAt: new Date().toISOString()
+              };
+            }
+            return { pages: newPages };
+          });
+        },
+        addSharedModule: (module, pageIndex) => {
+          set(state => {
+            const newPages = [...state.pages];
+            const targetIndex = Math.min(pageIndex, newPages.length - 1);
+            if (newPages[targetIndex]) {
+              newPages[targetIndex] = {
+                ...newPages[targetIndex],
+                modules: [...newPages[targetIndex].modules, module],
+                updatedAt: new Date().toISOString(),
               };
             }
             return { pages: newPages };

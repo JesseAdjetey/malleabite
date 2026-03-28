@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ls /Users/jesseadjetey/Documents/GitHub/malleabite/*.json /Users/jesseadjetey/Documents/GitHub/malleabite/*.rules)",
+      "Bash(ls /Users/jesseadjetey/Documents/GitHub/malleabite/firebase*)",
+      "Bash(firebase deploy --only firestore:rules)",
+      "Bash(firebase deploy --only firestore:indexes)"
     ]
   }
 }

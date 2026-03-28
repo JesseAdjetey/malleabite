@@ -56,6 +56,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isShort, setIsShort] = useState(false);  // < 40px
   const [isTiny, setIsTiny] = useState(false);     // < 25px
+  const [isHovered, setIsHovered] = useState(false);
 
   const combinedRef = useCallback((node: HTMLDivElement | null) => {
     containerRef.current = node;
@@ -101,7 +102,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
     <div
       ref={combinedRef}
       className={cn(
-        "calendar-event group rounded-sm sm:rounded overflow-hidden",
+        "calendar-event group relative rounded-sm sm:rounded overflow-hidden",
         bgClass,
         !isLocked && "cursor-move",
         isDragging && "opacity-70",
@@ -118,23 +119,29 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onMouseDown={onMouseDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Hover overlay — direct child so overflow-hidden clips it to card shape */}
+      {!compact && (
+        <div className={cn(
+          "absolute inset-0 z-10 bg-black/40 flex items-center justify-center gap-2 transition-opacity duration-150",
+          (isHovered && !isDragging) ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}>
+          {isRecurring && (
+            <div className="bg-white/20 rounded-full p-0.5">
+              <Repeat size={10} className="text-white" />
+            </div>
+          )}
+          {!isLocked && <DragHandle />}
+          <EventLockToggle isLocked={Boolean(isLocked)} onToggle={handleLockToggle} />
+        </div>
+      )}
+
       <div className={cn(
         "relative",
         compact ? "px-1.5 py-1" : isShort ? "h-full px-1 py-0.5" : "h-full p-1 sm:p-1.5"
       )}>
-        {/* Lock/Unlock Button - hidden in compact and short modes */}
-        {!compact && !isShort && <EventLockToggle isLocked={Boolean(isLocked)} onToggle={handleLockToggle} />}
-
-        {/* Drag Handle (only shown if not locked, not compact, not short) */}
-        {!isLocked && !compact && !isShort && <DragHandle />}
-
-        {/* Recurring indicator at top right - hidden for short events */}
-        {isRecurring && !compact && !isShort && (
-          <div className="absolute top-0 right-0 bg-white/20 rounded-full p-0.5 sm:p-1 m-0.5">
-            <Repeat size={8} className="text-white sm:w-[10px] sm:h-[10px]" />
-          </div>
-        )}
 
         {/* Event Title with inline indicators for compact mode */}
         <div className={cn(

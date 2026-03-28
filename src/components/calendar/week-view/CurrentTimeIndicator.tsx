@@ -13,9 +13,9 @@ const CurrentTimeIndicator: React.FC<CurrentTimeIndicatorProps> = ({
 }) => {
   if (!isCurrentDay) return null;
   
-  // Calculate position more precisely
+  const HOUR_HEIGHT = 80; // must match DayColumn.tsx hourHeight
   const minutes = currentTime.hour() * 60 + currentTime.minute();
-  const position = (minutes / (24 * 60)) * 100 * 20;
+  const position = (minutes / 60) * HOUR_HEIGHT;
   
   return (
     <div

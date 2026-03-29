@@ -540,8 +540,8 @@ class DeepgramVoiceAgentService {
           provider: {
             type: 'open_ai',
             model: 'gpt-4o-mini',
-            instructions: options.systemPrompt,
           },
+          instructions: options.systemPrompt,
           functions: (options.tools || buildAgentTools()).map(t => ({
             name: t.name,
             description: t.description,

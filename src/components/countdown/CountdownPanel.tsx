@@ -1,15 +1,40 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Timer, X, GripHorizontal } from 'lucide-react';
 import { useCountdownEvents } from '@/hooks/use-countdown-events';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { cn } from '@/lib/utils';
 
+/** Animated digit that slides up when the value changes */
+const SlideDigit: React.FC<{ value: number; pad?: boolean }> = ({ value, pad = true }) => {
+  const display = pad ? String(value).padStart(2, '0') : String(value);
+  return (
+    <span className="inline-flex overflow-hidden relative" style={{ minWidth: pad ? '1.4ch' : undefined }}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={display}
+          initial={{ y: '100%', opacity: 0 }}
+          animate={{ y: '0%', opacity: 1 }}
+          exit={{ y: '-100%', opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 40, mass: 0.5 }}
+          className="inline-block tabular-nums"
+        >
+          {display}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+};
+
 export const CountdownPanel: React.FC = () => {
   const { user } = useAuth();
   const countdowns = useCountdownEvents();
   const [isOpen, setIsOpen] = useState(false);
-  const constraintsRef = useRef(null);
+  const constraintsRef = useRef<HTMLDivElement>(null);
+
+  // Track drag distance to avoid treating a drag-release as a click
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+  const hasDragged = useRef(false);
 
   if (!user || countdowns.length === 0) return null;
 
@@ -21,10 +46,11 @@ export const CountdownPanel: React.FC = () => {
         dragConstraints={constraintsRef}
         dragMomentum={false}
         dragElastic={0}
-        // Default: top-left near page title
         initial={{ x: 16, y: 16 }}
         className="absolute pointer-events-auto"
         style={{ touchAction: 'none' }}
+        onDragStart={() => { hasDragged.current = false; }}
+        onDrag={() => { hasDragged.current = true; }}
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
@@ -34,7 +60,7 @@ export const CountdownPanel: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              className="w-56 rounded-2xl border border-white/20 bg-white/10 dark:bg-black/30 backdrop-blur-2xl shadow-xl overflow-hidden"
+              className="w-60 rounded-2xl border border-white/20 bg-white/10 dark:bg-black/30 backdrop-blur-2xl shadow-xl overflow-hidden"
             >
               {/* Drag handle + header */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 cursor-grab active:cursor-grabbing">
@@ -54,16 +80,33 @@ export const CountdownPanel: React.FC = () => {
 
               {/* Events list */}
               <div className="max-h-72 overflow-y-auto py-1">
-                {countdowns.map(({ event, days, hours, minutes, progressPercent }) => (
+                {countdowns.map(({ event, days, hours, minutes, seconds, progressPercent }) => (
                   <div key={event.id} className="px-3 py-2.5 border-b border-white/5 last:border-0">
                     <div className="text-xs font-medium text-foreground truncate mb-1">{event.title}</div>
+                    {/* Time display */}
                     <div
-                      className="text-lg font-bold tabular-nums leading-none mb-1.5"
+                      className="flex items-baseline gap-0.5 text-base font-bold leading-none mb-1.5"
                       style={{ color: event.color || 'hsl(var(--primary))' }}
                     >
-                      {days > 0 && <span>{days}d </span>}
-                      {hours > 0 && <span>{hours}h </span>}
-                      <span>{minutes}m</span>
+                      {days > 0 && (
+                        <>
+                          <SlideDigit value={days} pad={false} />
+                          <span className="text-xs font-medium opacity-70 mr-1">d</span>
+                        </>
+                      )}
+                      {(days > 0 || hours > 0) && (
+                        <>
+                          <SlideDigit value={hours} />
+                          <span className="text-xs font-medium opacity-70 mr-1">h</span>
+                        </>
+                      )}
+                      <SlideDigit value={minutes} />
+                      <span className="text-xs font-medium opacity-70">m</span>
+                      {/* Seconds — smaller, slightly muted */}
+                      <span className="ml-1 opacity-60 text-sm font-semibold">
+                        <SlideDigit value={seconds} />
+                        <span className="text-[10px] font-medium opacity-70">s</span>
+                      </span>
                     </div>
                     {/* Progress bar */}
                     <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
@@ -86,7 +129,12 @@ export const CountdownPanel: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              onClick={() => setIsOpen(true)}
+              onClick={() => {
+                if (!hasDragged.current) {
+                  setIsOpen(true);
+                }
+                hasDragged.current = false;
+              }}
               className={cn(
                 'relative h-10 w-10 rounded-xl flex items-center justify-center',
                 'backdrop-blur-2xl border border-white/20 bg-white/10 dark:bg-black/30',

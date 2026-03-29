@@ -539,6 +539,10 @@ export function useCalendarEvents() {
         folderName: event.folderName ?? null,
         userId: event.userId || user.uid,
 
+        // Countdown
+        countdownEnabled: event.countdownEnabled ?? false,
+        countdownReminderIntervalDays: event.countdownEnabled ? (event.countdownReminderIntervalDays ?? null) : null,
+
         // Mally Actions — automated sequences attached to this event
         mallyActions: event.mallyActions ?? null,
       };

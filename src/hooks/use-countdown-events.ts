@@ -7,6 +7,7 @@ export interface CountdownEvent {
   days: number;
   hours: number;
   minutes: number;
+  seconds: number;
   totalMinutesLeft: number;
   progressPercent: number; // 0-100, how far along we are to the event
 }
@@ -26,8 +27,9 @@ function computeCountdown(event: CalendarEventType): CountdownEvent | null {
   const days = Math.floor(msLeft / 86400000);
   const hours = Math.floor((msLeft % 86400000) / 3600000);
   const minutes = Math.floor((msLeft % 3600000) / 60000);
+  const seconds = Math.floor((msLeft % 60000) / 1000);
 
-  return { event, days, hours, minutes, totalMinutesLeft, progressPercent };
+  return { event, days, hours, minutes, seconds, totalMinutesLeft, progressPercent };
 }
 
 export function useCountdownEvents() {
@@ -50,7 +52,7 @@ export function useCountdownEvents() {
     };
 
     compute();
-    const interval = setInterval(compute, 60000); // update every minute
+    const interval = setInterval(compute, 1000); // update every second
     return () => clearInterval(interval);
   }, [events]);
 

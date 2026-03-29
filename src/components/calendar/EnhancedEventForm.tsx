@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarEventType, RecurrenceRule } from '@/lib/stores/types';
+import { CalendarEventType, MallyAction, RecurrenceRule } from '@/lib/stores/types';
+import { ActionBuilder } from '@/components/actions/ActionBuilder';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,7 +10,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer, Zap } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -85,6 +86,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [isAllDay, setIsAllDay] = useState(false);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | undefined>(undefined);
+  const [mallyActions, setMallyActions] = useState<MallyAction[]>([]);
+  const [actionsExpanded, setActionsExpanded] = useState(false);
 
   const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
 
@@ -191,6 +194,8 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         setSelectedCalendarIds([eventData.calendarId]);
       }
       setRecurrenceRule(eventData.recurrenceRule);
+      setMallyActions(eventData.mallyActions || []);
+      if (eventData.mallyActions?.length) setActionsExpanded(true);
     }
   }, [eventData]);
 
@@ -266,6 +271,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
       // Recurring event fields
       isRecurring: !!recurrenceRule,
       recurrenceRule: recurrenceRule,
+      mallyActions: mallyActions.length > 0 ? mallyActions : undefined,
     };
 
     // If multiple calendars selected, save a copy to each
@@ -479,7 +485,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
         {/* Calendar Selection — always visible; Personal is always an option */}
         {(() => {
-          const activeConnected = connectedCalendars.filter(c => c.isActive && c.id);
+          const activeConnected = connectedCalendars.filter(c => c.isActive && c.id && c.id !== PERSONAL_CALENDAR_ID);
           const allOptions: { id: string; name: string; color: string; source: string | null }[] = [
             { id: PERSONAL_CALENDAR_ID, name: 'Personal', color: '#8B5CF6', source: null },
             ...activeConnected,
@@ -624,6 +630,31 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
                   <SelectItem value="7">7 days</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          )}
+        </div>
+
+        {/* Mally Actions */}
+        <div className="rounded-md border mb-4">
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+            onClick={() => setActionsExpanded(v => !v)}
+          >
+            <Zap className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Mally Actions</span>
+            {mallyActions.length > 0 && (
+              <span className="ml-auto text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                {mallyActions.length}
+              </span>
+            )}
+          </button>
+          {actionsExpanded && (
+            <div className="px-3 pb-3 border-t border-border/30 pt-2.5">
+              <ActionBuilder
+                actions={mallyActions}
+                onChange={setMallyActions}
+              />
             </div>
           )}
         </div>

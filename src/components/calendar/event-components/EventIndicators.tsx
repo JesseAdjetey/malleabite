@@ -1,11 +1,12 @@
 
 import React from "react";
-import { Bell, CalendarClock, ListTodo } from "lucide-react";
+import { Bell, CalendarClock, ListTodo, Zap } from "lucide-react";
 
 interface EventIndicatorsProps {
   hasAlarm?: boolean;
   hasReminder?: boolean;
   hasTodo?: boolean;
+  hasActions?: boolean;
   participants?: string[];
 }
 
@@ -13,6 +14,7 @@ const EventIndicators: React.FC<EventIndicatorsProps> = ({
   hasAlarm,
   hasReminder,
   hasTodo,
+  hasActions,
   participants = [],
 }) => {
   return (
@@ -20,6 +22,7 @@ const EventIndicators: React.FC<EventIndicatorsProps> = ({
       {hasAlarm && <Bell size={10} className="text-white/70 sm:w-3 sm:h-3" />}
       {hasReminder && <CalendarClock size={10} className="text-white/70 sm:w-3 sm:h-3" />}
       {hasTodo && <ListTodo size={10} className="text-white/70 sm:w-3 sm:h-3" />}
+      {hasActions && <Zap size={10} className="text-yellow-300/90 sm:w-3 sm:h-3" />}
 
       {/* Participants */}
       {participants && participants.length > 0 && (

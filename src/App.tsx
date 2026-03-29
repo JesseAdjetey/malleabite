@@ -18,6 +18,8 @@ import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { UpgradePrompt } from '@/components/subscription/UpgradePrompt';
 import { Loader2 } from 'lucide-react';
 import { useNotificationManager } from '@/hooks/use-notification-manager';
+import { useActionScheduler } from '@/hooks/use-action-scheduler';
+import { ActionRunnerModal } from '@/components/actions/ActionRunnerModal';
 import { isNative, isAndroid, isIOS } from '@/lib/platform';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
@@ -60,6 +62,9 @@ const AppRoutes = () => {
   // Must be inside AuthProvider to access useAuth
   useNotificationManager();
 
+  // Mally Actions — detects upcoming events with action sequences
+  useActionScheduler();
+
   return (
     <ThemeProvider isAuthPage={isAuthPage}>
       <Suspense fallback={<PageLoader />}>
@@ -98,6 +103,7 @@ const AppRoutes = () => {
       {!isAuthPage && <PendingMeetHandler />}
       {!isAuthPage && <BottomMallyAI />}
       {!isAuthPage && <CountdownPanel />}
+      {!isAuthPage && <ActionRunnerModal />}
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}

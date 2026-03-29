@@ -163,6 +163,9 @@ export function useCalendarEvents() {
       // Countdown
       countdownEnabled: data.countdownEnabled || false,
       countdownReminderIntervalDays: data.countdownReminderIntervalDays ?? undefined,
+
+      // Mally Actions
+      mallyActions: data.mallyActions || undefined,
     };
   };
 
@@ -395,6 +398,9 @@ export function useCalendarEvents() {
         // Countdown
         countdownEnabled: event.countdownEnabled || false,
         countdownReminderIntervalDays: event.countdownReminderIntervalDays ?? null,
+
+        // Mally Actions
+        mallyActions: event.mallyActions ?? null,
       };
 
       // OPTIMISTIC UPDATE: Add to local state immediately for instant UI feedback
@@ -532,6 +538,9 @@ export function useCalendarEvents() {
         isArchived: event.isArchived ?? false,
         folderName: event.folderName ?? null,
         userId: event.userId || user.uid,
+
+        // Mally Actions — automated sequences attached to this event
+        mallyActions: event.mallyActions ?? null,
       };
 
       await updateDoc(doc(db, 'calendar_events', event.id), removeUndefinedDeep(updatedEvent));

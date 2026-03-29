@@ -1035,7 +1035,25 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
 
     // ── Notification Preferences ──
     { "type": "update_notification_preferences", "data": { "emailReminders": true, "pushNotifications": true, "quietHoursStart": "22:00", "quietHoursEnd": "07:00" } },
-    { "type": "schedule_event_reminders", "data": { "eventId": "...", "reminders": [{ "method": "push|email", "value": 15, "unit": "minutes|hours|days" }] } }
+    { "type": "schedule_event_reminders", "data": { "eventId": "...", "reminders": [{ "method": "push|email", "value": 15, "unit": "minutes|hours|days" }] } },
+
+    // ── Mally Actions — automated sequences that run when an event starts ──
+    // Use when user says "when X starts, open Y / start a focus / create a task / etc."
+    // Supported action types: open_url, open_app, start_pomodoro, create_todo, show_reminder
+    // Each action: { id: "uuid", type: "...", order: 0, ...type-specific fields }
+    // open_url fields: url (required), label (optional display name)
+    // open_app fields: appScheme e.g. "spotify:", "obsidian://", "ms-word://"; appName (display)
+    // start_pomodoro fields: pomodoroLabel (optional), pomodoroMinutes (default 25)
+    // create_todo fields: todoTitle (required)
+    // show_reminder fields: message (required)
+    { "type": "add_mally_actions", "data": { "eventId": "...", "actions": [
+      { "id": "uuid-1", "type": "open_url", "url": "https://example.com", "label": "Open doc", "order": 0 },
+      { "id": "uuid-2", "type": "open_app", "appScheme": "spotify:", "appName": "Spotify", "order": 1 },
+      { "id": "uuid-3", "type": "start_pomodoro", "pomodoroLabel": "Deep work", "pomodoroMinutes": 25, "order": 2 },
+      { "id": "uuid-4", "type": "create_todo", "todoTitle": "Review notes after session", "order": 3 },
+      { "id": "uuid-5", "type": "show_reminder", "message": "Reminder text here", "order": 4 }
+    ] } },
+    { "type": "remove_mally_actions", "data": { "eventId": "..." } }
   ],
   "memoryUpdate": {
     "preferences": { "key": "value" },

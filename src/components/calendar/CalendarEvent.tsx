@@ -94,6 +94,9 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   // Whether this is a recurring event
   const isRecurring = Boolean(event.isRecurring || event.recurrenceParentId);
 
+  // Whether this event has Mally Actions attached
+  const hasActionsAttached = Boolean(event.mallyActions?.length);
+
   // Determine if color is a hex value or a class name
   const isHexColor = color?.startsWith('#') || color?.startsWith('rgb');
   const bgStyle = isHexColor ? { backgroundColor: color } : undefined;
@@ -163,12 +166,13 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
             </span>
           )}
           {/* Compact inline indicators */}
-          {compact && (isRecurring || hasAlarm || hasReminder || isTodoEvent) && (
+          {compact && (isRecurring || hasAlarm || hasReminder || isTodoEvent || hasActionsAttached) && (
             <span className="flex-shrink-0 flex items-center gap-0.5 opacity-80">
               {isRecurring && <Repeat size={9} />}
               {hasAlarm && <span className="w-1.5 h-1.5 rounded-full bg-yellow-300" />}
               {hasReminder && <span className="w-1.5 h-1.5 rounded-full bg-blue-300" />}
               {isTodoEvent && <span className="w-1.5 h-1.5 rounded-full bg-green-300" />}
+              {hasActionsAttached && <span className="w-1.5 h-1.5 rounded-full bg-yellow-300/90" />}
             </span>
           )}
         </div>
@@ -185,6 +189,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
               hasAlarm={hasAlarm}
               hasReminder={hasReminder}
               hasTodo={isTodoEvent}
+              hasActions={hasActionsAttached}
               participants={participants}
             />
 

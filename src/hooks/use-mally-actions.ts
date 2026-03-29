@@ -1967,6 +1967,30 @@ export function useMallyActions() {
           return false;
         }
 
+        // ── Mally Actions ────────────────────────────────────────────────────
+
+        case 'add_mally_actions': {
+          if (!data.eventId) { toast.error('Event ID required for Mally Actions'); return false; }
+          const targetEvent = events.find(e => e.id === data.eventId);
+          if (!targetEvent) { toast.error('Event not found'); return false; }
+          if (!Array.isArray(data.actions) || data.actions.length === 0) {
+            toast.error('No actions provided');
+            return false;
+          }
+          await updateEvent({ ...targetEvent, mallyActions: data.actions });
+          toast.success(`Added ${data.actions.length} action${data.actions.length > 1 ? 's' : ''} to "${targetEvent.title}"`);
+          return true;
+        }
+
+        case 'remove_mally_actions': {
+          if (!data.eventId) { toast.error('Event ID required'); return false; }
+          const targetEvent = events.find(e => e.id === data.eventId);
+          if (!targetEvent) { toast.error('Event not found'); return false; }
+          await updateEvent({ ...targetEvent, mallyActions: [] });
+          toast.success(`Actions removed from "${targetEvent.title}"`);
+          return true;
+        }
+
         default:
           console.log('[MallyActions] Unknown action type:', type);
           return false;

@@ -157,7 +157,38 @@ export type CalendarEventType = {
   // Countdown feature
   countdownEnabled?: boolean;
   countdownReminderIntervalDays?: number; // How often to send reminders (default: 2)
+
+  // Mally Actions — automated action sequences that run when the event starts
+  mallyActions?: MallyAction[];
 };
+
+// ─── Mally Actions ──────────────────────────────────────────────────────────
+
+export type MallyActionType =
+  | 'open_url'
+  | 'open_app'
+  | 'start_pomodoro'
+  | 'create_todo'
+  | 'show_reminder';
+
+export interface MallyAction {
+  id: string;
+  type: MallyActionType;
+  order: number;
+  // open_url
+  url?: string;
+  label?: string;
+  // open_app — URL scheme (e.g. "spotify:", "obsidian://", "ms-word://")
+  appScheme?: string;
+  appName?: string;
+  // start_pomodoro
+  pomodoroLabel?: string;
+  pomodoroMinutes?: number;
+  // create_todo
+  todoTitle?: string;
+  // show_reminder
+  message?: string;
+}
 
 // Event attendee type
 export interface EventAttendee {

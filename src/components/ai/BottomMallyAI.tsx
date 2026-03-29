@@ -250,7 +250,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Settings: auto-execute toggle
-  const { aiAutoExecute } = useSettingsStore();
+  const { aiAutoExecute, mallyVoice } = useSettingsStore();
 
 
   const { user } = useAuth();
@@ -881,6 +881,7 @@ RULES:
         systemPrompt,
         firstMessage: 'Hey! What do you need?',
         tools: buildAgentTools(),
+        voiceModel: mallyVoice,
       });
     } catch (err) {
       console.error('[Mally] Voice agent failed, falling back:', err);

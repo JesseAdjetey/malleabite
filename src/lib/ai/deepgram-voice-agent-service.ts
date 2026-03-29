@@ -36,6 +36,7 @@ export interface VoiceAgentOptions {
   systemPrompt: string;
   firstMessage?: string;
   tools?: AgentTool[];
+  voiceModel?: string; // Deepgram Aura model id — defaults to aura-asteria-en
 }
 
 interface AgentTool {
@@ -534,19 +535,20 @@ class DeepgramVoiceAgentService {
         output: { encoding: 'linear16', sample_rate: OUTPUT_SAMPLE_RATE, container: 'none' },
       },
       agent: {
-        listen: { model: 'nova-2' },
+        listen: { provider: { type: 'deepgram', model: 'nova-2-general' } },
         think: {
-          provider: { type: 'open_ai' },
-          model: 'gpt-4o-mini',
-          temperature: 0.7,
-          instructions: options.systemPrompt,
+          provider: {
+            type: 'open_ai',
+            model: 'gpt-4o-mini',
+            instructions: options.systemPrompt,
+          },
           functions: (options.tools || buildAgentTools()).map(t => ({
             name: t.name,
             description: t.description,
             parameters: t.parameters,
           })),
         },
-        speak: { model: 'aura-asteria-en' },
+        speak: { provider: { type: 'deepgram', model: options.voiceModel ?? 'aura-asteria-en' } },
       },
     };
   }

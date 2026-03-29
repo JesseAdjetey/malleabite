@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
-import { useSettingsStore } from '@/lib/stores/settings-store';
+import { useSettingsStore, MALLY_VOICE_OPTIONS } from '@/lib/stores/settings-store';
 import { useAutoTranslateSafe } from '@/i18n/TranslationProvider';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/i18n/config';
 import { GroupedList, GroupedListHeader, GroupedListItem } from '@/components/ui/grouped-list';
@@ -50,7 +50,7 @@ const Settings = () => {
     toggleWakeWord,
     error: wakeWordError
   } = useHeyMally();
-  const { aiAutoExecute, setAiAutoExecute } = useSettingsStore();
+  const { aiAutoExecute, setAiAutoExecute, mallyVoice, setMallyVoice } = useSettingsStore();
   const { subscription } = useSubscription();
   const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
@@ -327,6 +327,41 @@ const Settings = () => {
                 onCheckedChange={(v) => { haptics.medium(); setAiAutoExecute(v); }}
               />
             </div>
+          </GroupedList>
+
+          {/* Mally Voice */}
+          <GroupedListHeader>Mally's Voice</GroupedListHeader>
+          <GroupedList className="mb-6">
+            {(['female', 'male'] as const).map((gender, gi) => (
+              <div key={gender}>
+                {gi > 0 && <div className="h-px bg-separator/30 mx-4" />}
+                <div className="px-4 pt-3 pb-1 text-caption1 font-medium text-muted-foreground uppercase tracking-wide">
+                  {gender === 'female' ? 'Female' : 'Male'}
+                </div>
+                {MALLY_VOICE_OPTIONS.filter(v => v.gender === gender).map((voice, i, arr) => (
+                  <button
+                    key={voice.id}
+                    className={cn(
+                      "w-full flex items-center justify-between px-4 py-3 transition-colors active:bg-muted/50",
+                      i < arr.length - 1 && "border-b border-separator/30"
+                    )}
+                    onClick={() => { haptics.light(); setMallyVoice(voice.id); }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-subheadline">{voice.label}</span>
+                      {voice.accent && (
+                        <span className="text-caption1 text-muted-foreground">· {voice.accent}</span>
+                      )}
+                    </div>
+                    {mallyVoice === voice.id && (
+                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
           </GroupedList>
 
           {/* How it works */}

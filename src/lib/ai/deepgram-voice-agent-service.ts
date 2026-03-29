@@ -574,8 +574,9 @@ class DeepgramVoiceAgentService {
       const input = e.inputBuffer.getChannelData(0);
       const outLength = Math.floor(input.length / downsampleFactor);
       const pcm = new Int16Array(outLength);
+      const MIC_GAIN = 3.0; // boost quiet microphones
       for (let i = 0; i < outLength; i++) {
-        const s = input[i * downsampleFactor];
+        const s = input[i * downsampleFactor] * MIC_GAIN;
         pcm[i] = Math.max(-32768, Math.min(32767, s * 32768));
       }
       socket.send(pcm.buffer);

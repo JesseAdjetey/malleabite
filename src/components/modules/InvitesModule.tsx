@@ -13,7 +13,7 @@ import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/AuthContext.firebase';
+import { useAuth } from '@/contexts/AuthContext.unified';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 
@@ -103,7 +103,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
                 <Avatar className="h-6 w-6 flex-shrink-0">
                   <AvatarImage src="" />
                   <AvatarFallback className="text-xs bg-primary/30">
-                    {getNameFromEmail(invite.recipientEmail || '').substring(0, 2).toUpperCase()}
+                    {getNameFromEmail(invite.senderEmail || '').substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
 
@@ -112,6 +112,7 @@ const InvitesModule: React.FC<InvitesModuleProps> = ({
                   <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
                     <Clock className="h-3 w-3" /> {formatTime(invite.eventStartTime || invite.createdAt)}
                   </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-500">From: {invite.senderEmail}</div>
                 </div>
 
                 {invite.status === 'pending' ? (

@@ -1,6 +1,6 @@
 // Firebase-based invites hook (replaces Supabase version)
 import { useState, useEffect, useCallback } from 'react';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy, serverTimestamp, getDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from 'sonner';
@@ -163,13 +163,60 @@ export const useInvites = () => {
 
     try {
       const inviteRef = doc(db, 'invites', inviteId);
+
+      // If accepting, fetch the invite data and create the event on recipient's calendar
+      if (status === 'accepted') {
+        const inviteSnap = await getDoc(inviteRef);
+        if (inviteSnap.exists()) {
+          const invite = inviteSnap.data() as Omit<Invite, 'id'>;
+          const startsAt = invite.eventStartTime ? new Date(invite.eventStartTime) : new Date();
+          const endsAt = invite.eventEndTime ? new Date(invite.eventEndTime) : new Date(startsAt.getTime() + 60 * 60 * 1000);
+
+          await addDoc(collection(db, 'calendar_events'), {
+            title: invite.eventTitle || 'Invited Event',
+            description: `Invited by ${invite.senderEmail}`,
+            color: '#8B5CF6',
+            isLocked: false,
+            isTodo: false,
+            hasAlarm: false,
+            hasReminder: false,
+            userId: user.uid,
+            todoId: null,
+            startAt: Timestamp.fromDate(startsAt),
+            endAt: Timestamp.fromDate(endsAt),
+            startsAt: Timestamp.fromDate(startsAt),
+            endsAt: Timestamp.fromDate(endsAt),
+            createdAt: serverTimestamp(),
+            location: null,
+            meetingUrl: null,
+            meetingProvider: null,
+            calendarId: null,
+            isAllDay: false,
+            visibility: 'public',
+            status: 'confirmed',
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            isRecurring: false,
+            recurrenceRule: null,
+            recurrenceParentId: null,
+            recurrenceExceptions: null,
+            attendees: null,
+            reminders: null,
+            useDefaultReminders: true,
+            eventType: 'default',
+            isArchived: false,
+            countdownEnabled: false,
+            countdownReminderIntervalDays: null,
+          });
+        }
+      }
+
       await updateDoc(inviteRef, {
         status,
         recipientId: user.uid,
         updatedAt: serverTimestamp(),
       });
 
-      toast.success(`Invite ${status}`);
+      toast.success(status === 'accepted' ? 'Invite accepted — event added to your calendar' : 'Invite declined');
       return { success: true };
     } catch (error) {
       console.error('Error responding to invite:', error);

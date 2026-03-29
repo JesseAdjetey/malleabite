@@ -46,6 +46,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { mallyTTS, unlockAudioContext } from "@/lib/ai/tts-service";
 import { speechService } from "@/lib/ai/speech-recognition-service";
+import { deepgramSTT } from "@/lib/ai/deepgram-stt-service";
+import { deepgramAgent, buildAgentTools } from "@/lib/ai/deepgram-voice-agent-service";
 import { haptics } from "@/lib/haptics";
 import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
@@ -55,7 +57,6 @@ import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
 import { MallyVoiceOverlay } from "./MallyVoiceOverlay";
-import { mallyVapi } from '@/lib/ai/vapi-service';
 import { RichMessageRenderer } from "./RichMessageRenderer";
 import { ActionProgress } from "./ActionProgress";
 import type { RichMessage, SuggestionChip, PendingAction, ActionCardData } from "./rich-message-types";
@@ -164,7 +165,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [overlayResponse, setOverlayResponse] = useState('');
   const [overlayProcessing, setOverlayProcessing] = useState(false);
   // True while Vapi WebRTC session is being established (before call-start fires)
-  const [vapiConnecting, setVapiConnecting] = useState(false);
   // Track which message is being read aloud (null = none)
   const [readingMessageId, setReadingMessageId] = useState<string | null>(null);
 
@@ -319,9 +319,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         ).catch(() => {});
       } catch {}
     }, 5000);
-    // Vapi pre-warm is triggered at module load (vapi-service.ts) — no delay needed here.
-    // This call is a no-op if already pre-warmed or pre-warming.
-    mallyVapi.preWarm();
     return () => { clearTimeout(t); };
   }, [user?.uid]);
 
@@ -504,11 +501,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setIsMinimized(true);
     mallyTTS.onComplete(null);
     mallyTTS.stop();
-    // Stop Vapi session if active
-    if (mallyVapi.isActive) {
-      mallyVapi.stop();
-      mallyVapi.onSpeakingChange(null);
-    }
     if (isRecording) {
       speechService.stopListening();
       setIsRecording(false);
@@ -518,16 +510,13 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Close the Siri-like voice overlay and end voice session
   const closeVoiceOverlay = useCallback(() => {
-    // Stop Vapi session if active
-    if (mallyVapi.isActive) {
-      mallyVapi.stop();
-      mallyVapi.onSpeakingChange(null);
-    }
     setVoiceOverlayOpen(false);
     setOverlayTranscript('');
     setOverlayResponse('');
     setOverlayProcessing(false);
     setIsSpeaking(false);
+    deepgramAgent.stop();
+    deepgramSTT.stop();
     if (isRecording) {
       speechService.stopListening();
       setIsRecording(false);
@@ -540,8 +529,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     mallyTTS.onComplete(null);
     resumeWakeWord?.();
     mallyTTS.stop();
-    // Pre-warm Vapi for next activation so it's instant
-    setTimeout(() => { mallyVapi.preWarm(); }, 2000);
   }, [isRecording, resumeWakeWord]);
 
   // Handle sending a voice message from the overlay — uses streaming Gemini for Siri-like speed.
@@ -694,67 +681,93 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     // Ensure mic is fully released before re-acquiring — critical for reliability.
     // Cancel any lingering speechSynthesis that might block the audio pipeline.
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    await speechService.ensureStopped(isRetry ? 100 : 200);
 
-    if (!voiceOverlayOpenRef.current) return; // Overlay closed while waiting
+    if (deepgramSTT.isAvailable) {
+      // ── Deepgram path: real-time WebSocket STT (Nova-2, proper VAD) ──
+      await deepgramSTT.ensureStopped(isRetry ? 80 : 150);
+      if (!voiceOverlayOpenRef.current) return;
+      setIsRecording(true);
 
-    setIsRecording(true);
-
-    await speechService.startListeningWithRetry(
-      (result) => {
-        overlayAbortRetryRef.current = 0; // Got audio — reset retry counter
+      const onResult = (result: { transcript: string; isFinal: boolean; confidence?: number }) => {
+        overlayAbortRetryRef.current = 0;
         setOverlayTranscript(result.transcript);
 
-        // VAD: auto-submit after adaptive silence — eliminates isFinal lag.
-        // Longer transcripts get shorter timeout (user is clearly talking),
-        // short transcripts get longer timeout (still formulating thought).
         if (vadTimerRef.current) clearTimeout(vadTimerRef.current);
 
         if (result.isFinal) {
           vadTimerRef.current = null;
-          handleOverlayVoiceMessage(result.transcript);
+          deepgramSTT.stop().then(() => {
+            setIsRecording(false);
+            handleOverlayVoiceMessage(result.transcript);
+          });
         } else if (result.transcript.trim().length > 3) {
-          // Adaptive timeout: 1500ms for short phrases, 900ms for longer ones
+          // Adaptive VAD timeout as safety net on top of Deepgram's endpointing
           const wordCount = result.transcript.trim().split(/\s+/).length;
-          const vadTimeout = wordCount >= 6 ? 900 : wordCount >= 3 ? 1200 : 1500;
+          const vadTimeout = wordCount >= 6 ? 800 : wordCount >= 3 ? 1100 : 1400;
           vadTimerRef.current = setTimeout(() => {
             vadTimerRef.current = null;
             if (voiceOverlayOpenRef.current) {
-              speechService.stopListening();
-              setIsRecording(false);
-              handleOverlayVoiceMessage(result.transcript.trim());
+              deepgramSTT.stop().then(() => {
+                setIsRecording(false);
+                handleOverlayVoiceMessage(result.transcript.trim());
+              });
             }
           }, vadTimeout);
         }
-      },
-      (err) => {
+      };
+
+      const onError = (err: string) => {
         setIsRecording(false);
         if (!voiceOverlayOpenRef.current) return;
-        // 'no-speech' — user hasn't spoken; keep waiting quietly (more patient retry)
-        if (err === 'no-speech') {
-          setTimeout(() => startOverlayListening(true), 500);
-          return;
+        console.error('[Mally] Deepgram error:', err);
+        // Fall back to Web Speech API on Deepgram failure
+        setTimeout(() => startOverlayListening(true), 500);
+      };
+
+      deepgramSTT.startListening(onResult, onError);
+    } else {
+      // ── Web Speech API fallback ──
+      await speechService.ensureStopped(isRetry ? 100 : 200);
+      if (!voiceOverlayOpenRef.current) return;
+      setIsRecording(true);
+
+      await speechService.startListeningWithRetry(
+        (result) => {
+          overlayAbortRetryRef.current = 0;
+          setOverlayTranscript(result.transcript);
+
+          if (vadTimerRef.current) clearTimeout(vadTimerRef.current);
+
+          if (result.isFinal) {
+            vadTimerRef.current = null;
+            handleOverlayVoiceMessage(result.transcript);
+          } else if (result.transcript.trim().length > 3) {
+            const wordCount = result.transcript.trim().split(/\s+/).length;
+            const vadTimeout = wordCount >= 6 ? 900 : wordCount >= 3 ? 1200 : 1500;
+            vadTimerRef.current = setTimeout(() => {
+              vadTimerRef.current = null;
+              if (voiceOverlayOpenRef.current) {
+                speechService.stopListening();
+                setIsRecording(false);
+                handleOverlayVoiceMessage(result.transcript.trim());
+              }
+            }, vadTimeout);
+          }
+        },
+        (err) => {
+          setIsRecording(false);
+          if (!voiceOverlayOpenRef.current) return;
+          if (err === 'no-speech') { setTimeout(() => startOverlayListening(true), 500); return; }
+          if ((err === 'network' || err === 'aborted') && overlayAbortRetryRef.current < 8) {
+            overlayAbortRetryRef.current++;
+            const backoff = Math.min(250 * overlayAbortRetryRef.current, 2500);
+            setTimeout(() => startOverlayListening(true), backoff);
+            return;
+          }
+          if (err !== 'aborted') console.error('[Mally] Speech error:', err);
         }
-        // 'network' — Web Speech API server unreachable (transient); retry
-        if (err === 'network' && overlayAbortRetryRef.current < 8) {
-          overlayAbortRetryRef.current++;
-          const backoff = Math.min(300 * overlayAbortRetryRef.current, 3000);
-          console.warn('[Mally] Speech network error — retrying...', overlayAbortRetryRef.current);
-          setTimeout(() => startOverlayListening(true), backoff);
-          return;
-        }
-        // 'aborted' can happen transiently after TTS or mic transitions — retry generously
-        if (err === 'aborted' && overlayAbortRetryRef.current < 8) {
-          overlayAbortRetryRef.current++;
-          const backoff = Math.min(200 * overlayAbortRetryRef.current, 2000);
-          setTimeout(() => startOverlayListening(true), backoff);
-          return;
-        }
-        if (err !== 'aborted') {
-          console.error('[Mally] Overlay speech error:', err);
-        }
-      }
-    );
+      );
+    }
   }, [pauseWakeWord, handleOverlayVoiceMessage]);
 
   // Stable ref for startOverlayListening so TTS callback can access latest version
@@ -763,27 +776,26 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Interrupt Mally mid-speech: stop TTS and start listening immediately
   const handleOverlayInterrupt = useCallback(() => {
-    if (mallyVapi.isActive) {
-      // Vapi handles interruption natively via barge-in — user just speaks.
-      // Tapping interrupt has no extra effect since Vapi owns the audio.
+    if (deepgramAgent.isActive) {
+      // Deepgram Agent handles barge-in natively — user just speaks
       return;
     }
     mallyTTS.stop();
+    deepgramSTT.stop();
     overlayAbortRetryRef.current = 0;
     startOverlayListening();
   }, [startOverlayListening]);
 
-  // Start a Vapi-managed voice session (replaces custom STT+TTS+VAD pipeline)
-  const startVapiSession = useCallback(async () => {
+  // Start a Deepgram Voice Agent session — full-duplex with native barge-in
+  const startVoiceAgentSession = useCallback(async () => {
     const context = buildContext();
     const now = new Date();
 
-    // Build dynamic system prompt with current calendar context (IDs included for delete/update)
-    const eventsSummary = (context.events || []).slice(0, 15).map((e: any) =>
+    const eventsSummary = (context.events || []).slice(0, 20).map((e: any) =>
       `• [ID:${e.id}] ${e.title} (${new Date(e.start).toLocaleString()} – ${new Date(e.end).toLocaleString()})`
     ).join('\n') || 'No events scheduled.';
 
-    const todosSummary = (context.todos || []).slice(0, 15).map((t: any) =>
+    const todosSummary = (context.todos || []).slice(0, 20).map((t: any) =>
       `• [ID:${t.id}] ${t.completed ? '✓' : '○'} ${t.text}`
     ).join('\n') || 'No tasks.';
 
@@ -791,15 +803,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       `• [ID:${a.id}] ${a.title} at ${a.time}`
     ).join('\n') || 'No alarms.';
 
-    const eisenhowerSummary = (context.eisenhowerItems || []).slice(0, 10).map((i: any) =>
-      `• [ID:${i.id}] ${i.text} (${i.quadrant})`
-    ).join('\n') || 'No priority items.';
-
-    const goalsSummary = (context.goals || []).slice(0, 10).map((g: any) =>
-      `• [ID:${g.id}] ${g.title} (${g.category}, ${g.frequency})`
-    ).join('\n') || 'No goals.';
-
-    const systemPrompt = `You are Mally, a warm, witty, and intelligent personal productivity assistant.
+    const systemPrompt = `You are Mally, a warm, witty, and intelligent personal productivity assistant. You speak conversationally — short, clear sentences. Never use markdown since you are speaking out loud.
 
 Current Time: ${now.toLocaleString()}
 Timezone: ${context.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone}
@@ -813,37 +817,17 @@ ${todosSummary}
 ALARMS (use ID for delete):
 ${alarmsSummary}
 
-PRIORITY MATRIX (Eisenhower):
-${eisenhowerSummary}
-
-GOALS:
-${goalsSummary}
-
-CAPABILITIES — you can:
-- Create, update, delete, or reschedule calendar events
-- Create, complete, or delete todos
-- Create or delete alarms, start/stop Pomodoro timer
-- Add items to the Eisenhower priority matrix
-- Add modules to specific pages, create/switch pages, and move modules between pages
-- Create goals with category and frequency
-- Search the web, check weather, stock prices, flight status
-- Enable or disable the countdown feature on any event using action enable_countdown. Params: eventId (string), enabled (boolean), reminderIntervalDays (number, optional — can be a fraction e.g. 0.5 for 12 hours, 0.0208 for 30 minutes). If user says "count down to X" or "set a countdown for X", find the event by title then call enable_countdown.
-
 RULES:
 - Be conversational, warm, and concise (1-3 sentences per response)
-- Always use the exact ID from the context above when updating/deleting — NEVER guess an ID
-- If the user says "delete my gym event" match it by title to find its ID first
+- Always use the exact ID when updating or deleting — never guess an ID
+- Match events/todos by title to find their ID when user refers to them by name
 - Default event duration is 1 hour unless specified
 - Use ISO8601 datetime format for tool parameters
-- Never use markdown — you are speaking out loud
-- Be proactive: suggest time slots, remind about conflicts, offer alternatives`;
+- Be proactive: suggest time slots, flag conflicts, offer alternatives`;
 
-    // Wire Vapi callbacks to overlay state
-    mallyVapi.setCallbacks({
-      onUserTranscript: (text, _isFinal) => {
-        setOverlayTranscript(text);
-      },
-      onAssistantTranscript: (text, _isFinal) => {
+    deepgramAgent.setCallbacks({
+      onUserTranscript: (text) => setOverlayTranscript(text),
+      onAssistantTranscript: (text) => {
         setOverlayProcessing(false);
         setOverlayResponse(text);
       },
@@ -852,80 +836,54 @@ RULES:
         setOverlayTranscript('');
         setOverlayProcessing(false);
       },
-      onUserSpeechEnd: () => {
+      onAgentSpeakingStart: () => {
         setIsRecording(false);
-        setOverlayProcessing(true);
+        setOverlayProcessing(false);
+      },
+      onAgentSpeakingEnd: () => {
+        // Agent finished speaking — ready for next input
       },
       onCallStart: () => {
-        console.log('[Mally] Vapi call connected');
-        setVapiConnecting(false); // WebRTC established — Vapi is listening now
+        console.log('[Mally] Voice agent connected');
       },
       onCallEnd: () => {
-        console.log('[Mally] Vapi call ended');
+        console.log('[Mally] Voice agent ended');
         closeVoiceOverlay();
       },
       onToolCall: async (name, args) => {
-        // ── Real-time data tools ──────────────────────────────────
+        // Real-time data tools
         if (name === 'get_weather') {
           const result = await getWeather(args.location);
-          if (result) return formatWeather(result);
-          return `Sorry, I couldn't get weather data for "${args.location}" right now.`;
-        }
-        if (name === 'get_stock_price') {
-          const result = await getStockPrice(args.symbol);
-          if (result) return formatStock(result);
-          return `No data found for symbol "${args.symbol}". Check the ticker is correct.`;
-        }
-        if (name === 'get_flight_status') {
-          const result = await getFlightStatus(args.flight_number);
-          if (result) return formatFlight(result);
-          return `No flight data found for "${args.flight_number}".`;
+          return result ? formatWeather(result) : `Couldn't get weather for "${args.location}".`;
         }
         if (name === 'search_web') {
           const results = await searchWeb(args.query);
-          if (results.length) return formatSearch(results);
-          return `No search results found for "${args.query}".`;
+          return results.length ? formatSearch(results) : `No results for "${args.query}".`;
         }
-        // ── reschedule_event → maps to update_event ───────────────
         if (name === 'reschedule_event') {
           const ok = await executeAction({ type: 'update_event', data: { eventId: args.eventId, start: args.newStart, end: args.newEnd } });
           if (ok) haptics.success();
-          return ok ? 'Event rescheduled' : 'Failed to reschedule';
+          return ok ? 'Event rescheduled.' : 'Failed to reschedule.';
         }
-        // ── All other tools: delete_event, complete_todo, delete_todo,
-        //    create_alarm, delete_alarm, create_eisenhower, create_goal,
-        //    create_todo, start_pomodoro, stop_pomodoro, etc. ───────
-        const action = { type: name, data: args };
-        const ok = await executeAction(action);
+        const ok = await executeAction({ type: name, data: args });
         if (ok) haptics.success();
-        return ok ? 'Done successfully' : 'Failed to execute';
+        return ok ? 'Done.' : 'Failed.';
       },
       onError: (err) => {
-        console.error('[Mally] Vapi error:', err);
-        setVapiConnecting(false);
-        // Fall back to custom pipeline on error
-        setOverlayResponse('Connection issue — switching to local voice.');
-        setTimeout(() => startOverlayListening(), 1000);
+        console.error('[Mally] Voice agent runtime error:', err);
       },
     });
 
-    // Wire assistant speaking state to overlay
-    mallyVapi.onSpeakingChange((speaking) => {
-      setIsSpeaking(speaking);
-    });
+    deepgramAgent.onSpeakingChange((speaking) => setIsSpeaking(speaking));
 
     try {
-      setVapiConnecting(true); // Show "Connecting..." in overlay while WebRTC handshakes
-      await mallyVapi.startSession({
+      await deepgramAgent.start({
         systemPrompt,
-        // Greeting spoken immediately after activation on both pre-warm and cold-start paths.
-        // Pre-warm: vapi.say() is called after mic unmute (~150ms after activation).
-        // Cold-start: firstMessage goes into the Vapi config and is spoken on call-start.
-        firstMessage: "Hey! What do you need?",
+        firstMessage: 'Hey! What do you need?',
+        tools: buildAgentTools(),
       });
     } catch (err) {
-      console.error('[Mally] Vapi session failed, falling back to custom pipeline');
-      setVapiConnecting(false);
+      console.error('[Mally] Voice agent failed, falling back:', err);
       startOverlayListening();
     }
   }, [buildContext, executeAction, closeVoiceOverlay, startOverlayListening]);
@@ -948,16 +906,12 @@ RULES:
       pauseWakeWord?.();
       overlayWakePausedRef.current = true;
 
-      if (mallyVapi.isAvailable) {
-        // Vapi path: haptics only — no audio ACK so Vapi's own voice isn't preceded
-        // by a mismatched browser/cloud TTS voice.
-        // ── Vapi path: managed WebRTC voice session ──
-        // Release any mic held by speech service before Vapi acquires its own
-        await speechService.ensureStopped(150);
-        startVapiSession();
+      if (deepgramAgent.isAvailable) {
+        // ── Deepgram Voice Agent: full-duplex, native barge-in, Nova-2 STT + GPT-4o-mini + Aura TTS ──
+        await speechService.ensureStopped(100);
+        startVoiceAgentSession();
       } else {
-        // ── Custom pipeline fallback (Web Speech API + Cloud TTS) ──
-        // Instant audio ACK so user knows Mally heard them
+        // ── Custom pipeline: Web Speech API → Gemini (streaming) → Google Cloud TTS ──
         mallyTTS.playInstantACK();
         await speechService.ensureStopped(250);
         startOverlayListening();
@@ -966,7 +920,7 @@ RULES:
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [startOverlayListening, startVapiSession]);
+  }, [startOverlayListening, startVoiceAgentSession]);
 
   // Auto-dismiss overlay after inactivity (like Siri)
   useEffect(() => {
@@ -1183,7 +1137,7 @@ RULES:
                 })) as any,
               };
             }));
-            const success = await executeAction(allActions[i]);
+            const success = await executeAction(allActions[i] as { type: string; data: any });
             executionResults.push(success);
             if (success) haptics.success();
             setMessages(prev => prev.map(m => {
@@ -1242,7 +1196,7 @@ RULES:
         }
 
         speak(aiResponse);
-        updateQuickActionsFromContext(aiResponse, allActions[0] || null);
+        updateQuickActionsFromContext(aiResponse, (allActions[0] as { type: string; data: any }) || null);
       };
 
       // ── Choose streaming vs non-streaming path ──────────────────────────
@@ -1430,12 +1384,12 @@ RULES:
         const title = pending.data?.title || pending.label;
         const freshEvents = useEventStore.getState().events;
         const match = freshEvents.find(e => e.title === title && e.calendarId === calInfo.id);
-        if (match) calInfo.eventId = match.id;
+        if (match) (calInfo as any).eventId = match.id;
       }
       if (listInf) {
         const text = pending.data?.text || pending.data?.title || pending.label;
         const match = todos.find(t => t.text === text && t.listId === listInf.id);
-        if (match) listInf.todoId = match.id;
+        if (match) (listInf as any).todoId = match.id;
       }
       card = {
         id: crypto.randomUUID(),
@@ -1481,7 +1435,7 @@ RULES:
   /** Approve all pending actions in the latest message */
   const handleApproveAll = async () => {
     haptics.selection();
-    const msg = messages.findLast(m => m.pendingActions?.some(a => a.status === 'pending'));
+    const msg = [...messages].reverse().find(m => m.pendingActions?.some(a => a.status === 'pending'));
     if (!msg?.pendingActions) return;
     for (const pending of msg.pendingActions.filter(a => a.status === 'pending')) {
       await handleApproveAction(pending.id);
@@ -1521,7 +1475,7 @@ RULES:
     if (isUserTyping) {
       // Fallback (Option D): inject a "Show on calendar" suggestion chip
       setMessages(prev => {
-        const lastAiMsg = [...prev].reverse().find(m => m.role === 'assistant');
+        const lastAiMsg = [...prev].reverse().find(m => m.sender === 'ai');
         if (!lastAiMsg) return prev;
         const showChip: SuggestionChip = {
           id: 'show-on-calendar',
@@ -1571,7 +1525,7 @@ RULES:
   const handleGuidedFlowSubmitMulti = (optionIds: string[]) => {
     haptics.selection();
     // Find the guided flow in the latest AI message to get labels
-    const msg = messages.findLast(m => m.guidedFlow);
+    const msg = [...messages].reverse().find(m => m.guidedFlow);
     if (!msg?.guidedFlow) return;
     const labels = optionIds.map(id =>
       msg.guidedFlow!.step.options.find(o => o.id === id)?.label || id
@@ -1881,7 +1835,7 @@ RULES:
         isListening={isRecording && voiceOverlayOpen}
         isSpeaking={isSpeaking && voiceOverlayOpen}
         isProcessing={overlayProcessing}
-        isConnecting={vapiConnecting}
+        isConnecting={false}
         transcript={overlayTranscript}
         responseText={overlayResponse}
         onClose={closeVoiceOverlay}
@@ -2036,7 +1990,7 @@ RULES:
                     <div className="space-y-3 max-w-4xl mx-auto w-full">
                       {messages.map((message, index) => {
                         const isLastAiMessage = message.sender === 'ai' &&
-                          index === messages.findLastIndex(m => m.sender === 'ai' && !m.isLoading);
+                          index === (() => { const idx = [...messages].reverse().findIndex(m => m.sender === 'ai' && !m.isLoading); return idx === -1 ? -1 : messages.length - 1 - idx; })();
                         return (
                         <motion.div
                           key={message.id}

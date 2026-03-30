@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
+import { sounds } from "@/lib/sounds";
 import CalendarEvent from "./calendar/CalendarEvent";
 import SelectableCalendarEvent from "./calendar/SelectableCalendarEvent";
 import { CalendarEventType } from "@/lib/store";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
 import { calculateEventPositions } from "@/lib/utils/event-overlap";
+import { useBulkSelectionStore } from "@/lib/stores/bulk-selection-store";
 
 interface MonthViewBoxProps {
   day: dayjs.Dayjs | null;
@@ -38,6 +40,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   onToggleSelection = () => { },
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
+  const { enableBulkMode, toggleSelection } = useBulkSelectionStore();
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
@@ -108,6 +111,7 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+    sounds.play("calendarDrop");
 
     try {
       // Parse the drag data
@@ -245,7 +249,12 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!isBulkMode) {
+                  if (e.shiftKey) {
+                    enableBulkMode();
+                    toggleSelection(event.id);
+                  } else if (isBulkMode) {
+                    onToggleSelection(event.id);
+                  } else {
                     onEventClick && onEventClick(event);
                   }
                 }}

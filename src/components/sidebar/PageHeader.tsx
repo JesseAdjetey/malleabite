@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Edit2, Check, Trash2, Users } from 'lucide-react';
+import { sounds } from '@/lib/sounds';
 
 interface PageHeaderProps {
   title: string;
@@ -65,7 +66,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         ) : (
           <div className="flex items-center text-center gap-2">
             <button
-              onClick={onPrevPage}
+              onClick={() => { sounds.play("pageSwitch"); onPrevPage(); }}
               disabled={!canGoToPrevPage}
               className={`p-1 rounded-full text-gray-400 dark:text-gray-500 hover:bg-purple-500/10 transition-colors ${!canGoToPrevPage ? 'opacity-20 cursor-not-allowed' : ''}`}
             >
@@ -82,7 +83,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </div>
 
             <button
-              onClick={onNextPage}
+              onClick={() => { sounds.play("pageSwitch"); onNextPage(); }}
               disabled={!canGoToNextPage}
               className={`p-1 rounded-full text-gray-400 dark:text-gray-500 hover:bg-purple-500/10 transition-colors ${!canGoToNextPage ? 'opacity-20 cursor-not-allowed' : ''}`}
             >

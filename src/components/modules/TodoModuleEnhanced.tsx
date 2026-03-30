@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { sounds } from "@/lib/sounds";
+import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
 import { cn } from "@/lib/utils";
 import {
@@ -132,6 +134,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   const handleAddItem = async () => {
     if (newItem.trim() && moduleListId) {
+      sounds.play("lightClick");
       setSubmitStatus(null);
       const response = await addTodo(newItem.trim(), moduleListId);
 
@@ -157,6 +160,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   };
 
   const handleToggleWithSync = async (item: any) => {
+    sounds.play("lightClick");
     // For collaborative modules use direct Firestore call (item may be owned by another user)
     if (isCollaborativeModule) {
       await directToggleTodo(item);
@@ -349,9 +353,15 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             No todos in this list
           </div>
         ) : (
-          activeTodos.map((item) => (
-            <div
+          <AnimatePresence mode="popLayout" initial={false}>
+          {activeTodos.map((item) => (
+            <motion.div
               key={item.id}
+              layout
+              initial={{ opacity: 0, y: -6, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -16, scale: 0.95, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
+              transition={{ type: "spring", damping: 25, stiffness: 320 }}
               ref={highlightedItemId === item.id && highlightedItemType === 'todo' ? spotlightRef : undefined}
               data-todo-id={item.id}
               className={cn(
@@ -362,16 +372,36 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
               onDragStart={(e) => handleDragStart(e, item)}
               onDragEnd={handleDragEnd}
             >
-              <div
+              <motion.div
                 className={cn("flex-shrink-0", !isViewOnly && "cursor-pointer")}
                 onClick={isViewOnly ? undefined : () => handleToggleWithSync(item)}
+                whileTap={!isViewOnly ? { scale: 0.8 } : undefined}
+                transition={{ type: "spring", damping: 20, stiffness: 400 }}
               >
-                {item.completed ? (
-                  <CheckCircle size={18} className="text-primary" />
-                ) : (
-                  <Circle size={18} className={isViewOnly ? "text-primary/30" : "text-primary/60"} />
-                )}
-              </div>
+                <AnimatePresence mode="wait" initial={false}>
+                  {item.completed ? (
+                    <motion.span
+                      key="checked"
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.6, opacity: 0 }}
+                      transition={{ type: "spring", damping: 20, stiffness: 400 }}
+                    >
+                      <CheckCircle size={18} className="text-primary" />
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="unchecked"
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.6, opacity: 0 }}
+                      transition={{ type: "spring", damping: 20, stiffness: 400 }}
+                    >
+                      <Circle size={18} className={isViewOnly ? "text-primary/30" : "text-primary/60"} />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.div>
               <span
                 className={cn("text-sm flex-1 text-gray-800 dark:text-white", {
                   "line-through opacity-50": item.completed,
@@ -390,29 +420,36 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
                   <Trash2 size={14} className="text-red-400" />
                 </button>
               )}
-            </div>
-          ))
+            </motion.div>
+          ))}
+          </AnimatePresence>
         )}
       </div>
 
       {/* Status Message */}
-      {submitStatus && (
-        <div
-          className={cn(
-            "text-xs p-2 mb-2 rounded-md flex items-center",
-            submitStatus.success
-              ? "bg-green-500/20 text-green-300"
-              : "bg-red-500/20 text-red-300"
-          )}
-        >
-          {submitStatus.success ? (
-            <CheckCircle2 size={14} className="mr-1" />
-          ) : (
-            <AlertCircle size={14} className="mr-1" />
-          )}
-          {submitStatus.message}
-        </div>
-      )}
+      <AnimatePresence>
+        {submitStatus && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97, transition: { duration: 0.15 } }}
+            transition={{ type: "spring", damping: 25, stiffness: 320 }}
+            className={cn(
+              "text-xs p-2 mb-2 rounded-md flex items-center",
+              submitStatus.success
+                ? "bg-green-500/20 text-green-300"
+                : "bg-red-500/20 text-red-300"
+            )}
+          >
+            {submitStatus.success ? (
+              <CheckCircle2 size={14} className="mr-1" />
+            ) : (
+              <AlertCircle size={14} className="mr-1" />
+            )}
+            {submitStatus.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Todo Input — hidden for view-only shared modules */}
       {!isViewOnly && (
@@ -425,12 +462,14 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             className="glass-input w-full text-sm"
             placeholder="Add a task..."
           />
-          <button
+          <motion.button
             onClick={handleAddItem}
+            whileTap={{ scale: 0.93 }}
+            transition={{ type: "spring", damping: 20, stiffness: 400 }}
             className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm"
           >
             Add
-          </button>
+          </motion.button>
         </div>
       )}
       </div> {/* Close droppable area */}

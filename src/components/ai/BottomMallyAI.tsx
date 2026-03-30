@@ -49,6 +49,7 @@ import { speechService } from "@/lib/ai/speech-recognition-service";
 import { deepgramSTT } from "@/lib/ai/deepgram-stt-service";
 import { mallyVapi } from "@/lib/ai/vapi-service";
 import { haptics } from "@/lib/haptics";
+import { sounds } from "@/lib/sounds";
 import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
 import { MentionReference, MentionOption, MentionTabId, createMentionReference, serializeReferences } from "./mention-types";
@@ -176,6 +177,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
   useEffect(() => { overlayProcessingRef.current = overlayProcessing; }, [overlayProcessing]);
+
+  // Play whoosh when AI panel text area expands (text box focus)
+  useEffect(() => {
+    if (isExpanded) sounds.play("mallyWhoosh");
+  }, [isExpanded]);
 
   // Clean up voice session timers on unmount
   useEffect(() => {
@@ -899,6 +905,7 @@ RULES:
       setOverlayTranscript('');
       setOverlayResponse('');
       haptics.medium();
+      sounds.play("heyMally");
 
       // Ensure AudioContext is unlocked
       unlockAudioContext();
@@ -1808,6 +1815,7 @@ RULES:
       setIsRecording(true);
       setIsExpanded(true);
       haptics.medium();
+      sounds.play("micOn");
 
       await speechService.startListening(
         (result) => {
@@ -1879,7 +1887,7 @@ RULES:
             whileTap={{ scale: 0.92 }}
             onDragStart={() => { (window as any).__mallyDragged = true; }}
             onDragEnd={() => { setTimeout(() => { (window as any).__mallyDragged = false; }, 100); }}
-            onClick={() => { if (!(window as any).__mallyDragged) setIsMinimized(false); }}
+            onClick={() => { if (!(window as any).__mallyDragged) { sounds.play("mallyChoir"); setIsMinimized(false); } }}
             className={cn(
               isMobile
                 ? "fixed left-4 z-50 h-10 w-10 rounded-xl flex items-center justify-center backdrop-blur-2xl border bg-purple-500/20 border-purple-400/30 dark:bg-white/10 dark:border-white/15 hover:bg-purple-500/30 dark:hover:bg-white/20 transition-colors"
@@ -1932,9 +1940,9 @@ RULES:
         {!isMinimized && (
           <motion.div
             ref={containerRef}
-            initial={{ opacity: 0, y: 40, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: "spring", damping: 28, stiffness: 300 } }}
-            exit={{ opacity: 0, y: 50, scale: 0.97, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+            initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.48, ease: [0.25, 0.46, 0.45, 0.94] } }}
+            exit={{ opacity: 0, y: 12, filter: 'blur(4px)', transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
             className={cn(
               "fixed z-50 flex flex-col",
               "left-0 right-0",
@@ -2151,24 +2159,34 @@ RULES:
 
             {/* Quick action chips */}
             <div className="px-4 py-2 overflow-x-auto scrollbar-hide">
-              <div className="flex gap-2 max-w-4xl mx-auto w-full">
+              <motion.div
+                className="flex gap-2 max-w-4xl mx-auto w-full"
+                initial="hidden"
+                animate="show"
+                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } } }}
+              >
                 {quickActions.map((action) => (
-                  <button
+                  <motion.button
                     key={action.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 8 },
+                      show: { opacity: 1, y: 0, transition: { type: 'spring', damping: 24, stiffness: 300 } },
+                    }}
+                    whileTap={{ scale: 0.93 }}
                     onClick={() => handleQuickAction(action)}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium",
                       "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/10 dark:border-white/10",
                       "text-muted-foreground hover:text-foreground",
-                      "transition-all whitespace-nowrap flex-shrink-0"
+                      "transition-colors whitespace-nowrap flex-shrink-0"
                     )}
                     title={action.label}
                   >
                     {action.icon}
                     <span className="hidden sm:inline">{action.label}</span>
-                  </button>
+                  </motion.button>
                 ))}
-              </div>
+              </motion.div>
             </div>
 
             {/* Proactive suggestion banner */}
@@ -2248,7 +2266,13 @@ RULES:
                 </div>
               )}
 
-              <div className="flex items-center gap-2 max-w-4xl mx-auto w-full">
+              <motion.div
+                className="flex items-center gap-2 max-w-4xl mx-auto w-full"
+                initial={{ scaleX: 0.88, opacity: 0 }}
+                animate={{ scaleX: 1, opacity: 1 }}
+                transition={{ type: "spring", damping: 22, stiffness: 280, delay: 0.06 }}
+                style={{ transformOrigin: 'center' }}
+              >
                 {/* Image upload button */}
                 <input
                   ref={fileInputRef}
@@ -2342,22 +2366,24 @@ RULES:
                 </button>
 
                 {/* Send button */}
-                <button
+                <motion.button
                   onClick={() => {
                     console.log('Send button clicked, inputText:', inputText);
                     handleSendMessage();
                   }}
                   disabled={(!inputText.trim() && !uploadedImage) || isLoading}
+                  whileTap={{ scale: 0.86 }}
+                  transition={{ type: 'spring', damping: 18, stiffness: 400 }}
                   className={cn(
-                    "p-2.5 rounded-full transition-all",
+                    "p-2.5 rounded-full transition-colors",
                     inputText.trim() || uploadedImage
                       ? "bg-purple-600 hover:bg-purple-700 text-white"
                       : "bg-black/5 dark:bg-white/10 text-muted-foreground"
                   )}
                 >
                   <Send className="h-5 w-5" />
-                </button>
-              </div>
+                </motion.button>
+              </motion.div>
             </div>
 
             {/* Recording indicator */}

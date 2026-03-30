@@ -1,5 +1,6 @@
 
 import React, { ReactNode, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Check, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -163,7 +164,20 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
         )}
       </div>
 
-      {!isMinimized && <div className="module-content">{children}</div>}
+      <AnimatePresence initial={false}>
+        {!isMinimized && (
+          <motion.div
+            className="module-content"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
+            transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+            style={{ overflow: 'hidden' }}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

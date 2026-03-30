@@ -278,6 +278,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
 
   const handleUpdate = async (updatedEvent: CalendarEventType) => {
     try {
+      let result: { success: boolean; error?: unknown };
       if (isRecurringEvent && editScope && editScope !== 'all') {
         const parentId = selectedEvent.recurrenceParentId ||
           (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
@@ -289,14 +290,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
           // Add exception to parent and create standalone event for this occurrence
           await addRecurrenceException(parentId, instanceDate);
           const { id, recurrenceRule, isRecurring, recurrenceParentId, ...eventData } = updatedEvent;
-          await updateEvent({ ...eventData, id: `${parentId}_exc_${instanceDate}` } as CalendarEventType);
+          result = await updateEvent({ ...eventData, id: `${parentId}_exc_${instanceDate}` } as CalendarEventType);
         } else {
           // 'thisAndFuture' or 'all' — update the parent event
-          await updateEvent({ ...updatedEvent, id: parentId });
+          result = await updateEvent({ ...updatedEvent, id: parentId });
         }
       } else {
-        await updateEvent(updatedEvent);
+        result = await updateEvent(updatedEvent);
       }
+
+      if (!result.success) return;
 
       // S2: If the title changed, propagate to linked entities
       if (updatedEvent.title && updatedEvent.title !== selectedEvent.title) {

@@ -24,6 +24,7 @@ export type ShortcutAction =
   | 'settings'
   | 'print'
   | 'showShortcuts'
+  | 'toggleBulkMode'
   // Event actions
   | 'deleteEvent'
   | 'editEvent'
@@ -73,6 +74,7 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, Shortcut> = {
   settings: { key: 's', description: 'Open settings', category: 'actions' },
   print: { key: 'p', ctrl: true, description: 'Print', category: 'actions' },
   showShortcuts: { key: '?', shift: true, description: 'Show keyboard shortcuts', category: 'actions' },
+  toggleBulkMode: { key: 'b', description: 'Toggle bulk select mode', category: 'actions' },
   
   // Event actions
   deleteEvent: { key: 'Delete', description: 'Delete selected event', category: 'events' },

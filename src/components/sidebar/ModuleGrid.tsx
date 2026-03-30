@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSidebarStore } from '@/lib/store';
 import ModuleRenderer from './ModuleRenderer';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
@@ -141,20 +141,24 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
         ref={containerRef}
         className={`${isTwoColumn ? 'grid grid-cols-2 gap-4 justify-items-center' : 'flex flex-col items-center'}`}
       >
+        <AnimatePresence mode="popLayout">
         {modules.map((module, index) => (
-          <ContextMenu key={module.id}>
+          <motion.div
+            key={module.id}
+            layout
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: draggedIndex === index ? 0.5 : 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
+            transition={{ type: "spring", damping: 22, stiffness: 200, delay: index * 0.05 }}
+            draggable={!isReadOnly}
+            onDragStart={() => !isReadOnly && handleDragStart(index)}
+            onDragOver={(e) => !isReadOnly && handleDragOver(e, index)}
+            onDrop={() => !isReadOnly && handleDrop(index)}
+            onDragEnd={handleDragEnd}
+          >
+          <ContextMenu>
             <ContextMenuTrigger asChild>
-              <motion.div
-                draggable={!isReadOnly}
-                onDragStart={() => !isReadOnly && handleDragStart(index)}
-                onDragOver={(e) => !isReadOnly && handleDragOver(e, index)}
-                onDrop={() => !isReadOnly && handleDrop(index)}
-                onDragEnd={handleDragEnd}
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: draggedIndex === index ? 0.5 : 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", damping: 22, stiffness: 200, delay: index * 0.05 }}
-                className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50' : ''}`}
-              >
+              <div className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50 rounded-2xl' : ''}`}>
                 <ModuleRenderer
                   module={module}
                   index={index}
@@ -169,7 +173,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   isReadOnly={isReadOnly}
                   contentReadOnly={contentReadOnly}
                 />
-              </motion.div>
+              </div>
             </ContextMenuTrigger>
 
             {!isReadOnly && (
@@ -214,7 +218,9 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
               </ContextMenuContent>
             )}
           </ContextMenu>
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
 
       {shareSheet && (

@@ -1,5 +1,5 @@
 
-import React, { lazy, Suspense, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { wrapTransition } from '@/lib/animations';
@@ -26,8 +26,13 @@ import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
 import { CountdownPanel } from '@/components/countdown/CountdownPanel';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
+import { KeyboardShortcutsDialog } from '@/components/keyboard/KeyboardShortcutsDialog';
+import { useViewStore, useDateStore } from '@/lib/store';
+import { useBulkSelectionStore } from '@/lib/stores/bulk-selection-store';
+import dayjs from 'dayjs';
 import { TranslationProvider } from '@/i18n/TranslationProvider';
 import '@/styles/ai-animations.css';
+import { sounds } from '@/lib/sounds';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
@@ -57,6 +62,11 @@ const PageLoader = () => (
 const AppRoutes = () => {
   const location = useLocation();
   const isAuthPage = location.pathname === '/auth';
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const { selectedView, setView } = useViewStore();
+  const { userSelectedDate, setDate, selectedMonthIndex, setMonth } = useDateStore();
+  const { isBulkMode, enableBulkMode, disableBulkMode } = useBulkSelectionStore();
 
   // Global notification manager for alarms and reminders
   // Must be inside AuthProvider to access useAuth
@@ -64,6 +74,69 @@ const AppRoutes = () => {
 
   // Mally Actions — detects upcoming events with action sequences
   useActionScheduler();
+
+  // Open shortcuts dialog via custom event (from header button) or ? key
+  useEffect(() => {
+    const onEvent = () => setShortcutsOpen(true);
+    window.addEventListener('open-shortcuts', onEvent);
+    return () => window.removeEventListener('open-shortcuts', onEvent);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (!isInput && e.key === '?') setShortcutsOpen(prev => !prev);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Mechanical typing sound — plays on printable keystrokes inside text inputs
+  useEffect(() => {
+    const onTypingKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (!isInput) return;
+      // Only fire on printable characters (single char keys) + Backspace
+      if (e.key === 'Backspace' || (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+        sounds.play("typingKey");
+      }
+    };
+    window.addEventListener('keydown', onTypingKey);
+    return () => window.removeEventListener('keydown', onTypingKey);
+  }, []);
+
+  // Calendar keyboard shortcuts: views (M/W/D), navigation (J/K), today (T), bulk (B)
+  useEffect(() => {
+    if (isAuthPage) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isInput || e.ctrlKey || e.metaKey || e.altKey) return;
+      switch (e.key.toLowerCase()) {
+        case 'm': setView('Month'); break;
+        case 'w': setView('Week'); break;
+        case 'd': setView('Day'); break;
+        case 't': setDate(dayjs()); setMonth(dayjs().month()); break;
+        case 'j':
+          if (selectedView === 'Month') setMonth(selectedMonthIndex + 1);
+          else if (selectedView === 'Week') setDate(userSelectedDate.add(1, 'week'));
+          else if (selectedView === 'Day') setDate(userSelectedDate.add(1, 'day'));
+          break;
+        case 'k':
+          if (selectedView === 'Month') setMonth(selectedMonthIndex - 1);
+          else if (selectedView === 'Week') setDate(userSelectedDate.subtract(1, 'week'));
+          else if (selectedView === 'Day') setDate(userSelectedDate.subtract(1, 'day'));
+          break;
+        case 'b':
+          if (isBulkMode) disableBulkMode(); else enableBulkMode();
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isAuthPage, selectedView, userSelectedDate, selectedMonthIndex, isBulkMode, setView, setDate, setMonth, enableBulkMode, disableBulkMode]);
 
   return (
     <ThemeProvider isAuthPage={isAuthPage}>
@@ -107,6 +180,7 @@ const AppRoutes = () => {
       {!isAuthPage && <ConsentBanner />}
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}
+      {!isAuthPage && <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
       <Toaster />
     </ThemeProvider>
   );

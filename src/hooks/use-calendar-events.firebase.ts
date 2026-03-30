@@ -140,6 +140,9 @@ export function useCalendarEvents() {
       googleEventId: firebaseEvent.googleEventId || undefined,
       source: (firebaseEvent.source as 'malleabite' | 'google') || undefined,
       userId: firebaseEvent.userId,
+
+      // Mally Actions
+      mallyActions: firebaseEvent.mallyActions || undefined,
     };
   };
 

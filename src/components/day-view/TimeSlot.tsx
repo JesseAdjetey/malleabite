@@ -5,6 +5,7 @@ import CalendarEvent from "../calendar/CalendarEvent";
 import SelectableCalendarEvent from "../calendar/SelectableCalendarEvent";
 import { useEventStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { useBulkSelectionStore } from "@/lib/stores/bulk-selection-store";
 import { toast } from "sonner";
 import { getTimeInfo } from "../calendar/event-utils/touch-handlers";
 import { nanoid } from "nanoid";
@@ -39,6 +40,7 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
 }) => {
   const { openEventSummary, toggleEventLock } = useEventStore();
   const { updateEvent } = useEventCRUD();
+  const { enableBulkMode, toggleSelection } = useBulkSelectionStore();
 
   // State for drag-over visual feedback
   const [isDragOver, setIsDragOver] = useState(false);
@@ -317,7 +319,12 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!isBulkMode) {
+                if (e.shiftKey) {
+                  enableBulkMode();
+                  toggleSelection(event.id);
+                } else if (isBulkMode) {
+                  onToggleSelection(event.id);
+                } else {
                   openEventSummary(event);
                 }
               }}

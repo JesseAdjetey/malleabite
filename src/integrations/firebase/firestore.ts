@@ -118,6 +118,9 @@ export interface CalendarEvent extends BaseDocument {
   // Google Calendar 2-way sync
   googleEventId?: string;
   source?: string;
+
+  // Mally Actions — automated sequences attached to this event
+  mallyActions?: any[];
 }
 
 export interface Todo extends BaseDocument {

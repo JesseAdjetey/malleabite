@@ -1,5 +1,6 @@
 
 import React from "react";
+import { sounds } from "@/lib/sounds";
 import dayjs from "dayjs";
 import { cn } from "@/lib/utils";
 import { useViewStore } from "@/lib/store";
@@ -20,6 +21,7 @@ const DayHeader: React.FC<DayHeaderProps> = ({ userSelectedDate, isToday }) => {
   const { selectedView, setView } = useViewStore();
 
   const handleViewChange = (view: string) => {
+    sounds.play("viewSwipe");
     setView(view);
   };
 

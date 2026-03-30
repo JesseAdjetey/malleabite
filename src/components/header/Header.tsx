@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, MoreHorizontal, Settings, Undo2, Redo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, MoreHorizontal, Settings, Undo2, Redo2, Keyboard, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '@/hooks/use-subscription';
 import { Crown } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
+import { sounds } from '@/lib/sounds';
 import { useThemeStore, type Theme } from '@/lib/stores/theme-store';
 import NotificationBell from './NotificationBell';
 
@@ -49,11 +50,21 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const isPro = subscription?.isPro ?? false;
 
   const { theme, setTheme } = useThemeStore();
+  const [soundsOn, setSoundsOn] = useState(sounds.enabled);
+
+  const toggleSounds = () => {
+    const next = sounds.toggle();
+    setSoundsOn(next);
+  };
 
   const cycleTheme = () => {
     haptics.light();
     const next: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' };
-    setTheme(next[theme]);
+    const nextTheme = next[theme];
+    if (nextTheme === 'dark') sounds.play("themeNight");
+    else if (nextTheme === 'light') sounds.play("themeDay");
+    else sounds.play("themeSystem");
+    setTheme(nextTheme);
   };
 
   const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
@@ -87,6 +98,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const handlePrevClick = () => {
     haptics.selection();
+    sounds.play("viewSwipe");
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex - 1);
@@ -104,6 +116,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const handleNextClick = () => {
     haptics.selection();
+    sounds.play("viewSwipe");
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex + 1);
@@ -230,7 +243,31 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
               </motion.button>
             )}
+            <motion.button
+              onClick={toggleSounds}
+              whileTap={{ scale: 0.85 }}
+              whileHover={{ scale: 1.1 }}
+              transition={{ type: "spring", damping: 18, stiffness: 380 }}
+              className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
+              title={soundsOn ? "Sounds: On" : "Sounds: Off"}
+            >
+              {soundsOn
+                ? <Volume2 className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+                : <VolumeX className="h-4 w-4 text-gray-400 dark:text-gray-500" />}
+            </motion.button>
             <NotificationBell />
+            {!isMobile && (
+              <motion.button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
+                whileTap={{ scale: 0.85 }}
+                whileHover={{ scale: 1.1 }}
+                transition={{ type: "spring", damping: 18, stiffness: 380 }}
+                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
+                title="Keyboard shortcuts (?)"
+              >
+                <Keyboard className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+              </motion.button>
+            )}
             {!isMobile && <SettingsNav />}
 
             {/* Mobile: overflow menu */}

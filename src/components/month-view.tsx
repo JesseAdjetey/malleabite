@@ -1,6 +1,7 @@
 // src/components/month-view.tsx
 
 import React, { Fragment, useState, useEffect, useMemo } from "react";
+import { sounds } from "@/lib/sounds";
 import MonthViewBox from "@/components/month-view-box";
 import { useDateStore, useEventStore, useViewStore } from "@/lib/store";
 import {
@@ -36,6 +37,7 @@ const MonthView = () => {
   const isMobile = useIsMobile();
 
   const handleViewChange = (view: string) => {
+    sounds.play("viewSwipe");
     setView(view);
   };
   const {

@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSidebarPages, useSharedPageModules } from '@/hooks/use-sidebar-pages';
 import { ModuleType } from '@/lib/store';
+import { sounds } from '@/lib/sounds';
 import ModuleSelector from '../modules/ModuleSelector';
 import PageHeader from './PageHeader';
 import ModuleGrid from './ModuleGrid';
@@ -27,6 +29,7 @@ const SideBar = () => {
 
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const [pageShareSheetOpen, setPageShareSheetOpen] = useState(false);
+  const [slideDir, setSlideDir] = useState<1 | -1>(1);
 
   const isSharedPage = !!activePage?.sharedFromPageId;
   // Structural lock: all shared pages (viewer + editor) can't rename/delete/reorder modules
@@ -45,12 +48,14 @@ const SideBar = () => {
 
   const handlePrevPage = () => {
     if (currentPageIndex > 0) {
+      setSlideDir(-1);
       setActivePageId(pages[currentPageIndex - 1].id);
     }
   };
 
   const handleNextPage = () => {
     if (currentPageIndex < pages.length - 1) {
+      setSlideDir(1);
       setActivePageId(pages[currentPageIndex + 1].id);
     }
   };
@@ -67,6 +72,7 @@ const SideBar = () => {
       case 'invites': defaultTitle = 'Event Invites'; break;
     }
 
+    sounds.play("moduleAdd");
     addModule(activePageId, { type: moduleType, title: defaultTitle });
   };
 
@@ -94,6 +100,7 @@ const SideBar = () => {
     const title = 'New Page';
     const result = await createPage(title);
     if (result.success && result.pageId) {
+      setSlideDir(1);
       setActivePageId(result.pageId);
     }
   };
@@ -136,25 +143,42 @@ const SideBar = () => {
       {/* Page modules with responsive grid */}
       <div
         ref={sidebarContentRef}
-        className="flex-1 overflow-y-auto p-4 pt-0"
+        className="flex-1 overflow-hidden relative"
       >
-        {/* Hide module selector for shared pages — owner controls page structure */}
-        {!isSharedPage && <ModuleSelector onSelect={handleAddModule} />}
+        <AnimatePresence mode="popLayout" custom={slideDir} initial={false}>
+          <motion.div
+            key={activePageId}
+            custom={slideDir}
+            variants={{
+              enter: (dir: number) => ({ x: `${dir * 100}%`, opacity: 0 }),
+              center: { x: 0, opacity: 1 },
+              exit: (dir: number) => ({ x: `${dir * -60}%`, opacity: 0 }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+            className="absolute inset-0 overflow-y-auto p-4 pt-0"
+          >
+            {/* Hide module selector for shared pages — owner controls page structure */}
+            {!isSharedPage && <ModuleSelector onSelect={handleAddModule} />}
 
-        {/* Module container */}
-        <ModuleGrid
-          modules={modulesToRender}
-          onRemoveModule={handleRemoveModule}
-          onUpdateModuleTitle={handleUpdateModuleTitle}
-          onReorderModules={handleReorderModules}
-          onMoveModule={handleMoveModule}
-          moveTargets={pages
-            .filter(p => p.id !== activePageId)
-            .map(p => ({ id: p.id, title: p.title }))}
-          pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
-          isReadOnly={isStructureReadOnly}
-          contentReadOnly={isContentReadOnly}
-        />
+            {/* Module container */}
+            <ModuleGrid
+              modules={modulesToRender}
+              onRemoveModule={handleRemoveModule}
+              onUpdateModuleTitle={handleUpdateModuleTitle}
+              onReorderModules={handleReorderModules}
+              onMoveModule={handleMoveModule}
+              moveTargets={pages
+                .filter(p => p.id !== activePageId)
+                .map(p => ({ id: p.id, title: p.title }))}
+              pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
+              isReadOnly={isStructureReadOnly}
+              contentReadOnly={isContentReadOnly}
+            />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Minimal Page Navigation Footer */}
@@ -163,7 +187,7 @@ const SideBar = () => {
           {pages.map((page, index) => (
             <button
               key={page.id}
-              onClick={() => setActivePageId(page.id)}
+              onClick={() => { sounds.play("pageSwitch"); setSlideDir(index > currentPageIndex ? 1 : -1); setActivePageId(page.id); }}
               className={cn(
                 "w-2.5 h-2.5 rounded-full transition-all duration-300",
                 index === currentPageIndex

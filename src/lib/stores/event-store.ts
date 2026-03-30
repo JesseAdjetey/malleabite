@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import dayjs from "dayjs";
 import { CalendarEventType } from "./types";
+import { sounds } from "@/lib/sounds";
 
 type EventStore = {
   events: CalendarEventType[];
@@ -101,6 +102,7 @@ export const useEventStore = create<EventStore>()(
             return;
           }
           
+          sounds.play("eventOpen");
           console.log('🔍 openEventSummary called with event:', event);
           console.log('🔍 Event fields:', {
             id: event.id,

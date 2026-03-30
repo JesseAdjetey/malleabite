@@ -7,6 +7,7 @@ import { useViewStore, useDateStore } from "@/lib/store";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { haptics } from "@/lib/haptics";
+import { sounds } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 import {
@@ -74,6 +75,7 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
         : `${dayCount} Days`;
 
   const handleViewChange = (view: string) => {
+    sounds.play("viewSwipe");
     setView(view);
   };
 

@@ -3,6 +3,7 @@
 // Orchestrates GroupSection, GroupManager, and AddCalendarFlow.
 
 import React, { useState, useCallback, useMemo } from 'react';
+import { sounds } from '@/lib/sounds';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -473,7 +474,7 @@ const CalendarDropdown: React.FC = () => {
 
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={(v) => { if (v) sounds.play("drawerOpen"); setOpen(v); }}>
         <PopoverTrigger asChild>
           <motion.button
             whileHover={{ scale: 1.02 }}

@@ -6,7 +6,15 @@
       "Bash(ls /Users/jesseadjetey/Documents/GitHub/malleabite/firebase*)",
       "Bash(firebase deploy --only firestore:rules)",
       "Bash(firebase deploy --only firestore:indexes)",
-      "Bash(firebase deploy --only firestore:rules,firestore:indexes)"
+      "Bash(firebase deploy --only firestore:rules,firestore:indexes)",
+      "Bash(git add src/components/actions/ src/hooks/use-action-scheduler.ts src/lib/stores/action-runner-store.ts src/App.tsx src/components/calendar/CalendarEvent.tsx src/components/calendar/EnhancedEventForm.tsx src/components/calendar/event-components/EventIndicators.tsx src/hooks/use-calendar-events.ts src/hooks/use-mally-actions.ts src/lib/stores/types.ts firebase/functions/src/index.ts)",
+      "Bash(git commit:*)",
+      "Bash(git push origin main)",
+      "Bash(npm run build)",
+      "Bash(firebase deploy --only functions)",
+      "Bash(git add src/integrations/firebase/firestore.ts src/hooks/use-calendar-events.firebase.ts src/contexts/EventDataProvider.tsx)",
+      "Bash(git pull --rebase origin main)",
+      "Bash(npx skills add remotion-dev/skills)"
     ]
   }
 }

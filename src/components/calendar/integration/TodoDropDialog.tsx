@@ -27,7 +27,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useCalendarGroups } from '@/hooks/use-calendar-groups';
-import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
+import { PERSONAL_CALENDAR_ID, useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { GroupIcon } from '@/types/calendar';
 import dayjs from 'dayjs';
 
@@ -102,6 +102,7 @@ const TodoDropDialog: React.FC<TodoDropDialogProps> = ({
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
   const { groups, getGroupCalendars } = useCalendarGroups();
+  const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
 
   const sortedGroups = useMemo(
     () => [...groups].sort((a, b) => a.order - b.order),
@@ -112,7 +113,20 @@ const TodoDropDialog: React.FC<TodoDropDialogProps> = ({
   useEffect(() => {
     if (open) {
       setKeepAsTodo(true);
-      setSelectedCalendarIds([PERSONAL_CALENDAR_ID]);
+
+      // Default selection = currently visible calendars (what the user has checked in the dropdown)
+      const visibleIds = getVisibleCalendarIds();
+      const available = new Set<string>([PERSONAL_CALENDAR_ID]);
+      groups.forEach(g =>
+        getGroupCalendars(g.id).forEach(cal => {
+          if (cal.id !== PERSONAL_CALENDAR_ID && cal.name?.toLowerCase() !== 'personal') {
+            available.add(cal.id);
+          }
+        })
+      );
+      const defaults = visibleIds.filter(id => available.has(id));
+      setSelectedCalendarIds(defaults.length > 0 ? defaults : [PERSONAL_CALENDAR_ID]);
+
       const groupsWithCals = groups
         .filter(g => getGroupCalendars(g.id).length > 0)
         .map(g => g.id);
@@ -251,7 +265,10 @@ const TodoDropDialog: React.FC<TodoDropDialogProps> = ({
 
                 {/* Connected calendars grouped */}
                 {sortedGroups.map(group => {
-                  const groupCals = getGroupCalendars(group.id);
+                  // Exclude the built-in Personal calendar — it's already shown above as a top-level row
+                  const groupCals = getGroupCalendars(group.id).filter(
+                    cal => cal.id !== PERSONAL_CALENDAR_ID && cal.name?.toLowerCase() !== 'personal'
+                  );
                   if (groupCals.length === 0) return null;
 
                   const isExpanded = expandedGroups.includes(group.id);

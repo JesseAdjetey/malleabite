@@ -4,6 +4,7 @@ import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import { formatMinutesAsTime, getTimeInMinutes } from "../event-utils/touch-handlers";
 import { nanoid } from "nanoid";
+import { sounds } from "@/lib/sounds";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 
 export const handleDragOver = (e: React.DragEvent) => {
@@ -31,7 +32,8 @@ export const handleDrop = (
   onRecurringEventDrop?: (result: RecurringDropResult) => void
 ) => {
   e.preventDefault();
-  
+  sounds.play("calendarDrop");
+
   // Check if Alt/Option was held during drop (duplicate mode)
   const isDuplicateMode = e.altKey;
   

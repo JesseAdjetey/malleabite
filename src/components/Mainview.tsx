@@ -18,6 +18,8 @@ import RippleBorder from "@/components/ui/RippleBorder";
 import { useCalendarFilterBridge } from "@/hooks/use-calendar-filter-bridge";
 import TemplateToolbar from "@/components/calendar/TemplateToolbar";
 import MobileModuleSheet from "@/components/mobile/MobileModuleSheet";
+import { ShortcutsTipStrip } from "@/components/calendar/ShortcutsTipStrip";
+import { sounds } from "@/lib/sounds";
 
 const Mainview = () => {
   // Bridge calendar groups → legacy filter store so views auto-filter
@@ -31,6 +33,7 @@ const Mainview = () => {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const isTouchDevice = useRef(false);
+  const lastTickX = useRef(0);
   const isMobile = useIsMobile();
   const [isCrossingBoundary, setIsCrossingBoundary] = useState(false);
   const crossingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,6 +94,10 @@ const Mainview = () => {
     let newWidth = e.clientX;
     newWidth = Math.max(MIN_WIDTH, Math.min(newWidth, maxWidth));
     setSidebarWidth(newWidth);
+    if (Math.abs(newWidth - lastTickX.current) >= 20) {
+      sounds.play("dragTick");
+      lastTickX.current = newWidth;
+    }
   };
 
   const stopDrag = () => {
@@ -223,22 +230,25 @@ const Mainview = () => {
             </div>
           ) : (
             /* ── Desktop: calendar fills remaining space ── */
-            <div className="overflow-y-auto flex-1 touch-pan-y">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={selectedView}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  {selectedView === "Month" && <MonthView />}
-                  {selectedView === "Day" && <DayView />}
-                  {selectedView === "Week" && <WeekView />}
-                </motion.div>
-              </AnimatePresence>
-            </div>
+            <>
+              <div className="overflow-y-auto flex-1 touch-pan-y">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedView}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="h-full"
+                  >
+                    {selectedView === "Month" && <MonthView />}
+                    {selectedView === "Day" && <DayView />}
+                    {selectedView === "Week" && <WeekView />}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+              <ShortcutsTipStrip />
+            </>
           )}
         </div>
       </div>

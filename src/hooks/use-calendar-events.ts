@@ -156,6 +156,11 @@ export function useCalendarEvents() {
       // Event type
       eventType: data.eventType || 'default',
 
+      // Google Calendar 2-way sync — must be preserved so updateEventWithSync
+      // can route Google-owned events through the bridge instead of Firestore.
+      googleEventId: data.googleEventId || undefined,
+      source: (data.source as 'malleabite' | 'google') || undefined,
+
       // Archiving support
       isArchived: isArchived,
       folderName: data.folderName || undefined,

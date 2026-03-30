@@ -6,7 +6,7 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe } from 'lucide-react';
+import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useSettingsStore, MALLY_VOICE_OPTIONS } from '@/lib/stores/settings-store';
+import { sounds } from '@/lib/sounds';
 import { useAutoTranslateSafe } from '@/i18n/TranslationProvider';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/i18n/config';
 import { GroupedList, GroupedListHeader, GroupedListItem } from '@/components/ui/grouped-list';
@@ -51,6 +52,8 @@ const Settings = () => {
     error: wakeWordError
   } = useHeyMally();
   const { aiAutoExecute, setAiAutoExecute, mallyVoice, setMallyVoice } = useSettingsStore();
+  const [soundsEnabled, setSoundsEnabled] = useState(sounds.enabled);
+  const handleToggleSounds = (val: boolean) => { sounds.setEnabled(val); setSoundsEnabled(val); };
   const { subscription } = useSubscription();
   const { theme } = useThemeStore();
   const isPro = subscription?.isPro ?? false;
@@ -189,6 +192,15 @@ const Settings = () => {
               label="Language"
               rightElement={<span className="text-caption1 text-muted-foreground">{getCurrentLangLabel()}</span>}
               onClick={() => goTo('language')}
+            />
+            <GroupedListItem
+              icon={<Volume2 className="h-4 w-4 text-indigo-500" />}
+              iconBg="bg-indigo-500/15"
+              label="UI Sounds"
+              sublabel={soundsEnabled ? 'Sound effects on' : 'Sound effects off'}
+              rightElement={
+                <Switch checked={soundsEnabled} onCheckedChange={handleToggleSounds} />
+              }
             />
             <GroupedListItem
               icon={<Mic className="h-4 w-4 text-green-500" />}

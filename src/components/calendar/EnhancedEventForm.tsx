@@ -84,7 +84,13 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
   // Calendar-style fields
   const [isAllDay, setIsAllDay] = useState(false);
-  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
+  const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>(() => {
+    // Read directly from the Zustand store (synchronous — no loading delay)
+    // so the correct calendars are shown immediately on open.
+    const visible = useCalendarFilterStore.getState().getVisibleCalendarIds()
+      .filter(id => !id.startsWith('template_'));
+    return visible.length > 0 ? visible : [PERSONAL_CALENDAR_ID];
+  });
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | undefined>(undefined);
   const [mallyActions, setMallyActions] = useState<MallyAction[]>([]);
   const [actionsExpanded, setActionsExpanded] = useState(false);
@@ -94,7 +100,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { events } = useCalendarEvents();
   const { calendars: connectedCalendars } = useCalendarGroups();
-  const getVisibleCalendarIds = useCalendarFilterStore(s => s.getVisibleCalendarIds);
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
 
   // Use either the event or initialEvent prop, whichever is provided
@@ -210,13 +215,12 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     }
   }, [isTemplateMode, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-select the first active calendar whenever none are selected; default to Personal
+  // Fallback: if the filter store was empty on mount and still no selection, default to Personal
   useEffect(() => {
     if (selectedCalendarIds.length === 0) {
-      const firstActive = connectedCalendars.find(c => c.isActive && c.id);
-      setSelectedCalendarIds([firstActive?.id || PERSONAL_CALENDAR_ID]);
+      setSelectedCalendarIds([PERSONAL_CALENDAR_ID]);
     }
-  }, [connectedCalendars, selectedCalendarIds.length]);
+  }, [selectedCalendarIds.length]);
 
   const handleSubmit = () => {
     if (!title) {
@@ -485,7 +489,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
         {/* Calendar Selection — always visible; Personal is always an option */}
         {(() => {
-          const activeConnected = connectedCalendars.filter(c => c.isActive && c.id && c.id !== PERSONAL_CALENDAR_ID);
+          const activeConnected = connectedCalendars.filter(c => c.id && c.id !== PERSONAL_CALENDAR_ID && c.name?.toLowerCase() !== 'personal');
           const allOptions: { id: string; name: string; color: string; source: string | null }[] = [
             { id: PERSONAL_CALENDAR_ID, name: 'Personal', color: '#8B5CF6', source: null },
             ...activeConnected,

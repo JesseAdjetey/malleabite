@@ -3,6 +3,7 @@ import { CalendarEventType } from "@/lib/stores/types";
 import dayjs from "dayjs";
 import { formatMinutesAsTime, getTimeInMinutes } from "@/components/calendar/event-utils/touch-handlers";
 import { nanoid } from "@/lib/utils";
+import { sounds } from "@/lib/sounds";
 import type { CreateEntityLinkInput, EntityType } from "@/lib/entity-links/types";
 
 export interface TodoDragData {
@@ -248,6 +249,7 @@ export const handleDrop = (
   options: DragHandlerOptions
 ) => {
   e.preventDefault();
+  sounds.play("calendarDrop");
 
   try {
     // Get the drag data

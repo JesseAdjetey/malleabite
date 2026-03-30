@@ -1,6 +1,7 @@
 
 import { useRef, useState } from "react";
 import { getDragData } from "@/components/calendar/event-utils/touch-handlers";
+import { sounds } from "@/lib/sounds";
 
 export function useEventDrag(event: any, isLocked: boolean = false, color: string = '') {
   const [isDragging, setIsDragging] = useState(false);
@@ -15,6 +16,7 @@ export function useEventDrag(event: any, isLocked: boolean = false, color: strin
     }
     
     setIsDragging(true);
+    sounds.play("calendarLift");
     e.dataTransfer.setData('application/json', JSON.stringify(getDragData(event, isLocked, color)));
     e.dataTransfer.effectAllowed = 'copyMove';
   };

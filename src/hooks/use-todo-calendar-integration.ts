@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import { CalendarEventType } from '@/lib/stores/types';
 import { TodoDragData, createTodoFromCalendarEvent } from '@/lib/dragdropHandlers';
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useEventCRUD } from '@/hooks/use-event-crud';
 import { useTodos } from '@/hooks/use-todos';
 import { useEisenhower } from '@/hooks/use-eisenhower';
 import { useEntityLinks } from '@/hooks/use-entity-links';
@@ -25,7 +25,7 @@ export function useTodoCalendarIntegration() {
   const [isLinkedWarningOpen, setIsLinkedWarningOpen] = useState(false);
   const [linkedEventRefs, setLinkedEventRefs] = useState<EntityRef[]>([]);
 
-  const { addEvent, updateEvent, removeEvent } = useCalendarEvents();
+  const { addEvent, updateEvent, removeEvent } = useEventCRUD();
   const { addTodo, linkTodoToEvent, deleteTodo, updateTodoTitle, unlinkTodoFromEvent } = useTodos();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
   const { link: createEntityLinkFn, unlink, getLinksFor, getLinksForFast, areLinked } = useEntityLinks();

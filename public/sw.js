@@ -67,10 +67,17 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Skip non-GET requests (POST/PUT/DELETE should never be intercepted)
+  if (request.method !== 'GET') return;
+
+  // Skip WebSocket upgrades
+  if (request.headers.get('upgrade') === 'websocket') return;
+
   // Skip cross-origin requests
-  if (url.origin !== self.location.origin) {
-    return;
-  }
+  if (url.origin !== self.location.origin) return;
+
+  // Skip Vite HMR, dev server internals, and browser-sync
+  if (url.pathname.startsWith('/@') || url.pathname.startsWith('/__')) return;
 
   // API requests - Network-first strategy
   if (url.pathname.startsWith('/api/') || url.hostname.includes('firebase')) {
@@ -88,12 +95,10 @@ async function cacheFirstStrategy(request, cacheName) {
     // Try cache first
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
-      console.log('[SW] Serving from cache:', request.url);
       return cachedResponse;
     }
 
     // If not in cache, fetch from network
-    console.log('[SW] Fetching from network:', request.url);
     const networkResponse = await fetch(request);
 
     // Cache the new response

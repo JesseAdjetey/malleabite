@@ -47,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { mallyTTS, unlockAudioContext } from "@/lib/ai/tts-service";
 import { speechService } from "@/lib/ai/speech-recognition-service";
 import { deepgramSTT } from "@/lib/ai/deepgram-stt-service";
-import { deepgramAgent, buildAgentTools } from "@/lib/ai/deepgram-voice-agent-service";
+import { mallyVapi } from "@/lib/ai/vapi-service";
 import { haptics } from "@/lib/haptics";
 import { MentionPopover } from "./MentionPopover";
 import { MentionTagBar } from "./MentionTagBar";
@@ -515,7 +515,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setOverlayResponse('');
     setOverlayProcessing(false);
     setIsSpeaking(false);
-    deepgramAgent.stop();
+    mallyVapi.stop();
     deepgramSTT.stop();
     if (isRecording) {
       speechService.stopListening();
@@ -776,8 +776,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Interrupt Mally mid-speech: stop TTS and start listening immediately
   const handleOverlayInterrupt = useCallback(() => {
-    if (deepgramAgent.isActive) {
-      // Deepgram Agent handles barge-in natively — user just speaks
+    if (mallyVapi.isActive) {
+      // VAPI handles barge-in natively — user just speaks
       return;
     }
     mallyTTS.stop();
@@ -786,7 +786,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     startOverlayListening();
   }, [startOverlayListening]);
 
-  // Start a Deepgram Voice Agent session — full-duplex with native barge-in
+  // Start a VAPI voice session — full-duplex with native barge-in and pre-warm
   const startVoiceAgentSession = useCallback(async () => {
     const context = buildContext();
     const now = new Date();
@@ -825,8 +825,10 @@ RULES:
 - Use ISO8601 datetime format for tool parameters
 - Be proactive: suggest time slots, flag conflicts, offer alternatives`;
 
-    deepgramAgent.setCallbacks({
-      onUserTranscript: (text) => setOverlayTranscript(text),
+    mallyVapi.setCallbacks({
+      onUserTranscript: (text, isFinal) => {
+        if (!isFinal) setOverlayTranscript(text);
+      },
       onAssistantTranscript: (text) => {
         setOverlayProcessing(false);
         setOverlayResponse(text);
@@ -836,22 +838,21 @@ RULES:
         setOverlayTranscript('');
         setOverlayProcessing(false);
       },
-      onAgentSpeakingStart: () => {
+      onUserSpeechEnd: () => {
         setIsRecording(false);
-        setOverlayProcessing(false);
-      },
-      onAgentSpeakingEnd: () => {
-        // Agent finished speaking — ready for next input
+        setOverlayProcessing(true);
       },
       onCallStart: () => {
-        console.log('[Mally] Voice agent connected');
+        console.log('[Mally] VAPI session connected');
+        setOverlayProcessing(false);
       },
       onCallEnd: () => {
-        console.log('[Mally] Voice agent ended');
+        console.log('[Mally] VAPI session ended');
         closeVoiceOverlay();
+        // Re-warm for next activation
+        setTimeout(() => mallyVapi.preWarm(mallyVoice), 1000);
       },
       onToolCall: async (name, args) => {
-        // Real-time data tools
         if (name === 'get_weather') {
           const result = await getWeather(args.location);
           return result ? formatWeather(result) : `Couldn't get weather for "${args.location}".`;
@@ -870,21 +871,20 @@ RULES:
         return ok ? 'Done.' : 'Failed.';
       },
       onError: (err) => {
-        console.error('[Mally] Voice agent runtime error:', err);
+        console.error('[Mally] VAPI error:', err);
       },
     });
 
-    deepgramAgent.onSpeakingChange((speaking) => setIsSpeaking(speaking));
+    mallyVapi.onSpeakingChange((speaking) => setIsSpeaking(speaking));
 
     try {
-      await deepgramAgent.start({
+      await mallyVapi.startSession({
         systemPrompt,
         firstMessage: 'Hey! What do you need?',
-        tools: buildAgentTools(),
-        voiceModel: mallyVoice,
+        voiceId: mallyVoice,
       });
     } catch (err) {
-      console.error('[Mally] Voice agent failed, falling back:', err);
+      console.error('[Mally] VAPI session failed, falling back:', err);
       startOverlayListening();
     }
   }, [buildContext, executeAction, closeVoiceOverlay, startOverlayListening]);
@@ -907,8 +907,8 @@ RULES:
       pauseWakeWord?.();
       overlayWakePausedRef.current = true;
 
-      if (deepgramAgent.isAvailable) {
-        // ── Deepgram Voice Agent: full-duplex, native barge-in, Nova-2 STT + GPT-4o-mini + Aura TTS ──
+      if (mallyVapi.isAvailable) {
+        // ── VAPI: full-duplex, native barge-in, pre-warmed WebRTC ──
         await speechService.ensureStopped(100);
         startVoiceAgentSession();
       } else {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCalendarEvents } from './use-calendar-events';
 import { CalendarEventType } from '@/lib/stores/types';
 
@@ -36,14 +36,23 @@ export function useCountdownEvents() {
   const { events } = useCalendarEvents();
   const [countdowns, setCountdowns] = useState<CountdownEvent[]>([]);
 
+  // Keep a stable ref to the filtered event list so the 1-second interval
+  // does NOT need to be recreated every time `events` changes.
+  // Without this, setCountdowns() → re-render → effect teardown/setup → repeat every second.
+  const countdownEventsRef = useRef<CalendarEventType[]>([]);
+
+  // Update the ref whenever the events array changes (but don't restart the ticker)
   useEffect(() => {
-    const countdownEvents = (events ?? []).filter(
+    countdownEventsRef.current = (events ?? []).filter(
       (e) => e.countdownEnabled && new Date(e.startsAt).getTime() > Date.now()
     );
+  }, [events]);
 
+  // Single long-lived 1-second interval — reads from the ref, never restarts
+  useEffect(() => {
     const compute = () => {
       const results: CountdownEvent[] = [];
-      for (const event of countdownEvents) {
+      for (const event of countdownEventsRef.current) {
         const c = computeCountdown(event);
         if (c) results.push(c);
       }
@@ -52,9 +61,9 @@ export function useCountdownEvents() {
     };
 
     compute();
-    const interval = setInterval(compute, 1000); // update every second
+    const interval = setInterval(compute, 1000);
     return () => clearInterval(interval);
-  }, [events]);
+  }, []); // ← empty deps: mount/unmount only
 
   return countdowns;
 }

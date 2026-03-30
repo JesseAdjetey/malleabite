@@ -16,6 +16,9 @@ export { synthesizeSpeech } from './tts';
 // Export scheduling streaming handler
 export { processSchedulingStream } from './scheduling';
 
+// Export VAPI custom LLM endpoint (Gemini wrapped in OpenAI-compatible SSE)
+export { vapiLlm } from './vapi-llm';
+
 // Export WhatsApp Bot handlers
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 

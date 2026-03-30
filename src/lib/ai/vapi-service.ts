@@ -38,6 +38,8 @@ export interface VapiSessionOptions {
   systemPrompt: string;
   /** First message Mally says when the call starts */
   firstMessage?: string;
+  /** VAPI built-in voiceId (e.g. 'Lily', 'Elliot'). Defaults to 'Lily'. */
+  voiceId?: string;
 }
 
 // ─── Mally Tool Definitions ──────────────────────────────────────────────────
@@ -566,17 +568,12 @@ class MallyVapiService {
 
     v.on('error', (err: any) => {
       if (this._isPreWarming || this._preWarmed) {
-        console.warn('[MallyVapi] Pre-warm error (non-critical):', err);
-        // Cleanup and try again later — set intentional so call-end doesn't double-schedule
+        console.warn('[MallyVapi] Pre-warm error (non-critical) — will cold-start on next activation:', err?.type);
         this._intentionalStop = true;
         this.forceCleanup();
-        // Only re-schedule if no session is starting
-        if (!this._startingSession) {
-          setTimeout(() => this.preWarm(), 5000);
-        }
         return;
       }
-      console.error('[MallyVapi] Error:', err);
+      console.error('[MallyVapi] Error type:', err?.type, '| stage:', err?.stage, '| error:', err?.error?.message ?? err?.error?.error ?? JSON.stringify(err?.error));
       this.callbacks.onError?.(err);
     });
   }
@@ -646,7 +643,7 @@ class MallyVapiService {
    * When startSession() is called next, connection is already live → instant activation.
    * Call this: on user login, after each session ends.
    */
-  async preWarm(): Promise<void> {
+  async preWarm(voiceId = 'Lily'): Promise<void> {
     if (!this.isAvailable) return;
     // If already pre-warming or pre-warmed, no-op
     if (this._isPreWarming || this._preWarmed) return;
@@ -665,19 +662,25 @@ class MallyVapiService {
     const vapi = this.ensureVapi();
 
     try {
+      const customLlmUrl = import.meta.env.VITE_VAPI_LLM_URL as string | undefined;
       await vapi.start({
         name: 'Mally-Standby',
         transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o',  // upgraded from gpt-4o-mini
-          // Full tools pre-loaded — so they're instantly available on activation
-          tools: buildMallyTools(),
-          messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
-          temperature: 0.7,
-          maxTokens: 300,
-        },
-        voice: { provider: 'vapi', voiceId: 'Elliot' },
+        model: customLlmUrl
+          ? {
+              provider: 'custom-llm',
+              url: customLlmUrl,
+              messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
+            }
+          : {
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              tools: buildMallyTools(),
+              messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
+              temperature: 0.7,
+              maxTokens: 300,
+            },
+        voice: { provider: 'vapi', voiceId },
         silenceTimeoutSeconds: 120, // Stay alive for up to 2 min
         maxDurationSeconds: 180,
         backgroundSound: 'off',
@@ -777,20 +780,27 @@ class MallyVapiService {
         await new Promise(r => setTimeout(r, 300));
       }
 
+      const customLlmUrl = import.meta.env.VITE_VAPI_LLM_URL as string | undefined;
       const vapi = this.ensureVapi();
       await vapi.start({
         name: 'Mally',
         ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
         transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o',  // upgraded from gpt-4o-mini
-          messages: [{ role: 'system', content: options.systemPrompt }],
-          tools: buildMallyTools(),
-          temperature: 0.7,
-          maxTokens: 300,
-        },
-        voice: { provider: 'vapi', voiceId: 'Elliot' },
+        model: customLlmUrl
+          ? {
+              provider: 'custom-llm',
+              url: customLlmUrl,
+              messages: [{ role: 'system', content: options.systemPrompt }],
+            }
+          : {
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              messages: [{ role: 'system', content: options.systemPrompt }],
+              tools: buildMallyTools(),
+              temperature: 0.7,
+              maxTokens: 300,
+            },
+        voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
         silenceTimeoutSeconds: 30,
         maxDurationSeconds: 300,
         backgroundSound: 'off',
@@ -800,7 +810,7 @@ class MallyVapiService {
         ],
       } as any);
     } catch (err: any) {
-      console.error('[MallyVapi] Failed to start session:', err);
+      console.error('[MallyVapi] Failed to start session:', JSON.stringify(err, null, 2));
       this.callbacks.onError?.(err);
       throw err;
     } finally {

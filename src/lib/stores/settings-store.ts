@@ -3,24 +3,21 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface MallyVoiceOption {
-  id: string;       // Deepgram Aura model id
+  id: string;       // VAPI built-in voiceId
   label: string;
   gender: 'female' | 'male';
   accent?: string;
 }
 
 export const MALLY_VOICE_OPTIONS: MallyVoiceOption[] = [
-  { id: 'aura-asteria-en',  label: 'Asteria',  gender: 'female' },
-  { id: 'aura-luna-en',     label: 'Luna',     gender: 'female' },
-  { id: 'aura-stella-en',   label: 'Stella',   gender: 'female' },
-  { id: 'aura-athena-en',   label: 'Athena',   gender: 'female', accent: 'British' },
-  { id: 'aura-hera-en',     label: 'Hera',     gender: 'female' },
-  { id: 'aura-orion-en',    label: 'Orion',    gender: 'male' },
-  { id: 'aura-arcas-en',    label: 'Arcas',    gender: 'male' },
-  { id: 'aura-perseus-en',  label: 'Perseus',  gender: 'male' },
-  { id: 'aura-angus-en',    label: 'Angus',    gender: 'male',   accent: 'Irish' },
-  { id: 'aura-helios-en',   label: 'Helios',   gender: 'male',   accent: 'British' },
-  { id: 'aura-zeus-en',     label: 'Zeus',     gender: 'male' },
+  { id: 'Lily',     label: 'Lily',     gender: 'female' },
+  { id: 'Savannah', label: 'Savannah', gender: 'female' },
+  { id: 'Hana',     label: 'Hana',     gender: 'female' },
+  { id: 'Neha',     label: 'Neha',     gender: 'female' },
+  { id: 'Elliot',   label: 'Elliot',   gender: 'male' },
+  { id: 'Rohan',    label: 'Rohan',    gender: 'male' },
+  { id: 'Spencer',  label: 'Spencer',  gender: 'male' },
+  { id: 'Cole',     label: 'Cole',     gender: 'male' },
 ];
 
 interface SettingsState {
@@ -46,7 +43,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAiAutoExecute: (value) => set({ aiAutoExecute: value }),
       defaultTodoListId: null,
       setDefaultTodoListId: (id) => set({ defaultTodoListId: id }),
-      mallyVoice: 'aura-asteria-en',
+      mallyVoice: 'Lily',
       setMallyVoice: (voice) => set({ mallyVoice: voice }),
     }),
     {

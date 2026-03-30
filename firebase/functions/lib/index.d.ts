@@ -1,6 +1,7 @@
 export { stripeWebhook, createCheckoutSession, createPortalSession, } from './stripe-webhooks';
 export { synthesizeSpeech } from './tts';
 export { processSchedulingStream } from './scheduling';
+export { vapiLlm } from './vapi-llm';
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 export { onGroupMeetUpdated, confirmGroupMeetSlot } from './group-meets';
 export { getGoogleCalendarAuthUrl, googleCalendarOAuthCallback, refreshGoogleCalendarAccessToken, listGoogleCalendarsForAccount, } from './google-calendar-oauth';

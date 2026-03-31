@@ -71,7 +71,7 @@ const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
     if (!loading && !error) {
       const signatureStartedAt = performance.now();
       const currentKeys = mergedEvents.map(
-        (event) => `${event.id}:${event.startsAt || ''}:${event.endsAt || ''}:${event.calendarId || ''}:${event.mallyActions?.length ?? 0}`
+        (event) => `${event.id}:${event.startsAt || ''}:${event.endsAt || ''}:${event.calendarId || ''}:${event.mallyActions?.length ?? 0}:${event.title}:${event.color || ''}:${event.isLocked ? 1 : 0}:${event.hasAlarm ? 1 : 0}:${event.hasReminder ? 1 : 0}:${event.description || ''}`
       );
       const signatureDuration = performance.now() - signatureStartedAt;
 

@@ -19,7 +19,6 @@ import TodoDropDialog from "@/components/calendar/integration/TodoDropDialog";
 import TodoLinkedWarningDialog from "@/components/calendar/integration/TodoLinkedWarningDialog";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { DayAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 
 const DayView = () => {
@@ -231,7 +230,7 @@ const DayView = () => {
       />
 
       <div className="mx-2 mb-2 rounded-2xl overflow-hidden cursor-glow">
-        <ScrollArea className="h-[calc(100vh-170px)]">
+        <div className="h-[calc(100vh-170px)] overflow-y-auto">
           <TimeSlotsGrid
             userSelectedDate={userSelectedDate}
             currentTime={currentTime}
@@ -244,7 +243,7 @@ const DayView = () => {
             isSelected={isSelected}
             onToggleSelection={toggleSelection}
           />
-        </ScrollArea>
+        </div>
       </div>
       <AddEventButton />
 

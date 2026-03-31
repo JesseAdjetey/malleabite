@@ -6,6 +6,9 @@ import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePomodoroStore, TimerMode } from '@/lib/stores/pomodoro-store';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 
 interface PomodoroModuleProps {
   title?: string;
@@ -26,6 +29,7 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
   isDragging = false,
   instanceId
 }) => {
+  const { user } = useAuth();
   const {
     getInstance, ensureInstance,
     setWorkDuration, setBreakTime, setFocusTarget,
@@ -65,6 +69,15 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
       }, 1000);
     } else if (timeLeft === 0 && isActive) {
       // Timer finished
+
+      // Record focus session completion to Firestore for analytics
+      if (timerMode === 'focus' && user?.uid) {
+        addDoc(collection(db, 'users', user.uid, 'pomodoro_sessions'), {
+          date: new Date().toISOString().substring(0, 10), // YYYY-MM-DD
+          durationMinutes: workDuration,
+          completedAt: serverTimestamp(),
+        }).catch(() => {});
+      }
 
       // Play sound
       const playNotificationSound = () => {

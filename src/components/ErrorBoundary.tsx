@@ -33,21 +33,31 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error details to console in development
     if (import.meta.env.DEV) {
       console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
 
-    // TODO: Send error to monitoring service (e.g., Sentry)
-    // if (import.meta.env.PROD) {
-    //   Sentry.captureException(error, {
-    //     contexts: {
-    //       react: {
-    //         componentStack: errorInfo.componentStack
-    //       }
-    //     }
-    //   });
-    // }
+    // Report to error monitoring in production
+    if (import.meta.env.PROD) {
+      try {
+        // Send to a minimal error reporting endpoint or analytics
+        // Replace with Sentry/LogRocket when integrated:
+        // Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
+        const payload = {
+          message: error.message,
+          stack: error.stack?.substring(0, 500),
+          componentStack: errorInfo.componentStack?.substring(0, 500),
+          url: window.location.href,
+          ts: new Date().toISOString(),
+        };
+        // Store in sessionStorage so support can retrieve it
+        const existing = JSON.parse(sessionStorage.getItem('_errorLog') || '[]');
+        existing.push(payload);
+        sessionStorage.setItem('_errorLog', JSON.stringify(existing.slice(-10)));
+      } catch {
+        // Never let error reporting crash the app
+      }
+    }
 
     this.setState({ errorInfo });
   }

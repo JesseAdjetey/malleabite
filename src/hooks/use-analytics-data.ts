@@ -72,7 +72,8 @@ export interface TimeDistribution {
  */
 function calculateDailyMetrics(
   events: CalendarEventType[],
-  date: string
+  date: string,
+  pomodoroCounts: Record<string, number> = {}
 ): DailyAnalytics {
   const dayEvents = events.filter((e) => {
     const eventDate = dayjs(e.startsAt).format('YYYY-MM-DD');
@@ -103,7 +104,7 @@ function calculateDailyMetrics(
     date,
     eventsCompleted: dayEvents.length,
     totalEventTime,
-    pomodoroSessions: 0, // TODO: Track from Pomodoro module
+    pomodoroSessions: pomodoroCounts[date] || 0,
     tasksCompleted: dayEvents.filter((e) => e.isTodo).length,
     productiveHours: Math.round((totalEventTime / 60) * 10) / 10,
     meetingTimeMinutes: meetingTime,
@@ -116,7 +117,8 @@ function calculateDailyMetrics(
  */
 function calculateWeeklyMetrics(
   events: CalendarEventType[],
-  weekStart: Date
+  weekStart: Date,
+  pomodoroCounts: Record<string, number> = {}
 ): WeeklyAnalytics {
   const start = dayjs(weekStart).startOf('week');
   const end = start.endOf('week');
@@ -130,7 +132,7 @@ function calculateWeeklyMetrics(
   const dailyBreakdown: DailyAnalytics[] = [];
   for (let i = 0; i < 7; i++) {
     const date = start.add(i, 'day').format('YYYY-MM-DD');
-    dailyBreakdown.push(calculateDailyMetrics(events, date));
+    dailyBreakdown.push(calculateDailyMetrics(events, date, pomodoroCounts));
   }
 
   // Find most productive day
@@ -161,7 +163,7 @@ function calculateWeeklyMetrics(
     averageEventDuration,
     mostProductiveDay: mostProductiveDay.date,
     mostProductiveHour,
-    pomodoroSessions: 0, // TODO: Track from Pomodoro module
+    pomodoroSessions: dailyBreakdown.reduce((sum, d) => sum + d.pomodoroSessions, 0),
     tasksCompleted: weekEvents.filter((e) => e.isTodo).length,
     dailyBreakdown,
   };
@@ -174,6 +176,26 @@ export function useAnalyticsData() {
   const { user } = useAuth();
   const { events, loading } = useCalendarEvents();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [pomodoroCounts, setPomodoroCounts] = useState<Record<string, number>>({});
+
+  // Subscribe to pomodoro sessions for the past 5 weeks
+  useEffect(() => {
+    if (!user?.uid) return;
+    const fiveWeeksAgo = dayjs().subtract(5, 'week').format('YYYY-MM-DD');
+    const q = query(
+      collection(db, 'users', user.uid, 'pomodoro_sessions'),
+      where('date', '>=', fiveWeeksAgo)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const counts: Record<string, number> = {};
+      snapshot.docs.forEach((d) => {
+        const date = d.data().date as string;
+        counts[date] = (counts[date] || 0) + 1;
+      });
+      setPomodoroCounts(counts);
+    }, () => {});
+    return unsub;
+  }, [user?.uid]);
 
   // Calculate metrics from events
   const metrics = useMemo<ProductivityMetrics | null>(() => {
@@ -182,9 +204,9 @@ export function useAnalyticsData() {
     const today = dayjs();
     const thisWeekStart = today.startOf('week').toDate();
     const lastWeekStart = today.subtract(1, 'week').startOf('week').toDate();
-    
-    const thisWeek = calculateWeeklyMetrics(events, thisWeekStart);
-    const lastWeek = calculateWeeklyMetrics(events, lastWeekStart);
+
+    const thisWeek = calculateWeeklyMetrics(events, thisWeekStart, pomodoroCounts);
+    const lastWeek = calculateWeeklyMetrics(events, lastWeekStart, pomodoroCounts);
 
     // Monthly metrics
     const monthStart = today.startOf('month');
@@ -225,7 +247,7 @@ export function useAnalyticsData() {
         productivityChange: Math.round(productivityChange * 10) / 10,
       },
     };
-  }, [events, loading]);
+  }, [events, loading, pomodoroCounts]);
 
   // Calculate time distribution
   const timeDistribution = useMemo<TimeDistribution[]>(() => {

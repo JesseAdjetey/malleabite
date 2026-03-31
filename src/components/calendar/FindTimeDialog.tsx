@@ -16,6 +16,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { Clock, Users, ChevronLeft, ChevronRight, Check, X, Star } from 'lucide-react';
 import { useFindTime, Attendee, TimeSlot, FindTimeOptions, FindTimeResult } from '@/hooks/use-find-time';
+import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useAuth } from '@/contexts/AuthContext.firebase';
 import dayjs from 'dayjs';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +36,8 @@ export function FindTimeDialog({
   initialAttendees = [],
   initialDuration = 60,
 }: FindTimeDialogProps) {
+  const { user } = useAuth();
+  const { events: myEvents } = useCalendarEvents();
   const [attendeeEmails, setAttendeeEmails] = useState<string[]>(initialAttendees);
   const [newEmail, setNewEmail] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
@@ -42,25 +46,44 @@ export function FindTimeDialog({
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // Build attendees array for the hook (in real app, would fetch their events from server)
+  // Build attendees array — always include current user with their real events so
+  // their own schedule is respected, plus any external attendees (no event data available).
   const attendees: Attendee[] = useMemo(() => {
-    return attendeeEmails.map((email, index) => ({
+    const self: Attendee = {
+      id: 'self',
+      email: user?.email || '',
+      displayName: user?.displayName || 'You',
+      events: myEvents,
+    };
+    const external = attendeeEmails.map((email, index) => ({
       id: `attendee-${index}`,
       email,
       displayName: email.split('@')[0],
-      events: [], // In production, fetch actual events from backend
+      events: [],
     }));
-  }, [attendeeEmails]);
+    return [self, ...external];
+  }, [attendeeEmails, user, myEvents]);
 
   const { findAvailableTimes, loading, results } = useFindTime(attendees);
+
+  const [emailError, setEmailError] = useState('');
 
   // Add attendee
   const addAttendee = useCallback(() => {
     const email = newEmail.trim().toLowerCase();
-    if (email && !attendeeEmails.includes(email) && email.includes('@')) {
-      setAttendeeEmails(prev => [...prev, email]);
-      setNewEmail('');
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) return;
+    if (!emailRegex.test(email)) {
+      setEmailError('Enter a valid email address');
+      return;
     }
+    if (attendeeEmails.includes(email)) {
+      setEmailError('This email has already been added');
+      return;
+    }
+    setEmailError('');
+    setAttendeeEmails(prev => [...prev, email]);
+    setNewEmail('');
   }, [newEmail, attendeeEmails]);
 
   // Remove attendee
@@ -79,12 +102,16 @@ export function FindTimeDialog({
       excludeWeekends: true,
     };
 
-    const findResults = await findAvailableTimes(options);
-    // Flatten all slots from all days
-    const allSlots = findResults.flatMap(r => r.slots.filter(s => s.available));
-    setAvailableSlots(allSlots);
-    setHasSearched(true);
-    setSelectedSlot(null);
+    try {
+      const findResults = await findAvailableTimes(options);
+      const allSlots = findResults.flatMap(r => r.slots.filter(s => s.available));
+      setAvailableSlots(allSlots);
+      setHasSearched(true);
+      setSelectedSlot(null);
+    } catch {
+      // loading state is reset inside the hook; show toast
+      import('sonner').then(({ toast }) => toast.error('Failed to find available times. Please try again.'));
+    }
   }, [attendeeEmails, durationMinutes, currentWeek, findAvailableTimes]);
 
   // Navigate weeks
@@ -145,16 +172,18 @@ export function FindTimeDialog({
                   type="email"
                   placeholder="Add email"
                   value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
+                  onChange={(e) => { setNewEmail(e.target.value); setEmailError(''); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       addAttendee();
                     }
                   }}
+                  className={emailError ? 'border-destructive' : ''}
                 />
                 <Button size="sm" onClick={addAttendee}>Add</Button>
               </div>
+              {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               <div className="flex flex-wrap gap-1 mt-2">
                 {attendeeEmails.map(email => (
                   <Badge key={email} variant="secondary" className="flex items-center gap-1">

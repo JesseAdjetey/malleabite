@@ -4,12 +4,18 @@ import { loadStripe, Stripe } from '@stripe/stripe-js';
 // Check if we're in mock mode
 const isMockMode = import.meta.env.VITE_STRIPE_MODE === 'mock';
 
+// Guard: mock mode must never be used in production
+if (import.meta.env.PROD && isMockMode) {
+  throw new Error(
+    '[Stripe] CRITICAL: VITE_STRIPE_MODE=mock is not allowed in production. ' +
+    'Set VITE_STRIPE_MODE=live and configure VITE_STRIPE_PUBLISHABLE_KEY.'
+  );
+}
+
 // Validate Stripe publishable key (unless in mock mode)
 if (!isMockMode && !import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY) {
-  console.warn(
-    'Missing VITE_STRIPE_PUBLISHABLE_KEY environment variable. ' +
-    'Stripe payment features will be disabled. ' +
-    'Set VITE_STRIPE_MODE=mock in .env to enable mock mode for testing.'
+  import('@/lib/logger').then(({ logger }) =>
+    logger.warn('Stripe', 'Missing VITE_STRIPE_PUBLISHABLE_KEY — payment features disabled')
   );
 }
 
@@ -19,7 +25,6 @@ let stripePromise: Promise<Stripe | null> | null = null;
 export const getStripe = () => {
   // Return null in mock mode - components will handle gracefully
   if (isMockMode) {
-    console.log('[Stripe] Running in MOCK mode - no real payments will be processed');
     return Promise.resolve(null);
   }
   
@@ -27,7 +32,6 @@ export const getStripe = () => {
     const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
     
     if (!publishableKey) {
-      console.error('Stripe publishable key is not configured');
       return Promise.resolve(null);
     }
     

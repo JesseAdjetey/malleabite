@@ -1,20 +1,21 @@
 // Appointment Scheduling / Booking Pages Hook
 // Allows users to create public booking pages for others to schedule time
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
   where,
   orderBy,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
@@ -385,12 +386,30 @@ export function useAppointmentScheduling() {
       };
 
       const docRef = await addDoc(collection(db, 'bookings'), booking);
-      
-      // TODO: Send confirmation emails
-      // TODO: Create calendar event for host
-      
+      const confirmedBooking = { id: docRef.id, ...booking };
+
+      // Send confirmation emails and create host calendar event via Cloud Function
+      try {
+        const sendConfirmation = httpsCallable(functions, 'onBookingCreated');
+        await sendConfirmation({
+          bookingId: docRef.id,
+          bookingPageId: pageId,
+          guestName: data.guestName,
+          guestEmail: data.guestEmail,
+          hostUserId: page.userId,
+          startsAt: confirmedBooking.startsAt,
+          endsAt: confirmedBooking.endsAt,
+          title: page.title,
+          location: page.location,
+          timeZone: data.timeZone,
+        });
+      } catch (fnError) {
+        // Booking is saved — non-fatal if the Cloud Function fails
+        console.error('Post-booking function failed:', fnError);
+      }
+
       toast.success('Appointment booked!');
-      return { success: true, booking: { id: docRef.id, ...booking } };
+      return { success: true, booking: confirmedBooking };
     } catch (error) {
       console.error('Failed to create booking:', error);
       toast.error('Failed to book appointment');

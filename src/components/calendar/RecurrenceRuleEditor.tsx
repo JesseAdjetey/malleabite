@@ -143,7 +143,7 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
             <label className="text-sm font-medium text-foreground">
               Frequency
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((freq) => (
                 <button
                   key={freq}
@@ -190,13 +190,13 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
               <label className="text-sm font-medium text-foreground">
                 Repeat on
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {dayNames.map((day, index) => (
                   <button
                     key={index}
                     type="button"
                     onClick={() => toggleDayOfWeek(index)}
-                    className={`w-10 h-10 rounded-full text-sm font-medium transition-all ${
+                    className={`w-10 h-10 rounded-full text-sm font-medium transition-all touch-manipulation ${
                       daysOfWeek.includes(index)
                         ? 'bg-gradient-to-br from-purple-500 to-violet-600 text-white shadow-lg shadow-purple-500/50'
                         : 'glass-input hover:border-purple-400/50'
@@ -232,11 +232,11 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
               <label className="text-sm font-medium text-foreground">
                 Date
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <select
                   value={monthOfYear}
                   onChange={(e) => setMonthOfYear(parseInt(e.target.value))}
-                  className="flex-1 glass-input text-foreground"
+                  className="flex-1 glass-input text-foreground min-h-[44px]"
                 >
                   {monthNames.map((month, index) => (
                     <option key={index} value={index}>
@@ -250,7 +250,7 @@ export const RecurrenceRuleEditor: React.FC<RecurrenceRuleEditorProps> = ({
                   max="31"
                   value={dayOfMonth}
                   onChange={(e) => setDayOfMonth(Math.max(1, Math.min(31, parseInt(e.target.value) || 1)))}
-                  className="w-20 glass-input text-foreground"
+                  className="w-full sm:w-20 glass-input text-foreground min-h-[44px]"
                 />
               </div>
             </div>

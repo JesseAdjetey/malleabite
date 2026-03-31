@@ -139,7 +139,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
     <div className="flex flex-col">
       <div
         ref={containerRef}
-        className={`${isTwoColumn ? 'grid grid-cols-2 gap-4 justify-items-center' : 'flex flex-col items-center'}`}
+        className={`${isTwoColumn ? 'grid grid-cols-2 gap-4' : 'flex flex-col'}`}
       >
         <AnimatePresence mode="popLayout">
         {modules.map((module, index) => (

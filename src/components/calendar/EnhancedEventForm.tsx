@@ -10,7 +10,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer, Zap } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer, Zap, MousePointerClick } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -659,11 +659,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         })()}
 
         {/* Recurring Event */}
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Repeat className="h-4 w-4 text-muted-foreground" />
-            <Label>Repeat</Label>
-          </div>
+        <div className="p-3 rounded-md border mb-4">
           <RecurrenceRuleEditor
             value={recurrenceRule}
             onChange={setRecurrenceRule}
@@ -769,7 +765,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
             onClick={() => setActionsExpanded(v => !v)}
           >
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Mally Actions</span>
             {mallyActions.length > 0 && (
               <span className="ml-auto text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">

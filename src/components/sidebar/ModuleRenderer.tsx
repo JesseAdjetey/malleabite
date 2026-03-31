@@ -43,8 +43,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   contentReadOnly = false,
 }) => {
   const moduleStyle = {
-    width: `${moduleWidth}px`,
-    maxWidth: '100%'
+    width: '100%',
   };
 
   const moduleProps = {

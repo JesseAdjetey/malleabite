@@ -33,6 +33,12 @@ export {
   listGoogleCalendarsForAccount,
 } from './google-calendar-oauth';
 
+// Export Mally Action push notification handlers
+export {
+  onCalendarEventActionWritten,
+  sendPendingActionNotifications,
+} from './action-notifications';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

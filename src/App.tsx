@@ -20,6 +20,9 @@ import { Loader2 } from 'lucide-react';
 import { useNotificationManager } from '@/hooks/use-notification-manager';
 import { useActionScheduler } from '@/hooks/use-action-scheduler';
 import { ActionRunnerModal } from '@/components/actions/ActionRunnerModal';
+import { useFCM } from '@/hooks/use-fcm';
+import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useActionRunnerStore } from '@/lib/stores/action-runner-store';
 import { isNative, isAndroid, isIOS } from '@/lib/platform';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
@@ -74,6 +77,40 @@ const AppRoutes = () => {
 
   // Mally Actions — detects upcoming events with action sequences
   useActionScheduler();
+
+  // FCM web push notifications for out-of-app action alerts
+  useFCM();
+
+  // Handle deep link from FCM notification tap: /?pendingActionEvent=<eventId>
+  const { events: calendarEvents } = useCalendarEvents();
+  const { setPending } = useActionRunnerStore();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pendingEventId = params.get('pendingActionEvent');
+    if (!pendingEventId || calendarEvents.length === 0) return;
+
+    const event = calendarEvents.find((e) => e.id === pendingEventId);
+    if (!event) return;
+
+    // Remove the param so it doesn't re-trigger on re-renders
+    params.delete('pendingActionEvent');
+    const cleanUrl =
+      window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState(null, '', cleanUrl);
+
+    setPending(event);
+  }, [calendarEvents, setPending]);
+
+  // Handle native notification tap (Capacitor) — dispatched by use-notification-manager
+  useEffect(() => {
+    const onMallyActionTap = (e: Event) => {
+      const { eventId } = (e as CustomEvent<{ eventId: string }>).detail;
+      const event = calendarEvents.find((ev) => ev.id === eventId);
+      if (event) setPending(event);
+    };
+    window.addEventListener('mally-action-tap', onMallyActionTap);
+    return () => window.removeEventListener('mally-action-tap', onMallyActionTap);
+  }, [calendarEvents, setPending]);
 
   // Open shortcuts dialog via custom event (from header button) or ? key
   useEffect(() => {

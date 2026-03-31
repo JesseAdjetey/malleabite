@@ -33,7 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+<<<<<<< Updated upstream
 exports.translateText = exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.listGoogleCalendarsForAccount = exports.refreshGoogleCalendarAccessToken = exports.googleCalendarOAuthCallback = exports.getGoogleCalendarAuthUrl = exports.confirmGroupMeetSlot = exports.onGroupMeetUpdated = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.vapiLlm = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+=======
+exports.translateText = exports.createCalendarEvent = exports.transcribeAudio = exports.processAIRequest = exports.sendPendingActionNotifications = exports.onCalendarEventActionWritten = exports.listGoogleCalendarsForAccount = exports.refreshGoogleCalendarAccessToken = exports.googleCalendarOAuthCallback = exports.getGoogleCalendarAuthUrl = exports.confirmGroupMeetSlot = exports.onGroupMeetUpdated = exports.generateWhatsAppLinkCode = exports.whatsappWebhook = exports.processSchedulingStream = exports.synthesizeSpeech = exports.createPortalSession = exports.createCheckoutSession = exports.stripeWebhook = void 0;
+>>>>>>> Stashed changes
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const admin = __importStar(require("firebase-admin"));
@@ -66,6 +70,10 @@ Object.defineProperty(exports, "getGoogleCalendarAuthUrl", { enumerable: true, g
 Object.defineProperty(exports, "googleCalendarOAuthCallback", { enumerable: true, get: function () { return google_calendar_oauth_1.googleCalendarOAuthCallback; } });
 Object.defineProperty(exports, "refreshGoogleCalendarAccessToken", { enumerable: true, get: function () { return google_calendar_oauth_1.refreshGoogleCalendarAccessToken; } });
 Object.defineProperty(exports, "listGoogleCalendarsForAccount", { enumerable: true, get: function () { return google_calendar_oauth_1.listGoogleCalendarsForAccount; } });
+// Export Mally Action push notification handlers
+var action_notifications_1 = require("./action-notifications");
+Object.defineProperty(exports, "onCalendarEventActionWritten", { enumerable: true, get: function () { return action_notifications_1.onCalendarEventActionWritten; } });
+Object.defineProperty(exports, "sendPendingActionNotifications", { enumerable: true, get: function () { return action_notifications_1.sendPendingActionNotifications; } });
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

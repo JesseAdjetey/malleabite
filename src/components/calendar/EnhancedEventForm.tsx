@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CalendarEventType, MallyAction, RecurrenceRule } from '@/lib/stores/types';
 import { ActionBuilder } from '@/components/actions/ActionBuilder';
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,162 @@ const TIME_OPTIONS = Array.from({ length: 24 * 4 }).map((_, i) => {
   const minute = (i % 4) * 15;
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 });
+
+/** Parse loose time strings into HH:MM. Returns null if unparseable. */
+function parseTimeInput(raw: string): string | null {
+  const s = raw.trim().toLowerCase().replace(/\s/g, '');
+  if (!s) return null;
+
+  // Already HH:MM
+  const colonMatch = s.match(/^(\d{1,2}):(\d{2})(am|pm)?$/);
+  if (colonMatch) {
+    let h = parseInt(colonMatch[1], 10);
+    const m = parseInt(colonMatch[2], 10);
+    const ampm = colonMatch[3];
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    if (h > 23 || m > 59) return null;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  // "930" or "930am"
+  const compactMatch = s.match(/^(\d{3,4})(am|pm)?$/);
+  if (compactMatch) {
+    const digits = compactMatch[1];
+    const ampm = compactMatch[2];
+    let h: number, m: number;
+    if (digits.length === 3) {
+      h = parseInt(digits[0], 10);
+      m = parseInt(digits.slice(1), 10);
+    } else {
+      h = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2), 10);
+    }
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    if (h > 23 || m > 59) return null;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+
+  // Single/double digit hour "9" or "14"
+  const hourOnly = s.match(/^(\d{1,2})(am|pm)?$/);
+  if (hourOnly) {
+    let h = parseInt(hourOnly[1], 10);
+    const ampm = hourOnly[2];
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    if (h > 23) return null;
+    return `${h.toString().padStart(2, '0')}:00`;
+  }
+
+  return null;
+}
+
+interface TimeComboboxProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  id?: string;
+}
+
+const TimeCombobox: React.FC<TimeComboboxProps> = ({ value, onChange, placeholder = 'HH:MM', id }) => {
+  const [inputVal, setInputVal] = useState(value);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Keep input in sync with external value changes (e.g. all-day toggle)
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  const filtered = inputVal
+    ? TIME_OPTIONS.filter(t => t.startsWith(inputVal) || t.replace(':', '').startsWith(inputVal.replace(':', '')))
+    : TIME_OPTIONS;
+
+  const commit = (raw: string) => {
+    const parsed = parseTimeInput(raw);
+    if (parsed) {
+      onChange(parsed);
+      setInputVal(parsed);
+    } else if (TIME_OPTIONS.includes(raw)) {
+      onChange(raw);
+      setInputVal(raw);
+    } else {
+      // Revert to last valid value
+      setInputVal(value);
+    }
+    setOpen(false);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        commit(inputVal);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, inputVal]);
+
+  // Scroll selected option into view
+  useEffect(() => {
+    if (!open || !listRef.current || !value) return;
+    const el = listRef.current.querySelector(`[data-time="${value}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [open, value]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          id={id}
+          type="text"
+          value={inputVal}
+          placeholder={placeholder}
+          className="w-full pl-8 pr-2 h-9 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onFocus={() => setOpen(true)}
+          onChange={e => { setInputVal(e.target.value); setOpen(true); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(inputVal); }
+            if (e.key === 'Escape') { setInputVal(value); setOpen(false); }
+            if (e.key === 'Tab') commit(inputVal);
+          }}
+          onBlur={() => {
+            // Short delay so click on dropdown registers first
+            setTimeout(() => commit(inputVal), 150);
+          }}
+          autoComplete="off"
+        />
+      </div>
+      {open && (
+        <div
+          ref={listRef}
+          className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md overflow-y-auto max-h-48 text-sm"
+        >
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-muted-foreground">No match</div>
+          ) : (
+            filtered.map(t => (
+              <div
+                key={t}
+                data-time={t}
+                onMouseDown={e => { e.preventDefault(); commit(t); }}
+                className={cn(
+                  'px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground',
+                  t === value && 'bg-accent/60 font-medium'
+                )}
+              >
+                {t}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   event,
@@ -444,43 +600,11 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <Label htmlFor="startTime" className="mb-1 block">Start Time</Label>
-                <Select
-                  value={startTime}
-                  onValueChange={setStartTime}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Start time">
-                      {startTime || "Select time"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[200px]">
-                    {TIME_OPTIONS.map((time) => (
-                      <SelectItem key={`start-${time}`} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimeCombobox id="startTime" value={startTime} onChange={setStartTime} placeholder="09:00" />
               </div>
               <div>
                 <Label htmlFor="endTime" className="mb-1 block">End Time</Label>
-                <Select
-                  value={endTime}
-                  onValueChange={setEndTime}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="End time">
-                      {endTime || "Select time"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[200px]">
-                    {TIME_OPTIONS.map((time) => (
-                      <SelectItem key={`end-${time}`} value={time}>
-                        {time}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimeCombobox id="endTime" value={endTime} onChange={setEndTime} placeholder="10:00" />
               </div>
             </div>
 

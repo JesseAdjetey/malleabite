@@ -117,10 +117,21 @@ export function useNotificationManager() {
 
             const actionPromise = LocalNotifications.addListener(
                 'localNotificationActionPerformed',
-                () => {
+                (action) => {
                     // User tapped the notification
                     stopSound();
                     mallyTTS.stop();
+
+                    // If it's a Mally Action notification, dispatch an event so
+                    // AppRoutes can pick it up and show the ActionRunnerModal
+                    if (action.notification.extra?.type === 'mally_action') {
+                        const eventId = action.notification.extra?.eventId;
+                        if (eventId) {
+                            window.dispatchEvent(
+                                new CustomEvent('mally-action-tap', { detail: { eventId } })
+                            );
+                        }
+                    }
                 }
             );
 

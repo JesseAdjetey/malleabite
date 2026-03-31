@@ -1,10 +1,49 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import fs from "fs";
 import { VitePWA } from 'vite-plugin-pwa';
 
+/**
+ * Injects Firebase config env vars into public/firebase-messaging-sw.js.
+ * Service workers can't use import.meta.env, so we replace %%VAR%% placeholders
+ * with actual values at dev-serve time and at build time.
+ */
+function firebaseMessagingSWPlugin(env: Record<string, string>): Plugin {
+  const templatePath = path.resolve('public/firebase-messaging-sw.js');
+
+  function inject(content: string): string {
+    return content.replace(/%%(\w+)%%/g, (_, key) => env[key] ?? '');
+  }
+
+  return {
+    name: 'firebase-messaging-sw',
+
+    // Dev server: intercept /firebase-messaging-sw.js and serve with injected env
+    configureServer(server) {
+      server.middlewares.use('/firebase-messaging-sw.js', (_req, res) => {
+        const raw = fs.readFileSync(templatePath, 'utf-8');
+        res.setHeader('Content-Type', 'application/javascript');
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(inject(raw));
+      });
+    },
+
+    // Build: write the injected file into dist/ after the bundle is written
+    closeBundle() {
+      const raw = fs.readFileSync(templatePath, 'utf-8');
+      const outDir = path.resolve('dist');
+      if (fs.existsSync(outDir)) {
+        fs.writeFileSync(path.join(outDir, 'firebase-messaging-sw.js'), inject(raw));
+      }
+    },
+  };
+}
+
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  return {
   server: {
     host: "::",
     port: 8080,
@@ -41,7 +80,7 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],
         // Exclude large images from precache, they'll be cached at runtime
-        globIgnores: ['**/assets/**'],
+        globIgnores: ['**/assets/**', 'firebase-messaging-sw.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit
         runtimeCaching: [
           {
@@ -74,7 +113,8 @@ export default defineConfig(({ mode }) => ({
           }
         ]
       }
-    })
+    }),
+    firebaseMessagingSWPlugin(env),
   ].filter(Boolean),
   resolve: {
     alias: {
@@ -150,4 +190,5 @@ export default defineConfig(({ mode }) => ({
       'firebase/firestore'
     ],
   },
-}));
+}; // end config object
+}); // end defineConfig

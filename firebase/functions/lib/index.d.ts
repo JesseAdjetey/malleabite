@@ -5,6 +5,7 @@ export { vapiLlm } from './vapi-llm';
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 export { onGroupMeetUpdated, confirmGroupMeetSlot } from './group-meets';
 export { getGoogleCalendarAuthUrl, googleCalendarOAuthCallback, refreshGoogleCalendarAccessToken, listGoogleCalendarsForAccount, } from './google-calendar-oauth';
+export { onCalendarEventActionWritten, sendPendingActionNotifications, } from './action-notifications';
 /**
  * Process AI requests for intelligent scheduling with Gemini AI
  */

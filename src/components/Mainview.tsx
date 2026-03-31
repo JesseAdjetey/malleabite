@@ -26,10 +26,13 @@ const Mainview = () => {
   useCalendarFilterBridge();
 
   const { selectedView } = useViewStore();
-  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar-width');
+    return saved ? parseInt(saved, 10) : 350;
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const [maxWidth, setMaxWidth] = useState(500);
+  const [maxWidth, setMaxWidth] = useState(() => window.innerWidth / 2);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const isTouchDevice = useRef(false);
@@ -53,6 +56,10 @@ const Mainview = () => {
     if (sidebarWidth < MIN_WIDTH) setSidebarWidth(MIN_WIDTH);
     if (sidebarWidth > maxWidth) setSidebarWidth(maxWidth);
   }, [maxWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-width', String(sidebarWidth));
+  }, [sidebarWidth]);
 
   useEffect(() => {
     isTouchDevice.current = 'ontouchstart' in window || navigator.maxTouchPoints > 0;

@@ -571,6 +571,19 @@ service cloud.firestore {
         && resource.data.senderId == request.auth.uid;
     }
 
+    // FCM push tokens — each user stores their own web push token
+    match /fcm_tokens/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Scheduled push notifications — written by Cloud Functions (admin SDK bypasses rules).
+    // Client needs read access only to verify their own pending notifications.
+    match /scheduled_push_notifications/{docId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+      allow write: if false; // Cloud Functions only
+    }
+
     // Group Meet Sessions — public read (link sharing), auth required to create
     match /group_meets/{sessionId} {
       // Anyone with the link can read (public meet page for guests)

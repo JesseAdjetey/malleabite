@@ -27,6 +27,9 @@ const sanitizeModuleForFirestore = (module: ModuleInstance): ModuleInstance => {
   ) as ModuleInstance;
 };
 
+// Module-level lock: shared across ALL hook instances to prevent concurrent default page creation
+let isCreatingDefaultPageGlobal = false;
+
 export function useSidebarPages() {
   const [pages, setPages] = useState<SidebarPage[]>([]);
   const [activePageId, setActivePageIdState] = useState<string | null>(null);
@@ -36,7 +39,6 @@ export function useSidebarPages() {
   const { createList } = useTodoLists();
   const shouldPersistActivePageRef = useRef(false);
   const activePageIdRef = useRef<string | null>(null);
-  const isCreatingDefaultPageRef = useRef(false);
 
   const getActivePageStorageKey = useCallback((uid: string) => `sidebar_active_page:${uid}`, []);
   const getSidebarPreferencesRef = useCallback((uid: string) => doc(db, `users/${uid}/sidebarPreferences`, 'settings'), []);
@@ -132,9 +134,9 @@ export function useSidebarPages() {
   const ensureDefaultPage = useCallback(async () => {
     if (!user?.uid) return null;
     // Prevent concurrent calls from creating multiple pages
-    if (isCreatingDefaultPageRef.current) return null;
+    if (isCreatingDefaultPageGlobal) return null;
 
-    isCreatingDefaultPageRef.current = true;
+    isCreatingDefaultPageGlobal = true;
     try {
       // Check if any pages exist (not just isDefault ones — avoids duplicates when isDefault is unset)
       const allPagesQuery = query(
@@ -163,7 +165,7 @@ export function useSidebarPages() {
       console.error('Error ensuring default page:', err);
       return null;
     } finally {
-      isCreatingDefaultPageRef.current = false;
+      isCreatingDefaultPageGlobal = false;
     }
   }, [user?.uid]);
 

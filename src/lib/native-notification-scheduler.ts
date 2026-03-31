@@ -5,6 +5,7 @@
 import { isNative, isAndroid } from '@/lib/platform';
 import type { Alarm } from '@/hooks/use-alarms';
 import type { Reminder } from '@/hooks/use-reminders';
+import type { CalendarEventType } from '@/lib/stores/types';
 import { Timestamp } from 'firebase/firestore';
 
 // ── ID Hashing ──────────────────────────────────────────────────────────────────
@@ -267,5 +268,65 @@ export async function syncAllNotifications(alarms: Alarm[], reminders: Reminder[
     console.log(`[NativeScheduler] Sync complete: ${scheduledAlarms} alarms, ${scheduledReminders} reminders scheduled`);
   } catch (err) {
     console.error('[NativeScheduler] Sync failed:', err);
+  }
+}
+
+// ── Mally Action Notifications ──────────────────────────────────────────────────
+// Prefix 200 to avoid collisions with alarm (prefix 0) and reminder (prefix 100) IDs.
+const ACTION_NOTIFICATION_PREFIX = 200;
+const TRIGGER_BEFORE_MS = 2 * 60 * 1000; // 2 minutes
+
+/**
+ * Schedule a local notification on iOS/Android for a calendar event with mallyActions.
+ * Fires 2 minutes before the event starts.
+ */
+export async function scheduleActionNotification(event: CalendarEventType): Promise<void> {
+  if (!isNative) return;
+  if (!event.mallyActions || event.mallyActions.length === 0) return;
+  if (!event.startsAt) return;
+
+  const startMs = new Date(event.startsAt).getTime();
+  if (isNaN(startMs)) return;
+
+  const triggerMs = startMs - TRIGGER_BEFORE_MS;
+  if (triggerMs <= Date.now()) return; // Already past
+
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    const id = firestoreIdToNumericId(event.id, ACTION_NOTIFICATION_PREFIX);
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id,
+          title: `⚡ ${event.title}`,
+          body: 'Tap to run your scheduled actions',
+          schedule: { at: new Date(triggerMs) },
+          channelId: isAndroid ? 'reminders' : undefined,
+          extra: {
+            type: 'mally_action',
+            eventId: event.id,
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    console.error(`[NativeScheduler] Failed to schedule action notification for ${event.id}:`, err);
+  }
+}
+
+/**
+ * Cancel a previously scheduled action notification for an event.
+ */
+export async function cancelActionNotification(eventId: string): Promise<void> {
+  if (!isNative) return;
+
+  try {
+    const { LocalNotifications } = await import('@capacitor/local-notifications');
+    await LocalNotifications.cancel({
+      notifications: [{ id: firestoreIdToNumericId(eventId, ACTION_NOTIFICATION_PREFIX) }],
+    });
+  } catch (err) {
+    console.error(`[NativeScheduler] Failed to cancel action notification for ${eventId}:`, err);
   }
 }

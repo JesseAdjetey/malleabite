@@ -51,7 +51,7 @@ export const useWeekRangeStore = create<WeekRangeStoreType>()(
         setWasAutoMobile: (val: boolean) => set({ wasAutoMobile: val }),
         setSavedDesktopRange: (range) => set({ savedDesktopRange: range }),
       }),
-      { name: "week_range", skipHydration: true }
+      { name: "week_range" }
     )
   )
 );

@@ -14,7 +14,8 @@
       "Bash(firebase deploy --only functions)",
       "Bash(git add src/integrations/firebase/firestore.ts src/hooks/use-calendar-events.firebase.ts src/contexts/EventDataProvider.tsx)",
       "Bash(git pull --rebase origin main)",
-      "Bash(npx skills add remotion-dev/skills)"
+      "Bash(npx skills add remotion-dev/skills)",
+      "Bash(firebase deploy --only functions,firestore:rules)"
     ]
   }
 }

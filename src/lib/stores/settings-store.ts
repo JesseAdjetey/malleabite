@@ -32,6 +32,19 @@ interface SettingsState {
   /** Deepgram Aura TTS voice model for Mally voice sessions */
   mallyVoice: string;
   setMallyVoice: (voice: string) => void;
+  /**
+   * Which calendar IDs the AI (Mally) is allowed to read events from.
+   * null = all calendars (default).
+   * string[] = only the listed calendar IDs.
+   */
+  aiEnabledCalendarIds: string[] | null;
+  setAiEnabledCalendarIds: (ids: string[] | null) => void;
+  /**
+   * When true, Mally never asks clarifying questions — it picks the best option
+   * and acts immediately. When false (default), it may ask brief follow-up questions.
+   */
+  mallyAutoMode: boolean;
+  setMallyAutoMode: (value: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -45,6 +58,10 @@ export const useSettingsStore = create<SettingsState>()(
       setDefaultTodoListId: (id) => set({ defaultTodoListId: id }),
       mallyVoice: 'Lily',
       setMallyVoice: (voice) => set({ mallyVoice: voice }),
+      aiEnabledCalendarIds: null,
+      setAiEnabledCalendarIds: (ids) => set({ aiEnabledCalendarIds: ids }),
+      mallyAutoMode: false,
+      setMallyAutoMode: (value) => set({ mallyAutoMode: value }),
     }),
     {
       name: 'timegeist-settings',

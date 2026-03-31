@@ -29,7 +29,10 @@ import {
   CheckSquare,
   ExternalLink,
   Heart,
+  Settings2,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext.firebase";
@@ -255,8 +258,15 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Settings: auto-execute toggle
-  const { aiAutoExecute, mallyVoice } = useSettingsStore();
+  // Settings
+  const {
+    aiAutoExecute,
+    mallyVoice,
+    aiEnabledCalendarIds,
+    setAiEnabledCalendarIds,
+    mallyAutoMode,
+    setMallyAutoMode,
+  } = useSettingsStore();
 
 
   const { user } = useAuth();
@@ -1091,7 +1101,7 @@ RULES:
         const guidedFlow = detectGuidedFlow(aiResponse);
         const displayText = extractCleanText(aiResponse, !!sections, !!guidedFlow);
 
-        if (allActions.length > 0 && !aiAutoExecute) {
+        if (allActions.length > 0 && !aiAutoExecute && !mallyAutoMode) {
           // ── Confirmation mode ──────────────────────────────────────────
           const pendingActions: PendingAction[] = allActions.map((action) => ({
             id: crypto.randomUUID(),
@@ -2364,6 +2374,73 @@ RULES:
                 >
                   {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </button>
+
+                {/* Mally settings */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="p-2.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Mally settings"
+                    >
+                      <Settings2 className="h-5 w-5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="end" className="w-64 p-3 space-y-4">
+                    {/* Auto mode toggle */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Auto mode</span>
+                        <Switch
+                          checked={mallyAutoMode}
+                          onCheckedChange={setMallyAutoMode}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {mallyAutoMode
+                          ? "Mally acts immediately — no questions asked."
+                          : "Mally may ask brief follow-up questions."}
+                      </p>
+                    </div>
+
+                    {/* AI calendar filter */}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Calendars Mally reads</p>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {calendarAccounts.map((cal) => {
+                          const enabled = aiEnabledCalendarIds === null || aiEnabledCalendarIds.includes(cal.id);
+                          return (
+                            <label key={cal.id} className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                onChange={(e) => {
+                                  const allIds = calendarAccounts.map(c => c.id);
+                                  const current = aiEnabledCalendarIds ?? allIds;
+                                  const next = e.target.checked
+                                    ? [...current, cal.id]
+                                    : current.filter(id => id !== cal.id);
+                                  // If all selected, reset to null (= all)
+                                  setAiEnabledCalendarIds(
+                                    next.length === allIds.length ? null : next
+                                  );
+                                }}
+                                className="rounded"
+                              />
+                              <span
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: cal.color }}
+                              />
+                              <span className="text-xs truncate">{cal.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Only checked calendars will be visible to Mally.
+                      </p>
+                    </div>
+                  </PopoverContent>
+                </Popover>
 
                 {/* Send button */}
                 <motion.button

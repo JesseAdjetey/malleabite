@@ -136,6 +136,8 @@ export function useMallyActions() {
 
   // Default todo list preference
   const defaultTodoListId = useSettingsStore(s => s.defaultTodoListId);
+  const aiEnabledCalendarIds = useSettingsStore(s => s.aiEnabledCalendarIds);
+  const mallyAutoMode = useSettingsStore(s => s.mallyAutoMode);
 
   /** Resolve the target todo list for a new AI-created todo.
    *  Priority: AI-specified ID → AI-specified name → user default preference → activeListId → first list */
@@ -2075,6 +2077,11 @@ export function useMallyActions() {
     events: events.slice(0, 20),
     todos: todos.slice(0, 30),
     alarms: alarms.slice(0, 20).map(a => ({ id: a.id, title: a.title, time: (a as any).time })),
+    // AI calendar filter: which calendars Mally reads events from (null = all)
+    aiEnabledCalendarIds: aiEnabledCalendarIds,
+    // Auto mode: when true, AI never asks clarifying questions
+    autoMode: mallyAutoMode,
+
     // Persistent AI memory (preferences, patterns, goals, observations)
     userMemory: userMemory ? {
       preferences: userMemory.preferences,

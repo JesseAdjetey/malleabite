@@ -1,5 +1,6 @@
 
 import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { logger } from '@/lib/logger';
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { wrapTransition } from '@/lib/animations';
@@ -178,6 +179,7 @@ const AppRoutes = () => {
   return (
     <ThemeProvider isAuthPage={isAuthPage}>
       <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={location.pathname}
@@ -209,9 +211,10 @@ const AppRoutes = () => {
             </Routes>
           </motion.div>
         </AnimatePresence>
+        </ErrorBoundary>
       </Suspense>
       {!isAuthPage && <PendingMeetHandler />}
-      {!isAuthPage && <BottomMallyAI />}
+      {!isAuthPage && <ErrorBoundary fallback={<></>}><BottomMallyAI /></ErrorBoundary>}
       {!isAuthPage && <CountdownPanel />}
       {!isAuthPage && <ActionRunnerModal />}
       {!isAuthPage && <ConsentBanner />}
@@ -238,7 +241,7 @@ function App() {
     // Keyboard resize mode
     import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
       return Keyboard.setResizeMode({ mode: KeyboardResize.Body }).catch(() => {
-        console.log('[App] Keyboard.setResizeMode not supported');
+        logger.warn('App', 'Keyboard.setResizeMode not supported');
       });
     }).catch(() => {});
 
@@ -274,7 +277,7 @@ function App() {
         if (isActive) {
           // Trigger a refetch by dispatching a custom event
           window.dispatchEvent(new Event('app-resumed'));
-          console.log('[App] Resumed from background');
+          logger.debug('App', 'Resumed from background');
         }
       });
     }).catch(() => {});
@@ -294,13 +297,13 @@ function App() {
         // Tab hidden — disconnect Firestore to prevent ERR_NETWORK_IO_SUSPENDED flood
         disableNetwork(db).then(() => {
           firestoreDisabled = true;
-          console.log('[App] Firestore network disabled (tab hidden)');
+          logger.debug('App', 'Firestore network disabled (tab hidden)');
         }).catch(() => {});
       } else if (firestoreDisabled) {
         // Tab visible again — reconnect Firestore
         enableNetwork(db).then(() => {
           firestoreDisabled = false;
-          console.log('[App] Firestore network re-enabled (tab visible)');
+          logger.debug('App', 'Firestore network re-enabled (tab visible)');
         }).catch(() => {});
       }
     };

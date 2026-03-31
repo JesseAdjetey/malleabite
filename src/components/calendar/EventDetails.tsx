@@ -1,7 +1,10 @@
 
 import React, { useState, useCallback, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from '@/hooks/use-mobile';
+import { logger } from '@/lib/logger';
 import { useEventStore } from "@/lib/store";
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { useEventCRUD } from '@/hooks/use-event-crud';
@@ -31,7 +34,7 @@ class EventDetailsErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('EventDetails error:', error, errorInfo);
+    logger.error('EventDetails', 'Render error', error);
   }
 
   render() {
@@ -81,6 +84,7 @@ interface EventDetailsProps {
 }
 
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
+  const isMobile = useIsMobile();
   const { selectedEvent } = useEventStore();
 
   const { updateEvent, removeEvent } = useEventCRUD();
@@ -139,7 +143,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       setShowRecurringDeleteDialog(false);
       onClose();
     } catch (error) {
-      console.error("Error deleting recurring event:", error);
+      logger.error("EventDetails", "Error deleting recurring event", error);
       toast.error("Failed to delete event");
     }
   }, [selectedEvent, addRecurrenceException, removeEvent, onClose]);
@@ -173,7 +177,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       }
       return 'All day';
     } catch (error) {
-      console.error('Error formatting time:', error);
+      logger.error('EventDetails', 'Error formatting time', error);
       return 'All day';
     }
   })();
@@ -192,7 +196,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       }
       return desc;
     } catch (error) {
-      console.error('Error getting description:', error);
+      logger.error('EventDetails', 'Error getting description', error);
       return '';
     }
   })();
@@ -217,7 +221,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       // If it's a todo event, also handle todo item
       if (selectedEvent.isTodo && selectedEvent.todoId) {
         // Only delete the calendar event, not the todo item
-        console.log("Removing todo calendar event:", selectedEvent.id);
+        logger.debug("EventDetails", "Removing todo calendar event", { id: selectedEvent.id });
       }
 
       // Track for undo before deleting
@@ -234,7 +238,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       }
       onClose();
     } catch (error) {
-      console.error("Error deleting event:", error);
+      logger.error("EventDetails", "Error deleting event", error);
       toast.error("Failed to delete event");
     }
   };
@@ -263,7 +267,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       toast.success("Todo marked as complete");
       onClose();
     } catch (error) {
-      console.error("Error completing todo:", error);
+      logger.error("EventDetails", "Error completing todo", error);
       toast.error("Failed to complete todo");
     }
   };
@@ -311,7 +315,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       setEditScope(null);
       onClose();
     } catch (error) {
-      console.error("Error updating event:", error);
+      logger.error("EventDetails", "Error updating event", error);
       toast.error("Failed to update event");
     }
   };
@@ -333,7 +337,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       }
       return 'Date not available';
     } catch (error) {
-      console.error('Error formatting date:', error);
+      logger.error('EventDetails', 'Error formatting date', error);
       return 'Date not available';
     }
   })();
@@ -341,21 +345,25 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   // Get participants if any
   const hasParticipants = selectedEvent.participants && selectedEvent.participants.length > 0;
 
-  return (
+  const contentBody = isEditing ? (
+    <EnhancedEventForm
+      initialEvent={selectedEvent}
+      onSave={handleUpdate}
+      onCancel={handleCancel}
+    />
+  ) : (
     <>
-      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto bg-background/95 border-white/10">
-          {isEditing ? (
-            <EnhancedEventForm
-              initialEvent={selectedEvent}
-              onSave={handleUpdate}
-              onCancel={handleCancel}
-            />
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-xl">{selectedEvent.title}</DialogTitle>
-              </DialogHeader>
+      {!isMobile && (
+        <DialogHeader>
+          <DialogTitle className="text-xl">{selectedEvent.title}</DialogTitle>
+        </DialogHeader>
+      )}
+      {isMobile && (
+        <SheetHeader className="pb-2">
+          <SheetTitle className="text-xl">{selectedEvent.title}</SheetTitle>
+        </SheetHeader>
+      )}
+
 
               <div className="py-4 space-y-4">
                 <div className="flex items-start gap-3">
@@ -435,12 +443,12 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
                 </div>
               </div>
 
-              <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-2 pt-2 border-t">
                 <div>
                   <Button
                     variant="destructive"
                     onClick={handleDeleteClick}
-                    className="transition-colors hover:bg-destructive/90"
+                    className="transition-colors hover:bg-destructive/90 w-full sm:w-auto"
                   >
                     Delete
                   </Button>
@@ -450,51 +458,61 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
                     <Button
                       variant="secondary"
                       onClick={handleComplete}
-                      className="transition-colors hover:bg-secondary/80"
+                      className="transition-colors hover:bg-secondary/80 flex-1 sm:flex-none"
                     >
                       Complete
                     </Button>
                   )}
                   <Button
                     onClick={handleEdit}
-                    className="transition-colors hover:bg-primary/90"
+                    className="transition-colors hover:bg-primary/90 flex-1 sm:flex-none"
                   >
                     Edit
                   </Button>
                 </div>
-              </DialogFooter>
+              </div>
             </>
-          )}
-        </DialogContent>
-      </Dialog>
+  );
+
+  return (
+    <>
+      {isMobile ? (
+        <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+          <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-2xl px-4 pb-8">
+            {contentBody}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+          <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto bg-background/95 border-white/10">
+            {contentBody}
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Recurring Event Delete Dialog */}
-      {
-        selectedEvent && isRecurringEvent && (
-          <RecurringEventEditDialog
-            open={showRecurringDeleteDialog}
-            onOpenChange={setShowRecurringDeleteDialog}
-            event={selectedEvent}
-            action="delete"
-            onConfirm={handleRecurringDeleteConfirm}
-            onCancel={() => setShowRecurringDeleteDialog(false)}
-          />
-        )
-      }
+      {selectedEvent && isRecurringEvent && (
+        <RecurringEventEditDialog
+          open={showRecurringDeleteDialog}
+          onOpenChange={setShowRecurringDeleteDialog}
+          event={selectedEvent}
+          action="delete"
+          onConfirm={handleRecurringDeleteConfirm}
+          onCancel={() => setShowRecurringDeleteDialog(false)}
+        />
+      )}
 
       {/* Recurring Event Edit Scope Dialog */}
-      {
-        selectedEvent && isRecurringEvent && (
-          <RecurringEventEditDialog
-            open={showRecurringEditDialog}
-            onOpenChange={setShowRecurringEditDialog}
-            event={selectedEvent}
-            action="edit"
-            onConfirm={handleRecurringEditConfirm}
-            onCancel={() => setShowRecurringEditDialog(false)}
-          />
-        )
-      }
+      {selectedEvent && isRecurringEvent && (
+        <RecurringEventEditDialog
+          open={showRecurringEditDialog}
+          onOpenChange={setShowRecurringEditDialog}
+          event={selectedEvent}
+          action="edit"
+          onConfirm={handleRecurringEditConfirm}
+          onCancel={() => setShowRecurringEditDialog(false)}
+        />
+      )}
     </>
   );
 };

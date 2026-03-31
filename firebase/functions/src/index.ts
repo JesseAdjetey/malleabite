@@ -39,6 +39,9 @@ export {
   sendPendingActionNotifications,
 } from './action-notifications';
 
+// Export booking confirmation handler
+export { onBookingCreated } from './booking-notifications';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

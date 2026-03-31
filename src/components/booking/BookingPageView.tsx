@@ -30,6 +30,7 @@ import {
 } from '@/hooks/use-appointment-scheduling';
 import dayjs, { Dayjs } from 'dayjs';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface BookingPageViewProps {
   bookingPageId: string;
@@ -66,10 +67,9 @@ export function BookingPageView({ bookingPageId, bookingPage: initialPage }: Boo
     if (selectedDate && bookingPage) {
       setLoadingSlots(true);
       getAvailableSlots(bookingPage.id, selectedDate.toDate())
-        .then(slots => {
-          setAvailableSlots(slots);
-          setLoadingSlots(false);
-        });
+        .then(slots => setAvailableSlots(slots))
+        .catch(() => toast.error('Failed to load available times. Please try again.'))
+        .finally(() => setLoadingSlots(false));
     }
   }, [selectedDate, bookingPage, getAvailableSlots]);
 
@@ -108,15 +108,36 @@ export function BookingPageView({ bookingPageId, bookingPage: initialPage }: Boo
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookingPage || !selectedTime || !selectedDate || !formData.name || !formData.email) return;
-    
+    if (!bookingPage || !selectedTime || !selectedDate) return;
+
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast.error('Please enter your name');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    // Rate limit: max 3 booking attempts per minute (client-side guard)
+    const rateLimitKey = `booking_${bookingPage.id}`;
+    const attempts = JSON.parse(sessionStorage.getItem(rateLimitKey) || '[]') as number[];
+    const recent = attempts.filter(t => Date.now() - t < 60_000);
+    if (recent.length >= 3) {
+      toast.error('Too many attempts. Please wait a moment before trying again.');
+      return;
+    }
+    sessionStorage.setItem(rateLimitKey, JSON.stringify([...recent, Date.now()]));
+
     setSubmitting(true);
     try {
       const startDateTime = selectedDate.format('YYYY-MM-DD') + ' ' + selectedTime;
-      
+
       await createBooking(bookingPage.id, {
-        guestName: formData.name,
-        guestEmail: formData.email,
+        guestName: formData.name.trim(),
+        guestEmail: formData.email.trim().toLowerCase(),
         guestPhone: formData.phone || undefined,
         startsAt: dayjs(startDateTime).toISOString(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -125,7 +146,8 @@ export function BookingPageView({ bookingPageId, bookingPage: initialPage }: Boo
       setConfirmed(true);
       setStep('confirm');
     } catch (error) {
-      console.error('Booking failed:', error);
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

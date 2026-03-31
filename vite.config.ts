@@ -140,18 +140,29 @@ export default defineConfig(({ mode }) => {
             '@radix-ui/react-popover',
             '@radix-ui/react-select',
             '@radix-ui/react-tabs',
-            '@radix-ui/react-toast'
+            '@radix-ui/react-toast',
           ],
           'firebase-vendor': [
             'firebase/app',
             'firebase/auth',
             'firebase/firestore',
             'firebase/functions',
-            'firebase/storage'
+            'firebase/storage',
+            'firebase/messaging',
           ],
           'chart-vendor': ['recharts'],
           'date-vendor': ['date-fns', 'dayjs'],
           'animation-vendor': ['framer-motion'],
+          'capacitor-vendor': [
+            '@capacitor/core',
+            '@capacitor/app',
+            '@capacitor/haptics',
+            '@capacitor/keyboard',
+            '@capacitor/local-notifications',
+            '@capacitor/network',
+            '@capacitor/splash-screen',
+            '@capacitor/status-bar',
+          ],
         },
         // Optimize chunk file names
         chunkFileNames: 'assets/js/[name]-[hash].js',
@@ -163,9 +174,9 @@ export default defineConfig(({ mode }) => {
     // Terser options for production
     terserOptions: {
       compress: {
-        drop_console: false, // Temporarily disabled for debugging
+        drop_console: mode === 'production',
         drop_debugger: true,
-        pure_funcs: [], // Temporarily disabled for debugging
+        pure_funcs: mode === 'production' ? ['console.log', 'console.debug', 'console.info'] : [],
       },
       format: {
         comments: false,

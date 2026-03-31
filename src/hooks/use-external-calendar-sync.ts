@@ -1,20 +1,21 @@
 // External Calendar Sync Hook - ICS subscription, CalDAV, Google/Outlook sync
 import { useState, useCallback, useEffect } from 'react';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
   where,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 import dayjs from 'dayjs';
 import { CalendarEventType } from '@/lib/stores/types';
 
@@ -165,7 +166,7 @@ export function parseICSContent(icsContent: string, calendarId: string): Partial
         events.push(event);
       }
     } catch (error) {
-      console.error('Failed to parse VEVENT:', error);
+      logger.error('parseICSContent', 'Failed to parse VEVENT', { error });
     }
   }
   
@@ -272,7 +273,7 @@ export function useExternalCalendarSync() {
         
         setExternalCalendars(calendars);
       } catch (error) {
-        console.error('Failed to fetch external calendars:', error);
+        logger.error('useExternalCalendarSync', 'Failed to fetch external calendars', { error });
       } finally {
         setLoading(false);
       }
@@ -314,7 +315,7 @@ export function useExternalCalendarSync() {
       
       return { success: true, calendar: newCalendar };
     } catch (error) {
-      console.error('Failed to add ICS subscription:', error);
+      logger.error('useExternalCalendarSync', 'Failed to add ICS subscription', { error });
       toast.error('Failed to add calendar');
       return { success: false, error };
     }
@@ -371,7 +372,7 @@ export function useExternalCalendarSync() {
       toast.info('OAuth sync not yet implemented');
       return { success: false, eventsAdded: 0, eventsUpdated: 0, eventsDeleted: 0, errors: ['Not implemented'] };
     } catch (error) {
-      console.error('Sync failed:', error);
+      logger.error('useExternalCalendarSync', 'Sync failed', { error });
       
       await updateDoc(doc(db, 'external_calendars', calendarId), {
         lastSyncAt: new Date().toISOString(),
@@ -432,7 +433,7 @@ export function useExternalCalendarSync() {
       toast.success('Calendar removed');
       return { success: true };
     } catch (error) {
-      console.error('Failed to remove calendar:', error);
+      logger.error('useExternalCalendarSync', 'Failed to remove calendar', { error });
       toast.error('Failed to remove calendar');
       return { success: false, error };
     }
@@ -457,7 +458,7 @@ export function useExternalCalendarSync() {
         )
       );
     } catch (error) {
-      console.error('Failed to toggle visibility:', error);
+      logger.error('useExternalCalendarSync', 'Failed to toggle visibility', { error });
       toast.error('Failed to update calendar');
     }
   }, [externalCalendars]);

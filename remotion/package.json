@@ -1,0 +1,27 @@
+{
+  "name": "malleabite-videos",
+  "version": "1.0.0",
+  "description": "Marketing videos for Malleabite",
+  "scripts": {
+    "dev": "npx remotion studio",
+    "render:mally-ai": "npx remotion render MallyAI out/mally-ai.mp4",
+    "render:sidebar": "npx remotion render SidebarRules out/sidebar-rules.mp4",
+    "render:todo-drag": "npx remotion render TodoDrag out/todo-drag.mp4",
+    "render:collaborate": "npx remotion render Collaborate out/collaborate.mp4",
+    "render:all": "npm run render:mally-ai && npm run render:sidebar && npm run render:todo-drag && npm run render:collaborate"
+  },
+  "dependencies": {
+    "@remotion/transitions": "4.0.442",
+    "remotion": "4.0.442",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "4.0.442",
+    "@remotion/cli": "4.0.442",
+    "@remotion/renderer": "4.0.442",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5"
+  }
+}

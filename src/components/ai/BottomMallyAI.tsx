@@ -766,8 +766,22 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         setIsRecording(false);
         if (!voiceOverlayOpenRef.current) return;
         console.error('[Mally] Deepgram error:', err);
-        // Fall back to Web Speech API on Deepgram failure
-        setTimeout(() => startOverlayListening(true), 500);
+        // Cap retries: after 2 Deepgram failures, fall through to Web Speech API
+        if (overlayAbortRetryRef.current < 2) {
+          overlayAbortRetryRef.current++;
+          setTimeout(() => startOverlayListening(true), 500);
+        } else {
+          // Deepgram unavailable — switch to Web Speech API for this session
+          console.warn('[Mally] Deepgram failed repeatedly, switching to Web Speech API');
+          setTimeout(() => speechService.startListeningWithRetry(
+            (result) => {
+              overlayAbortRetryRef.current = 0;
+              setOverlayTranscript(result.transcript);
+              if (result.isFinal) handleOverlayVoiceMessage(result.transcript);
+            },
+            () => { setIsRecording(false); },
+          ).catch(() => setIsRecording(false)), 300);
+        }
       };
 
       deepgramSTT.startListening(onResult, onError);

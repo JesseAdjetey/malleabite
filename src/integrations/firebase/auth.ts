@@ -11,6 +11,9 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithCredential,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
 import { auth } from './config';
 import { isNative } from '@/lib/platform';
@@ -25,6 +28,7 @@ export interface AuthError {
 export interface SignInCredentials {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface SignUpCredentials extends SignInCredentials {
@@ -33,6 +37,10 @@ export interface SignUpCredentials extends SignInCredentials {
 
 // Auth functions
 export const signIn = async (credentials: SignInCredentials): Promise<UserCredential> => {
+  const persistence = credentials.rememberMe === false
+    ? browserSessionPersistence
+    : browserLocalPersistence;
+  await setPersistence(auth, persistence);
   return await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
 };
 
@@ -58,7 +66,9 @@ export const signUp = async (credentials: SignUpCredentials): Promise<UserCreden
   return userCredential;
 };
 
-export const signInWithGoogle = async (): Promise<UserCredential> => {
+export const signInWithGoogle = async (rememberMe = true): Promise<UserCredential> => {
+  const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+  await setPersistence(auth, persistence);
   if (isNative) {
     // Use the Capacitor Firebase Authentication plugin for native Google Sign-In
     const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');

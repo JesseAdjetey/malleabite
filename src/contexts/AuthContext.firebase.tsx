@@ -16,9 +16,9 @@ import { logger } from '@/lib/logger';
 interface AuthContextType {
   user: User | null;
   signOut: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signUp: (email: string, password: string, name?: string) => Promise<{success: boolean; isConfirmationEmailSent: boolean}>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (rememberMe?: boolean) => Promise<void>;
   loading: boolean;
   error: string | null;
   clearError: () => void;
@@ -28,10 +28,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Sign out after 30 minutes of inactivity
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const inactivityTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetInactivityTimer = React.useCallback(() => {
+    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+    inactivityTimer.current = setTimeout(() => {
+      signOutUser().catch(() => {});
+    }, INACTIVITY_TIMEOUT_MS);
+  }, []);
 
   useEffect(() => {
     // Set up Firebase auth state listener
@@ -39,6 +51,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       logger.auth('Auth state changed', { signedIn: !!firebaseUser });
       setUser(firebaseUser);
       setLoading(false);
+
+      if (firebaseUser) {
+        // Start inactivity timer when user signs in
+        resetInactivityTimer();
+        ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, resetInactivityTimer, { passive: true }));
+      } else {
+        // Clear timer on sign out
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+        ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, resetInactivityTimer));
+      }
     });
 
     // Safety timeout: if auth hasn't resolved in 5 seconds, stop loading
@@ -56,18 +78,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       unsubscribe();
       clearTimeout(timeout);
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, resetInactivityTimer));
     };
-  }, []);
+  }, [resetInactivityTimer]);
 
   const clearError = () => setError(null);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, rememberMe?: boolean) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       logger.info('Auth', 'Sign in attempt', {});
-      await firebaseSignIn({ email, password });
+      await firebaseSignIn({ email, password, rememberMe });
       logger.info('Auth', 'Sign in successful', {});
       toast({
         title: "Success!",
@@ -123,13 +147,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (rememberMe = true) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       logger.info('Auth', 'Google sign in attempt');
-      await firebaseSignInWithGoogle();
+      await firebaseSignInWithGoogle(rememberMe);
       
       logger.info('Auth', 'Google sign in successful');
       toast({

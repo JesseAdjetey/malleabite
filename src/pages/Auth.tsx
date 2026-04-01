@@ -106,6 +106,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [emailSent, setEmailSent] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -162,7 +163,7 @@ const Auth = () => {
           throw validationError;
         }
 
-        await signIn(sanitizedEmail, password);
+        await signIn(sanitizedEmail, password, rememberMe);
       }
     } catch (err) {
       logger.error('Auth', 'Authentication error', err as Error);
@@ -171,7 +172,7 @@ const Auth = () => {
 
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(rememberMe);
     } catch (err: any) {
       logger.error('Auth', 'Google sign-in error', err);
     }
@@ -199,8 +200,17 @@ const Auth = () => {
             <img src="/logo-quadrant.svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
           </div>
 
-          {/* Right: Sign in Pill */}
-          <div className="flex-1 flex justify-end">
+          {/* Right: Remember me + Sign in */}
+          <div className="flex-1 flex justify-end items-center gap-3">
+            <label className="hidden sm:flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-border accent-purple-500 cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Keep me signed in</span>
+            </label>
             <Button
               type="button"
               onClick={handleGoogleSignIn}
@@ -446,10 +456,22 @@ const Auth = () => {
                     {validationErrors.password && <p className="text-destructive text-xs mt-1">{validationErrors.password}</p>}
                   </div>
 
+                  {!isSignUp && (
+                    <label className="flex sm:hidden items-center gap-2.5 cursor-pointer select-none mt-1">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-border accent-purple-500 cursor-pointer"
+                      />
+                      <span className="text-xs text-muted-foreground">Keep me signed in</span>
+                    </label>
+                  )}
+
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-10 mt-6 bg-muted hover:bg-muted/80 text-foreground font-mono text-xs shadow-sm transition-all flex items-center justify-center"
+                    className="w-full h-10 mt-4 bg-muted hover:bg-muted/80 text-foreground font-mono text-xs shadow-sm transition-all flex items-center justify-center"
                   >
                     {loading ? (
                       <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />

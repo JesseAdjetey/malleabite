@@ -12,6 +12,7 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
+import { auditLog, trackFailure } from './audit-logger';
 
 const deepgramApiKey = defineSecret('DEEPGRAM_API_KEY');
 
@@ -30,12 +31,18 @@ export const getDeepgramToken = onRequest(
       return;
     }
 
+    let uid: string;
     try {
-      await admin.auth().verifyIdToken(authHeader.slice(7));
+      const decoded = await admin.auth().verifyIdToken(authHeader.slice(7));
+      uid = decoded.uid;
     } catch {
+      const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] ?? 'unknown';
+      trackFailure(`deepgram:${ip}`, 'auth.failed', undefined, ip);
+      auditLog('auth.failed', { severity: 'WARNING', ip, endpoint: 'getDeepgramToken' });
       res.status(401).json({ error: 'Invalid auth token' });
       return;
     }
+    auditLog('api.request', { userId: uid, endpoint: 'getDeepgramToken' });
 
     const key = deepgramApiKey.value();
     if (!key) {

@@ -1,23 +1,18 @@
 
 import React, { useState } from 'react';
 import { useDateStore, useViewStore } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, MoreHorizontal, Settings, Undo2, Redo2, Keyboard, Volume2, VolumeX } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Home, Sun, Moon, Monitor, Keyboard, Volume2, VolumeX } from 'lucide-react';
+import { motion } from 'framer-motion';
 import UndoRedoToolbar from '@/components/calendar/UndoRedoToolbar';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 import dayjs from 'dayjs';
 import SettingsNav from './SettingsNav';
 import { TooltipProvider } from "@/components/ui/tooltip";
-import AnalyticsNav from './AnalyticsNav';
 import BulkModeToggle from '../calendar/BulkModeToggle';
 import CalendarDropdown from '../calendar/CalendarDropdown';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSubscription } from '@/hooks/use-subscription';
-import { Crown } from 'lucide-react';
 import { haptics } from '@/lib/haptics';
 import { sounds } from '@/lib/sounds';
 import { useThemeStore, type Theme } from '@/lib/stores/theme-store';
@@ -31,7 +26,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const todaysDate = dayjs();
   const { userSelectedDate, setDate, setMonth, selectedMonthIndex } = useDateStore();
   const { selectedView, setView } = useViewStore();
-  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -45,9 +39,6 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     bulkDuplicate,
     deselectAll
   } = useBulkSelection();
-
-  const { subscription } = useSubscription();
-  const isPro = subscription?.isPro ?? false;
 
   const { theme, setTheme } = useThemeStore();
   const [soundsOn, setSoundsOn] = useState(sounds.enabled);
@@ -160,10 +151,10 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       </div>
 
       {/* Right Side Container */}
-      <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
-
+      <div className="flex items-center gap-2 pointer-events-auto overflow-x-auto hide-scrollbar max-w-[calc(100vw-5rem)]">
         <span className="text-xs font-semibold tracking-widest uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 select-none flex-shrink-0">Beta</span>
-        <span className="text-muted-foreground/30">|</span>
+
+        <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm flex-shrink-0">
 
         {/* Today Button */}
         <motion.button
@@ -232,20 +223,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               iconOnly
             />
 
-            {/* Desktop: inline tools */}
-            {!isMobile && <UndoRedoToolbar />}
-            {!isMobile && (
-              <motion.button
-                onClick={cycleTheme}
-                whileTap={{ scale: 0.85, rotate: 15 }}
-                whileHover={{ scale: 1.1 }}
-                transition={{ type: "spring", damping: 18, stiffness: 380 }}
-                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
-                title={`Theme: ${themeLabel}`}
-              >
-                <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-              </motion.button>
-            )}
+            <UndoRedoToolbar />
+            <motion.button
+              onClick={cycleTheme}
+              whileTap={{ scale: 0.85, rotate: 15 }}
+              whileHover={{ scale: 1.1 }}
+              transition={{ type: "spring", damping: 18, stiffness: 380 }}
+              className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
+              title={`Theme: ${themeLabel}`}
+            >
+              <ThemeIcon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+            </motion.button>
             <motion.button
               onClick={toggleSounds}
               whileTap={{ scale: 0.85 }}
@@ -259,91 +247,22 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 : <VolumeX className="h-4 w-4 text-gray-400 dark:text-gray-500" />}
             </motion.button>
             <NotificationBell />
-            {!isMobile && (
-              <motion.button
-                onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
-                whileTap={{ scale: 0.85 }}
-                whileHover={{ scale: 1.1 }}
-                transition={{ type: "spring", damping: 18, stiffness: 380 }}
-                className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
-                title="Keyboard shortcuts (?)"
-              >
-                <Keyboard className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-              </motion.button>
-            )}
-            {!isMobile && <SettingsNav />}
-
-            {/* Mobile: overflow menu */}
-            {isMobile && <MobileOverflowMenu cycleTheme={cycleTheme} themeLabel={themeLabel} ThemeIcon={ThemeIcon} />}
+            <motion.button
+              onClick={() => window.dispatchEvent(new CustomEvent('open-shortcuts'))}
+              whileTap={{ scale: 0.85 }}
+              whileHover={{ scale: 1.1 }}
+              transition={{ type: "spring", damping: 18, stiffness: 380 }}
+              className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 flex items-center justify-center"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+            </motion.button>
+            <SettingsNav />
           </TooltipProvider>
+        </div>
         </div>
       </div>
     </div>
-  );
-};
-
-// ── Mobile Overflow Menu ──────────────────────────────────────────
-const MobileOverflowMenu: React.FC<{
-  cycleTheme: () => void;
-  themeLabel: string;
-  ThemeIcon: React.ElementType;
-}> = ({ cycleTheme, themeLabel, ThemeIcon }) => {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen(!open)}
-        className="h-8 w-8 p-0 rounded-lg hover:bg-black/10 dark:hover:bg-white/10"
-      >
-        <MoreHorizontal className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-      </Button>
-
-      {open && <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />}
-      <AnimatePresence>
-      {open && (
-          <motion.div
-            key="overflow-menu"
-            initial={{ opacity: 0, scale: 0.9, y: -10, transformOrigin: "top right" }}
-            animate={{ opacity: 1, scale: 1, y: 0, transition: { type: "spring", damping: 24, stiffness: 340 } }}
-            exit={{ opacity: 0, scale: 0.92, y: -8, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
-            style={{ transformOrigin: "top right" }}
-            className="absolute right-0 top-full mt-1 z-[71] min-w-[180px] bg-popover/95 backdrop-blur-xl border border-border rounded-xl shadow-xl overflow-hidden">
-            <button
-              onClick={() => { cycleTheme(); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
-            >
-              <ThemeIcon className="h-4 w-4" />
-              Theme: {themeLabel}
-            </button>
-            <button
-              onClick={() => { navigate('/settings'); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </button>
-            <button
-              onClick={() => { navigate('/analytics'); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-              Analytics
-            </button>
-            <button
-              onClick={() => { navigate('/quick-schedule'); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors border-t border-border/50"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-              Quick Schedule
-            </button>
-          </motion.div>
-      )}
-      </AnimatePresence>
-    </>
   );
 };
 

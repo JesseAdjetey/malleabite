@@ -504,6 +504,22 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
   }, [isExpanded]);
 
+  // Esc key: same two-step dismiss as clicking outside
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (isExpanded) {
+        e.stopPropagation();
+        if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); }
+      } else if (!isMinimized) {
+        e.stopPropagation();
+        setIsMinimized(true);
+      }
+    };
+    window.addEventListener('keydown', handleEsc, true);
+    return () => window.removeEventListener('keydown', handleEsc, true);
+  }, [isExpanded, isMinimized]);
+
   // Auto-retract when navigating to a different page
   useEffect(() => {
     // End voice session if active
@@ -1861,7 +1877,7 @@ RULES:
         onInterrupt={handleOverlayInterrupt}
       />
 
-      {/* Dark overlay when expanded */}
+      {/* Step 1: dark+blur overlay when expanded — click collapses (removes blur) but keeps panel */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -1870,6 +1886,19 @@ RULES:
             exit={{ opacity: 0 }}
             onClick={() => { if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); } }}
             className="fixed inset-0 bg-white/50 dark:bg-black/40 backdrop-blur-sm z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Step 2: transparent overlay when panel is visible but not expanded — click minimizes entirely */}
+      <AnimatePresence>
+        {!isMinimized && !isExpanded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMinimized(true)}
+            className="fixed inset-0 z-40 bg-transparent"
           />
         )}
       </AnimatePresence>

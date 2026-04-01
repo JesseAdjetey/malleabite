@@ -101,7 +101,11 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             </button>
           </div>
         ) : (
-          <h3 className="text-lg font-semibold text-primary flex-1 min-w-0 truncate">{title}</h3>
+          <h3
+            className="text-lg font-semibold text-primary flex-1 min-w-0 truncate cursor-pointer hover:opacity-70 transition-opacity"
+            onClick={onTitleChange ? startRename : undefined}
+            title={onTitleChange ? "Click to rename" : undefined}
+          >{title}</h3>
         )}
 
         {!isEditing && !isReadOnly && (

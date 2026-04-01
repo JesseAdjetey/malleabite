@@ -74,7 +74,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </button>
 
             <div className="flex flex-col items-center">
-              <h1 className="text-xl font-semibold text-purple-800 dark:text-purple-200">{title}</h1>
+              <h1
+                className={`text-xl font-semibold text-purple-800 dark:text-purple-200 ${!isSharedPage ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+                onClick={!isSharedPage ? handleEditTitle : undefined}
+                title={!isSharedPage ? "Click to rename" : undefined}
+              >{title}</h1>
               {isSharedPage && sharedOwnerName && (
                 <span className="text-xs text-muted-foreground leading-none">
                   by {sharedOwnerName}

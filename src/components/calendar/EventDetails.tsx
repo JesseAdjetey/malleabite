@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from '@/hooks/use-mobile';
 import { logger } from '@/lib/logger';
 import { useEventStore } from "@/lib/store";
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { useEventCRUD } from '@/hooks/use-event-crud';
 import { useUndoRedo } from '@/hooks/use-undo-redo';
 import { toast } from 'sonner';
@@ -85,10 +84,9 @@ interface EventDetailsProps {
 
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const isMobile = useIsMobile();
-  const { selectedEvent } = useEventStore();
+  const { selectedEvent, events } = useEventStore();
 
   const { updateEvent, removeEvent } = useEventCRUD();
-  const { addRecurrenceException } = useCalendarEvents();
   const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();
   const { toggleTodo, deleteTodo } = useTodos();
   const { syncEventTitle, syncEventCompletion, deleteWithSync, getLinksForFast } = useMirrorSync();
@@ -120,24 +118,42 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
         : dayjs(selectedEvent.startsAt).format('YYYY-MM-DD');
 
       if (scope === 'single') {
-        // Delete only this occurrence by adding an exception to the parent
-        if (addRecurrenceException && parentId) {
-          await addRecurrenceException(parentId, instanceDate);
+        // Add exception to parent event — update parent so UI refreshes immediately
+        const parentEvent = events.find(e => e.id === parentId);
+        if (parentEvent) {
+          const updatedParent = {
+            ...parentEvent,
+            recurrenceExceptions: [...(parentEvent.recurrenceExceptions || []), instanceDate],
+          };
+          await updateEvent(updatedParent);
           toast.success("This occurrence has been removed");
         } else {
-          // Fallback: just delete the event
+          // Parent not in local store — delete the virtual instance directly
           await removeEvent(selectedEvent.id);
           toast.success("Event deleted");
         }
       } else if (scope === 'all') {
-        // Delete the parent event (which deletes all occurrences)
         await removeEvent(parentId);
         toast.success("All occurrences deleted");
       } else if (scope === 'thisAndFuture') {
-        // Add end date to parent recurrence rule
-        // For now, just delete all as a simpler implementation
-        await removeEvent(parentId);
-        toast.success("This and future occurrences deleted");
+        // Truncate the series by setting endDate to the day before this occurrence
+        const parentEvent = events.find(e => e.id === parentId);
+        if (parentEvent) {
+          const endDate = dayjs(selectedEvent.startsAt).subtract(1, 'day').format('YYYY-MM-DD');
+          const updatedParent = {
+            ...parentEvent,
+            recurrenceRule: parentEvent.recurrenceRule ? {
+              ...parentEvent.recurrenceRule,
+              endDate,
+              count: undefined,
+            } : undefined,
+          };
+          await updateEvent(updatedParent);
+          toast.success("This and future occurrences deleted");
+        } else {
+          await removeEvent(parentId);
+          toast.success("This and future occurrences deleted");
+        }
       }
 
       setShowRecurringDeleteDialog(false);
@@ -146,7 +162,7 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
       logger.error("EventDetails", "Error deleting recurring event", error);
       toast.error("Failed to delete event");
     }
-  }, [selectedEvent, addRecurrenceException, removeEvent, onClose]);
+  }, [selectedEvent, events, updateEvent, removeEvent, onClose]);
 
   const handleRecurringEditConfirm = useCallback((scope: EditScope) => {
     setEditScope(scope);
@@ -290,9 +306,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
           ? selectedEvent.id.split('_')[1]
           : dayjs(selectedEvent.startsAt).format('YYYY-MM-DD');
 
-        if (editScope === 'single' && addRecurrenceException) {
+        if (editScope === 'single') {
           // Add exception to parent and create standalone event for this occurrence
-          await addRecurrenceException(parentId, instanceDate);
+          const parentEvent = events.find(e => e.id === parentId);
+          if (parentEvent) {
+            const updatedParent = {
+              ...parentEvent,
+              recurrenceExceptions: [...(parentEvent.recurrenceExceptions || []), instanceDate],
+            };
+            await updateEvent(updatedParent);
+          }
           const { id, recurrenceRule, isRecurring, recurrenceParentId, ...eventData } = updatedEvent;
           result = await updateEvent({ ...eventData, id: `${parentId}_exc_${instanceDate}` } as CalendarEventType);
         } else {

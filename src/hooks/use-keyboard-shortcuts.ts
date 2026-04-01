@@ -1,6 +1,6 @@
 // Keyboard Shortcuts Hook - Google Calendar-style navigation
 import { useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 
 // Define all available shortcuts
@@ -40,8 +40,8 @@ export interface Shortcut {
 export const DEFAULT_SHORTCUTS: Record<ShortcutAction, Shortcut> = {
   // Navigation
   goToToday: { key: 't', description: 'Go to today', category: 'navigation' },
-  goToNextPeriod: { key: 'j', description: 'Go to next period', category: 'navigation' },
-  goToPrevPeriod: { key: 'k', description: 'Go to previous period', category: 'navigation' },
+  goToNextPeriod: { key: 'k', description: 'Go to next period', category: 'navigation' },
+  goToPrevPeriod: { key: 'j', description: 'Go to previous period', category: 'navigation' },
 
   // View switching
   dayView: { key: 'd', description: 'Day view', category: 'views' },
@@ -108,6 +108,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
   } = options;
 
   const navigate = useNavigate();
+  const location = useLocation();
   const activeShortcuts = { ...DEFAULT_SHORTCUTS, ...shortcuts };
   
   // Track if user is in an input field
@@ -218,7 +219,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         onRefresh?.();
         break;
       case 'settings':
-        navigate('/settings');
+        navigate(location.pathname === '/settings' ? '/' : '/settings');
         break;
       case 'showShortcuts':
         onShowShortcuts?.();
@@ -255,6 +256,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     onShowShortcuts,
     navigatePeriod,
     navigate,
+    location,
   ]);
 
   // Register event listener

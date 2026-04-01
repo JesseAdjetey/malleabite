@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { getHours, isCurrentDay } from "@/lib/getTime";
 import { cn } from "@/lib/utils";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -57,6 +57,8 @@ const DayColumn: React.FC<DayColumnProps> = ({
 }) => {
   const hourHeight = 80; // px per hour
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+  // Track when context menu last closed to prevent spurious openEventSummary calls
+  const ctxMenuClosedAtRef = useRef(0);
 
   // Conflict detection
   const { conflicts, isEnabled: conflictEnabled } = useConflictMap(dayEvents);
@@ -189,6 +191,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
             }}
             onClick={(e) => {
               e.stopPropagation();
+              if (Date.now() - ctxMenuClosedAtRef.current < 300) return;
               if (e.shiftKey && !isBulkMode) {
                 onShiftClickEvent?.(event.id);
                 return;
@@ -215,6 +218,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
                 onColorChange={onColorChange}
                 onLockToggle={(eventId, locked) => toggleEventLock(eventId, locked)}
                 onReschedule={() => setRescheduleEvent(event)}
+                onOpenChange={(open) => { if (!open) ctxMenuClosedAtRef.current = Date.now(); }}
               >
                 <div className="h-full relative">
                   {/* Top resize handle — adjusts start time */}

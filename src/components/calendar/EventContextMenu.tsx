@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -41,6 +41,8 @@ interface EventContextMenuProps {
   onLockToggle?: (eventId: string, locked: boolean) => void;
   /** Opens RescheduleOptionsSheet for this event */
   onReschedule?: () => void;
+  /** Called when context menu opens/closes — use to gate parent click handlers */
+  onOpenChange?: (open: boolean) => void;
 }
 
 const EventContextMenu: React.FC<EventContextMenuProps> = ({
@@ -52,9 +54,17 @@ const EventContextMenu: React.FC<EventContextMenuProps> = ({
   onColorChange,
   onLockToggle,
   onReschedule,
+  onOpenChange,
 }) => {
+  const wasOpenRef = useRef(false);
+
+  const handleOpenChange = (open: boolean) => {
+    wasOpenRef.current = open;
+    onOpenChange?.(open);
+  };
+
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={handleOpenChange}>
       <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>

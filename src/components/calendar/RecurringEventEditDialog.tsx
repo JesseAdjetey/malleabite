@@ -116,8 +116,8 @@ export function RecurringEventEditDialog({
 
             {/* This and following */}
             <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
-              <RadioGroupItem value="thisAndFollowing" id="thisAndFollowing" className="mt-1" />
-              <Label htmlFor="thisAndFollowing" className="cursor-pointer flex-1">
+              <RadioGroupItem value="thisAndFuture" id="thisAndFuture" className="mt-1" />
+              <Label htmlFor="thisAndFuture" className="cursor-pointer flex-1">
                 <div className="font-medium">This and following events</div>
                 <div className="text-sm text-muted-foreground">
                   {isDelete ? 'Delete' : 'Change'} this and all future occurrences

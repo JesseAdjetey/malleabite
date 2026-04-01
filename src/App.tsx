@@ -161,12 +161,12 @@ const AppRoutes = () => {
         case 'w': setView('Week'); break;
         case 'd': setView('Day'); break;
         case 't': setDate(dayjs()); setMonth(dayjs().month()); break;
-        case 'j':
+        case 'k':
           if (selectedView === 'Month') setMonth(selectedMonthIndex + 1);
           else if (selectedView === 'Week') setDate(userSelectedDate.add(1, 'week'));
           else if (selectedView === 'Day') setDate(userSelectedDate.add(1, 'day'));
           break;
-        case 'k':
+        case 'j':
           if (selectedView === 'Month') setMonth(selectedMonthIndex - 1);
           else if (selectedView === 'Week') setDate(userSelectedDate.subtract(1, 'week'));
           else if (selectedView === 'Day') setDate(userSelectedDate.subtract(1, 'day'));

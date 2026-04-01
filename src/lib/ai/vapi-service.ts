@@ -670,6 +670,7 @@ class MallyVapiService {
           ? {
               provider: 'custom-llm',
               url: customLlmUrl,
+              model: 'gemini-2.5-flash',
               messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
             }
           : {
@@ -790,6 +791,7 @@ class MallyVapiService {
           ? {
               provider: 'custom-llm',
               url: customLlmUrl,
+              model: 'gemini-2.5-flash',
               messages: [{ role: 'system', content: options.systemPrompt }],
             }
           : {

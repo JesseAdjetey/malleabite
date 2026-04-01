@@ -165,6 +165,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   // Siri-like full-screen voice overlay state
   const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false);
+  const [isVapiConnecting, setIsVapiConnecting] = useState(false);
+  const isVapiConnectingRef = useRef(false);
+  // Keep ref in sync so closures (setTimeout, callbacks) can read fresh value
+  useEffect(() => { isVapiConnectingRef.current = isVapiConnecting; }, [isVapiConnecting]);
   const [overlayTranscript, setOverlayTranscript] = useState('');
   const [overlayResponse, setOverlayResponse] = useState('');
   const [overlayProcessing, setOverlayProcessing] = useState(false);
@@ -193,6 +197,15 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
   }, []);
+
+  // Pre-warm VAPI WebRTC on mount so the first "Hey Mally" is instant
+  useEffect(() => {
+    if (mallyVapi.isAvailable) {
+      // Small delay so the rest of the app can finish mounting first
+      const t = setTimeout(() => mallyVapi.preWarm(mallyVoice), 2000);
+      return () => clearTimeout(t);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wire TTS speaking state to component — SINGLE source of truth for re-listening.
   // Handles both overlay and non-overlay voice paths using refs (not closures on React state).
@@ -546,6 +559,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setOverlayTranscript('');
     setOverlayResponse('');
     setOverlayProcessing(false);
+    setIsVapiConnecting(false);
     setIsSpeaking(false);
     mallyVapi.stop();
     deepgramSTT.stop();
@@ -876,10 +890,12 @@ RULES:
       },
       onCallStart: () => {
         console.log('[Mally] VAPI session connected');
+        setIsVapiConnecting(false);
         setOverlayProcessing(false);
       },
       onCallEnd: () => {
         console.log('[Mally] VAPI session ended');
+        setIsVapiConnecting(false);
         closeVoiceOverlay();
         // Re-warm for next activation
         setTimeout(() => mallyVapi.preWarm(mallyVoice), 1000);
@@ -904,10 +920,28 @@ RULES:
       },
       onError: (err) => {
         console.error('[Mally] VAPI error:', err);
+        setIsVapiConnecting(false);
+        // VAPI had a post-connect error (e.g. mic denied, ICE failure) — fall back
+        // to the Web Speech API + Gemini pipeline so the overlay stays functional.
+        if (voiceOverlayOpenRef.current) {
+          startOverlayListening();
+        }
       },
     });
 
     mallyVapi.onSpeakingChange((speaking) => setIsSpeaking(speaking));
+
+    setIsVapiConnecting(true);
+
+    // Safety timeout: if VAPI hasn't fired call-start within 10s, fall back
+    const connectTimeoutId = setTimeout(() => {
+      if (voiceOverlayOpenRef.current && isVapiConnectingRef.current) {
+        console.warn('[Mally] VAPI connection timeout — falling back');
+        mallyVapi.stop();
+        setIsVapiConnecting(false);
+        startOverlayListening();
+      }
+    }, 10_000);
 
     try {
       await mallyVapi.startSession({
@@ -917,7 +951,10 @@ RULES:
       });
     } catch (err) {
       console.error('[Mally] VAPI session failed, falling back:', err);
+      setIsVapiConnecting(false);
       startOverlayListening();
+    } finally {
+      clearTimeout(connectTimeoutId);
     }
   }, [buildContext, executeAction, closeVoiceOverlay, startOverlayListening]);
 
@@ -1870,7 +1907,7 @@ RULES:
         isListening={isRecording && voiceOverlayOpen}
         isSpeaking={isSpeaking && voiceOverlayOpen}
         isProcessing={overlayProcessing}
-        isConnecting={false}
+        isConnecting={isVapiConnecting}
         transcript={overlayTranscript}
         responseText={overlayResponse}
         onClose={closeVoiceOverlay}

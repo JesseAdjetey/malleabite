@@ -199,13 +199,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     };
   }, []);
 
-  // Pre-warm VAPI WebRTC on mount so the first "Hey Mally" is instant
-  useEffect(() => {
-    if (mallyVapi.isAvailable) {
-      const t = setTimeout(() => mallyVapi.preWarm(mallyVoice), 2000);
-      return () => clearTimeout(t);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wire TTS speaking state to component — SINGLE source of truth for re-listening.
   // Handles both overlay and non-overlay voice paths using refs (not closures on React state).
@@ -760,8 +753,6 @@ RULES:
           voiceSessionStartRef.current = null;
         }
         closeVoiceOverlay();
-        // Re-warm for next activation
-        setTimeout(() => mallyVapi.preWarm(mallyVoice), 1000);
       },
       onToolCall: async (name, args) => {
         if (name === 'get_weather') {

@@ -31,6 +31,7 @@ import { CountdownPanel } from '@/components/countdown/CountdownPanel';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
 import { KeyboardShortcutsDialog } from '@/components/keyboard/KeyboardShortcutsDialog';
+import { FeedbackEdgeTab } from '@/components/feedback/FeedbackEdgeTab';
 import { useViewStore, useDateStore, useEventStore } from '@/lib/store';
 import { useBulkSelectionStore } from '@/lib/stores/bulk-selection-store';
 import { useEventCRUD } from '@/hooks/use-event-crud';
@@ -257,6 +258,7 @@ const AppRoutes = () => {
       {!isAuthPage && <InstallPrompt />}
       {!isAuthPage && <UpgradePrompt />}
       {!isAuthPage && <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />}
+      {!isAuthPage && <FeedbackEdgeTab />}
       <Toaster />
     </ThemeProvider>
   );

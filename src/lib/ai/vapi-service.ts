@@ -784,6 +784,15 @@ class MallyVapiService {
         await new Promise(r => setTimeout(r, 300));
       }
 
+      // Ensure AudioContext is running before Vapi tries to acquire the mic
+      try {
+        const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          if (ctx.state === 'suspended') await ctx.resume();
+        }
+      } catch {}
+
       const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID as string | undefined;
       const vapi = this.ensureVapi();
       if (assistantId) {

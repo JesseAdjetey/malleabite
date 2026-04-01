@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { FirebaseFunctions } from "@/integrations/firebase/functions";
 import { useUsageLimits } from "@/hooks/use-usage-limits";
+import { useSubscription } from "@/hooks/use-subscription";
 import { useMallyActions } from "@/hooks/use-mally-actions";
 import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proactive-suggestions";
 import { logger } from "@/lib/logger";
@@ -49,7 +50,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { mallyTTS, unlockAudioContext } from "@/lib/ai/tts-service";
 import { speechService } from "@/lib/ai/speech-recognition-service";
-import { deepgramSTT } from "@/lib/ai/deepgram-stt-service";
 import { mallyVapi } from "@/lib/ai/vapi-service";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
@@ -167,6 +167,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false);
   const [isVapiConnecting, setIsVapiConnecting] = useState(false);
   const isVapiConnectingRef = useRef(false);
+  const voiceSessionStartRef = useRef<number | null>(null);
   // Keep ref in sync so closures (setTimeout, callbacks) can read fresh value
   useEffect(() => { isVapiConnectingRef.current = isVapiConnecting; }, [isVapiConnecting]);
   const [overlayTranscript, setOverlayTranscript] = useState('');
@@ -216,25 +217,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       // Only act on TTS finishing (speaking → not speaking)
       if (speaking || !wasVoiceActivatedRef.current) return;
 
-      // ── OVERLAY PATH: voice overlay is open ──
-      if (voiceOverlayOpenRef.current) {
-        // Wait for audio pipeline to fully release before re-acquiring mic.
-        // speechSynthesis fallback needs longer release time.
-        const delay = mallyTTS.lastUsedFallback ? 800 : 250;
-        setTimeout(async () => {
-          // Guard: overlay still open, not already listening, not still processing AI
-          if (!voiceOverlayOpenRef.current) return;
-          if (speechService.isListening) return;
-          if (overlayProcessingRef.current) return;
-          if (isRecordingRef.current) return;
-
-          console.log('[Mally] TTS finished → re-starting overlay listening');
-          if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-          await speechService.ensureStopped(100);
-          startOverlayListeningRef.current?.();
-        }, delay);
-        return; // Don't also run non-overlay path
-      }
+      // Overlay path: Vapi manages its own turn-taking — nothing to do here.
+      if (voiceOverlayOpenRef.current) return;
 
       // ── NON-OVERLAY PATH: inline voice session ──
       if (voiceSessionActiveRef.current) {
@@ -283,7 +267,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
 
   const { user } = useAuth();
-  const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
+  const { limits, incrementAICount, incrementVoiceMinutes, triggerUpgradePrompt } = useUsageLimits();
+  const { subscription } = useSubscription();
   const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
   const {
     executeAction,
@@ -562,15 +547,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setIsVapiConnecting(false);
     setIsSpeaking(false);
     mallyVapi.stop();
-    deepgramSTT.stop();
     if (isRecording) {
       speechService.stopListening();
       setIsRecording(false);
     }
     overlayWakePausedRef.current = false;
-    overlayAbortRetryRef.current = 0;
-    deepgramUnavailableRef.current = false;
-    overlayListeningActiveRef.current = false;
     setVoiceSessionActive(false);
     wasVoiceActivatedRef.current = false;
     // Clear any pending TTS completion callback to prevent stale restarts
@@ -696,14 +677,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       }
     }
 
-    // Safety net: if TTS is not playing (muted, very short response, or already finished),
-    // the onSpeakingChange handler won't fire. Start re-listening directly.
-    setTimeout(() => {
-      if (voiceOverlayOpenRef.current && !mallyTTS.isSpeaking && !speechService.isListening && !isRecordingRef.current) {
-        console.log('[Mally] TTS not playing after processing → starting overlay listening directly');
-        startOverlayListeningRef.current?.();
-      }
-    }, 500);
   }, [user?.uid, messages, isMuted, buildContext, incrementAICount, executeAction, closeVoiceOverlay]);
 
   // Start listening in overlay mode
@@ -712,136 +685,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Track whether overlay wake-word pause was already applied for this session
   const overlayWakePausedRef = useRef(false);
-  // Retry counter for transient aborted errors — reset on each new speech round
-  const overlayAbortRetryRef = useRef(0);
-  // Set to true when Deepgram fails — skip it for the rest of the session
-  const deepgramUnavailableRef = useRef(false);
-  // Prevent concurrent startOverlayListening calls from racing
-  const overlayListeningActiveRef = useRef(false);
-
-  const startOverlayListening = useCallback(async (isRetry = false) => {
-    if (!isRetry) overlayAbortRetryRef.current = 0;
-    // Deduplicate: if a listen session is already starting/active, ignore
-    if (overlayListeningActiveRef.current) return;
-    overlayListeningActiveRef.current = true;
-    setOverlayTranscript('');
-    // Keep previous overlayResponse visible so user can re-read while formulating next input
-
-    // Pause wake word only once per overlay session (not on every retry)
-    if (!overlayWakePausedRef.current) {
-      pauseWakeWord?.();
-      overlayWakePausedRef.current = true;
-    }
-
-    // Ensure mic is fully released before re-acquiring — critical for reliability.
-    // Cancel any lingering speechSynthesis that might block the audio pipeline.
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-
-    if (deepgramSTT.isAvailable && !deepgramUnavailableRef.current) {
-      // ── Deepgram path: real-time WebSocket STT (Nova-2, proper VAD) ──
-      await deepgramSTT.ensureStopped(isRetry ? 80 : 150);
-      if (!voiceOverlayOpenRef.current) { overlayListeningActiveRef.current = false; return; }
-      overlayListeningActiveRef.current = false; // Listening is now active; allow future calls
-      setIsRecording(true);
-
-      const onResult = (result: { transcript: string; isFinal: boolean; confidence?: number }) => {
-        overlayAbortRetryRef.current = 0;
-        setOverlayTranscript(result.transcript);
-
-        if (vadTimerRef.current) clearTimeout(vadTimerRef.current);
-
-        if (result.isFinal) {
-          vadTimerRef.current = null;
-          deepgramSTT.stop().then(() => {
-            setIsRecording(false);
-            handleOverlayVoiceMessage(result.transcript);
-          });
-        } else if (result.transcript.trim().length > 3) {
-          // Adaptive VAD timeout as safety net on top of Deepgram's endpointing
-          const wordCount = result.transcript.trim().split(/\s+/).length;
-          const vadTimeout = wordCount >= 6 ? 800 : wordCount >= 3 ? 1100 : 1400;
-          vadTimerRef.current = setTimeout(() => {
-            vadTimerRef.current = null;
-            if (voiceOverlayOpenRef.current) {
-              deepgramSTT.stop().then(() => {
-                setIsRecording(false);
-                handleOverlayVoiceMessage(result.transcript.trim());
-              });
-            }
-          }, vadTimeout);
-        }
-      };
-
-      const onError = (err: string) => {
-        setIsRecording(false);
-        if (!voiceOverlayOpenRef.current) return;
-        console.warn('[Mally] Deepgram unavailable, switching to Web Speech API:', err);
-        deepgramUnavailableRef.current = true;
-        setTimeout(() => startOverlayListening(true), 300);
-      };
-
-      deepgramSTT.startListening(onResult, onError);
-    } else {
-      // ── Web Speech API fallback ──
-      await speechService.ensureStopped(isRetry ? 100 : 200);
-      if (!voiceOverlayOpenRef.current) { overlayListeningActiveRef.current = false; return; }
-      overlayListeningActiveRef.current = false; // Listening is now active; allow future calls
-      setIsRecording(true);
-
-      await speechService.startListeningWithRetry(
-        (result) => {
-          overlayAbortRetryRef.current = 0;
-          setOverlayTranscript(result.transcript);
-
-          if (vadTimerRef.current) clearTimeout(vadTimerRef.current);
-
-          if (result.isFinal) {
-            vadTimerRef.current = null;
-            handleOverlayVoiceMessage(result.transcript);
-          } else if (result.transcript.trim().length > 3) {
-            const wordCount = result.transcript.trim().split(/\s+/).length;
-            const vadTimeout = wordCount >= 6 ? 900 : wordCount >= 3 ? 1200 : 1500;
-            vadTimerRef.current = setTimeout(() => {
-              vadTimerRef.current = null;
-              if (voiceOverlayOpenRef.current) {
-                speechService.stopListening();
-                setIsRecording(false);
-                handleOverlayVoiceMessage(result.transcript.trim());
-              }
-            }, vadTimeout);
-          }
-        },
-        (err) => {
-          setIsRecording(false);
-          if (!voiceOverlayOpenRef.current) return;
-          if (err === 'no-speech') { setTimeout(() => startOverlayListening(true), 500); return; }
-          if ((err === 'network' || err === 'aborted') && overlayAbortRetryRef.current < 8) {
-            overlayAbortRetryRef.current++;
-            const backoff = Math.min(250 * overlayAbortRetryRef.current, 2500);
-            setTimeout(() => startOverlayListening(true), backoff);
-            return;
-          }
-          if (err !== 'aborted') console.error('[Mally] Speech error:', err);
-        }
-      );
-    }
-  }, [pauseWakeWord, handleOverlayVoiceMessage]);
-
-  // Stable ref for startOverlayListening so TTS callback can access latest version
-  const startOverlayListeningRef = useRef(startOverlayListening);
-  useEffect(() => { startOverlayListeningRef.current = startOverlayListening; }, [startOverlayListening]);
-
-  // Interrupt Mally mid-speech: stop TTS and start listening immediately
+  // Interrupt Mally mid-speech — Vapi handles barge-in natively
   const handleOverlayInterrupt = useCallback(() => {
-    if (mallyVapi.isActive) {
-      // VAPI handles barge-in natively — user just speaks
-      return;
-    }
-    mallyTTS.stop();
-    deepgramSTT.stop();
-    overlayAbortRetryRef.current = 0;
-    startOverlayListening();
-  }, [startOverlayListening]);
+    // Vapi handles barge-in natively — user just speaks
+  }, []);
 
   // Start a VAPI voice session — full-duplex with native barge-in and pre-warm
   const startVoiceAgentSession = useCallback(async () => {
@@ -901,12 +748,18 @@ RULES:
       },
       onCallStart: () => {
         console.log('[Mally] VAPI session connected');
+        voiceSessionStartRef.current = Date.now();
         setIsVapiConnecting(false);
         setOverlayProcessing(false);
       },
       onCallEnd: () => {
         console.log('[Mally] VAPI session ended');
         setIsVapiConnecting(false);
+        if (voiceSessionStartRef.current) {
+          const minutes = Math.ceil((Date.now() - voiceSessionStartRef.current) / 60_000);
+          incrementVoiceMinutes(minutes);
+          voiceSessionStartRef.current = null;
+        }
         closeVoiceOverlay();
         // Re-warm for next activation
         setTimeout(() => mallyVapi.preWarm(mallyVoice), 1000);
@@ -932,11 +785,8 @@ RULES:
       onError: (err) => {
         console.error('[Mally] VAPI error:', err);
         setIsVapiConnecting(false);
-        // VAPI had a post-connect error (e.g. mic denied, ICE failure) — fall back
-        // to the Web Speech API + Gemini pipeline so the overlay stays functional.
-        if (voiceOverlayOpenRef.current) {
-          startOverlayListening();
-        }
+        closeVoiceOverlay();
+        toast.error('Voice connection failed. Please try again.');
       },
     });
 
@@ -944,13 +794,14 @@ RULES:
 
     setIsVapiConnecting(true);
 
-    // Safety timeout: if VAPI hasn't fired call-start within 10s, fall back
+    // Safety timeout: if Vapi hasn't fired call-start within 10s, close overlay
     const connectTimeoutId = setTimeout(() => {
       if (voiceOverlayOpenRef.current && isVapiConnectingRef.current) {
-        console.warn('[Mally] VAPI connection timeout — falling back');
+        console.warn('[Mally] VAPI connection timeout');
         mallyVapi.stop();
         setIsVapiConnecting(false);
-        startOverlayListening();
+        closeVoiceOverlay();
+        toast.error('Could not connect to voice. Please try again.');
       }
     }, 10_000);
 
@@ -961,17 +812,37 @@ RULES:
         voiceId: mallyVoice,
       });
     } catch (err) {
-      console.error('[Mally] VAPI session failed, falling back:', err);
+      console.error('[Mally] VAPI session failed:', err);
       setIsVapiConnecting(false);
-      startOverlayListening();
+      closeVoiceOverlay();
+      toast.error('Voice session failed. Please try again.');
     } finally {
       clearTimeout(connectTimeoutId);
     }
-  }, [buildContext, executeAction, closeVoiceOverlay, startOverlayListening]);
+  }, [buildContext, executeAction, closeVoiceOverlay]);
 
   // Listen for Hey Mally activation — Siri-like full-screen voice overlay
   useEffect(() => {
     const handleHeyMallyActivation = async () => {
+      // Voice is a paid feature — require Pro or Teams subscription
+      if (!(subscription?.isPro || subscription?.isTeams)) {
+        toast.info('Voice is a Pro feature. Upgrade to Pro to use Hey Mally.', { duration: 4000 });
+        return;
+      }
+      // Enforce monthly voice minute cap
+      if (!limits.canUseVoice) {
+        toast.info(
+          `You've used all ${limits.voiceMinutesLimit} voice minutes this month. Resets on the 1st.`,
+          { duration: 5000 }
+        );
+        return;
+      }
+
+      if (!mallyVapi.isAvailable) {
+        toast.error('Voice is not configured. Please contact support.');
+        return;
+      }
+
       overlayWakePausedRef.current = false;
       wasVoiceActivatedRef.current = true;
       setVoiceSessionActive(true);
@@ -984,25 +855,17 @@ RULES:
       // Ensure AudioContext is unlocked
       unlockAudioContext();
 
-      // Kill the wake word mic so Vapi/overlay can use it
+      // Kill the wake word mic so Vapi can use it
       pauseWakeWord?.();
       overlayWakePausedRef.current = true;
 
-      if (mallyVapi.isAvailable) {
-        // ── VAPI: full-duplex, native barge-in, pre-warmed WebRTC ──
-        await speechService.ensureStopped(100);
-        startVoiceAgentSession();
-      } else {
-        // ── Custom pipeline: Web Speech API → Gemini (streaming) → Google Cloud TTS ──
-        mallyTTS.playInstantACK();
-        await speechService.ensureStopped(250);
-        startOverlayListening();
-      }
+      await speechService.ensureStopped(100);
+      startVoiceAgentSession();
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [startOverlayListening, startVoiceAgentSession]);
+  }, [startVoiceAgentSession, limits.canUseVoice, limits.voiceMinutesLimit, subscription]);
 
   // Auto-dismiss overlay after inactivity (like Siri)
   useEffect(() => {

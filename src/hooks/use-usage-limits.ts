@@ -9,36 +9,44 @@ import { SUBSCRIPTION_PLANS } from '@/lib/stripe';
 export interface UsageData {
   eventsThisMonth: number;
   aiRequestsThisMonth: number;
+  voiceMinutesThisMonth: number;
   activeModules: number;
   lastResetDate: string;
   totalEventsCreated: number;
   totalAiRequests: number;
+  totalVoiceMinutes: number;
 }
 
 export interface UsageLimits {
   canCreateEvent: boolean;
   canUseAI: boolean;
+  canUseVoice: boolean;
   canAddModule: boolean;
   canUseRecurring: boolean;
   canUseAdvancedAnalytics: boolean;
   eventsRemaining: number;
   aiRequestsRemaining: number;
   modulesRemaining: number;
+  voiceMinutesRemaining: number;
   eventsUsed: number;
   aiRequestsUsed: number;
   modulesUsed: number;
+  voiceMinutesUsed: number;
   eventsLimit: number;
   aiRequestsLimit: number;
   modulesLimit: number;
+  voiceMinutesLimit: number;
 }
 
 const DEFAULT_USAGE: UsageData = {
   eventsThisMonth: 0,
   aiRequestsThisMonth: 0,
+  voiceMinutesThisMonth: 0,
   activeModules: 0,
   lastResetDate: new Date().toISOString(),
   totalEventsCreated: 0,
   totalAiRequests: 0,
+  totalVoiceMinutes: 0,
 };
 
 export function useUsageLimits() {
@@ -95,6 +103,7 @@ export function useUsageLimits() {
               ...data,
               eventsThisMonth: 0,
               aiRequestsThisMonth: 0,
+              voiceMinutesThisMonth: 0,
               lastResetDate: now.toISOString(),
             };
             await setDoc(usageRef, resetData);
@@ -124,11 +133,19 @@ export function useUsageLimits() {
   const aiLimit = planLimits.aiRequestsPerMonth as number;
   const eventLimit = planLimits.eventsPerMonth as number;
   const moduleLimit = planLimits.modulesActive as number;
+  const voiceLimit = (planLimits as any).voiceMinutesPerMonth as number | undefined;
+
+  // Voice is a paid feature — only available on Pro or Teams
+  const isPaidVoiceUser = !!(subscription?.isPro || subscription?.isTeams);
+  const voiceMinutesUsed = usage?.voiceMinutesThisMonth || 0;
+  const voiceMinutesLimit = voiceLimit ?? 0;
+  const canUseVoice = isPaidVoiceUser && (voiceLimit === undefined || voiceMinutesUsed < voiceMinutesLimit);
 
   const limits: UsageLimits = {
     // Check if actions are allowed - forced to true
     canCreateEvent: true,
     canUseAI: true,
+    canUseVoice,
     canAddModule: true,
     canUseRecurring: true,
     canUseAdvancedAnalytics: true,
@@ -137,11 +154,13 @@ export function useUsageLimits() {
     eventsUsed: usage?.eventsThisMonth || 0,
     aiRequestsUsed: usage?.aiRequestsThisMonth || 0,
     modulesUsed: usage?.activeModules || 0,
+    voiceMinutesUsed,
 
     // Limits
     eventsLimit: eventLimit === -1 ? Infinity : eventLimit,
     aiRequestsLimit: aiLimit === -1 ? Infinity : aiLimit,
     modulesLimit: moduleLimit === -1 ? Infinity : moduleLimit,
+    voiceMinutesLimit,
 
     // Remaining
     eventsRemaining: eventLimit === -1
@@ -155,6 +174,8 @@ export function useUsageLimits() {
     modulesRemaining: moduleLimit === -1
       ? Infinity
       : Math.max(0, moduleLimit - (usage?.activeModules || 0)),
+
+    voiceMinutesRemaining: Math.max(0, voiceMinutesLimit - voiceMinutesUsed),
   };
 
   // Increment event count
@@ -239,6 +260,20 @@ export function useUsageLimits() {
     }
   }, [user, usage?.activeModules, limits.canAddModule]);
 
+  // Record voice minutes used (called when a Vapi session ends)
+  const incrementVoiceMinutes = useCallback(async (minutes: number): Promise<void> => {
+    if (!user || minutes <= 0) return;
+    try {
+      const usageRef = doc(db, 'usage', user.uid);
+      await setDoc(usageRef, {
+        voiceMinutesThisMonth: increment(minutes),
+        totalVoiceMinutes: increment(minutes),
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error incrementing voice minutes:', error);
+    }
+  }, [user]);
+
   // Check if a premium feature can be used
   const checkPremiumFeature = useCallback((
     feature: 'recurring' | 'analytics'
@@ -263,6 +298,7 @@ export function useUsageLimits() {
     incrementEventCount,
     decrementEventCount,
     incrementAICount,
+    incrementVoiceMinutes,
     updateModuleCount,
     checkPremiumFeature,
 

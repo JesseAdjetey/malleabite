@@ -76,7 +76,7 @@ export const SUBSCRIPTION_PLANS = {
   PRO: {
     id: 'pro',
     name: 'Pro',
-    price: 9.99,
+    price: 12.99,
     interval: 'month' as const,
     stripePriceId: import.meta.env.VITE_STRIPE_PRO_MONTHLY_PRICE_ID,
     stripeProductId: import.meta.env.VITE_STRIPE_PRO_PRODUCT_ID,
@@ -84,6 +84,7 @@ export const SUBSCRIPTION_PLANS = {
       events: 'unlimited',
       modules: 'unlimited',
       aiRequests: 'unlimited',
+      voice: '45 min/mo',
       analytics: 'advanced',
       support: 'priority',
       customTemplates: 'unlimited',
@@ -92,25 +93,27 @@ export const SUBSCRIPTION_PLANS = {
     limits: {
       eventsPerMonth: -1, // -1 = unlimited
       modulesActive: -1,
-      aiRequestsPerMonth: 1000, // Soft limit for rate limiting
+      aiRequestsPerMonth: 1000,
+      voiceMinutesPerMonth: 45,
       customTemplates: -1,
       teamMembers: 1,
       storageGB: 5,
     }
   },
-  
+
   PRO_ANNUAL: {
     id: 'pro-annual',
     name: 'Pro Annual',
-    price: 99.99,
+    price: 99,
     interval: 'year' as const,
     stripePriceId: import.meta.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID,
     stripeProductId: import.meta.env.VITE_STRIPE_PRO_PRODUCT_ID,
-    savings: 17, // percentage saved vs monthly
+    savings: 36, // percentage saved vs monthly ($12.99×12=$155.88 vs $99)
     features: {
       events: 'unlimited',
       modules: 'unlimited',
       aiRequests: 'unlimited',
+      voice: '45 min/mo',
       analytics: 'advanced',
       support: 'priority',
       customTemplates: 'unlimited',
@@ -120,16 +123,17 @@ export const SUBSCRIPTION_PLANS = {
       eventsPerMonth: -1,
       modulesActive: -1,
       aiRequestsPerMonth: 1000,
+      voiceMinutesPerMonth: 45,
       customTemplates: -1,
       teamMembers: 1,
       storageGB: 5,
     }
   },
-  
+
   TEAMS: {
     id: 'teams',
     name: 'Teams',
-    price: 7,
+    price: 9,
     pricePerUser: true,
     interval: 'month' as const,
     stripePriceId: import.meta.env.VITE_STRIPE_TEAMS_MONTHLY_PRICE_ID,
@@ -139,6 +143,7 @@ export const SUBSCRIPTION_PLANS = {
       events: 'unlimited',
       modules: 'unlimited',
       aiRequests: 'unlimited',
+      voice: '45 min/user/mo',
       analytics: 'advanced',
       support: 'priority',
       customTemplates: 'unlimited',
@@ -151,6 +156,7 @@ export const SUBSCRIPTION_PLANS = {
       eventsPerMonth: -1,
       modulesActive: -1,
       aiRequestsPerMonth: 1000,
+      voiceMinutesPerMonth: 45,
       customTemplates: -1,
       teamMembers: -1,
       storageGB: 20,

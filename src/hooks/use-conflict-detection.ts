@@ -7,6 +7,11 @@ import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import { useSettingsStore } from '@/lib/stores/settings-store';
+import {
+  detectEventConflicts,
+  type EventConflict as AlgoEventConflict,
+} from '@/lib/algorithms/conflict-detection';
 
 dayjs.extend(isBetween);
 dayjs.extend(isSameOrBefore);
@@ -241,4 +246,54 @@ export function hasEventConflict(
   conflictResult: ConflictDetectionResult
 ): boolean {
   return conflictResult.conflictingEventIds.has(eventId);
+}
+
+// ─── New preference-aware API ────────────────────────────────────────────────
+// Used by calendar views and the rescheduler.
+
+export type { AlgoEventConflict };
+
+export interface ConflictMapResult {
+  /** eventId → structured conflicts */
+  conflicts: Map<string, AlgoEventConflict[]>;
+  hasConflicts: boolean;
+  criticalCount: number;
+  warningCount: number;
+  /** false when mode === 'off' */
+  isEnabled: boolean;
+}
+
+/**
+ * useConflictMap — preference-aware hook returning a Map keyed by eventId.
+ * Use this in calendar views and the rescheduler.
+ */
+export function useConflictMap(events: CalendarEventType[]): ConflictMapResult {
+  const { reschedulingPrefs } = useSettingsStore();
+
+  return useMemo<ConflictMapResult>(() => {
+    if (reschedulingPrefs.mode === 'off') {
+      return {
+        conflicts: new Map(),
+        hasConflicts: false,
+        criticalCount: 0,
+        warningCount: 0,
+        isEnabled: false,
+      };
+    }
+
+    const map = new Map<string, AlgoEventConflict[]>();
+    let criticalCount = 0;
+    let warningCount = 0;
+
+    for (const event of events) {
+      const analysis = detectEventConflicts(event, events, reschedulingPrefs);
+      if (analysis.hasConflicts) {
+        map.set(event.id, analysis.conflicts);
+        criticalCount += analysis.conflicts.filter((c) => c.severity === 'critical').length;
+        warningCount  += analysis.conflicts.filter((c) => c.severity === 'warning').length;
+      }
+    }
+
+    return { conflicts: map, hasConflicts: map.size > 0, criticalCount, warningCount, isEnabled: true };
+  }, [events, reschedulingPrefs]);
 }

@@ -29,8 +29,12 @@ export function useNotificationManager() {
     const { alarms, updateAlarm } = useAlarms();
     const { reminders, toggleReminderActive } = useReminders();
     const countdowns = useCountdownEvents();
-    const triggeredAlarmsRef = useRef<Set<string>>(new Set());
-    const triggeredRemindersRef = useRef<Set<string>>(new Set());
+    const triggeredAlarmsRef = useRef<Set<string>>(new Set(
+        JSON.parse(sessionStorage.getItem('triggered-alarms') || '[]') as string[]
+    ));
+    const triggeredRemindersRef = useRef<Set<string>>(new Set(
+        JSON.parse(sessionStorage.getItem('triggered-reminders') || '[]') as string[]
+    ));
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Request notification permission on mount + create channels on Android
@@ -263,6 +267,7 @@ export function useNotificationManager() {
 
         console.log('Triggering alarm:', alarm.title);
         triggeredAlarmsRef.current.add(alarm.id);
+        sessionStorage.setItem('triggered-alarms', JSON.stringify([...triggeredAlarmsRef.current]));
 
         showNotification(
             `⏰ ${alarm.title}`,
@@ -279,10 +284,10 @@ export function useNotificationManager() {
         }
 
         // Clear from triggered set after 15 minutes to prevent re-triggering within the 10m window
-        // The window is 10 minutes, so 15 minutes is safe.
         setTimeout(() => {
             if (alarm.id) {
                 triggeredAlarmsRef.current.delete(alarm.id);
+                sessionStorage.setItem('triggered-alarms', JSON.stringify([...triggeredAlarmsRef.current]));
             }
         }, 900000);
     }, [showNotification, updateAlarm]);
@@ -292,6 +297,7 @@ export function useNotificationManager() {
 
         console.log('Triggering reminder:', reminder.title);
         triggeredRemindersRef.current.add(reminder.id);
+        sessionStorage.setItem('triggered-reminders', JSON.stringify([...triggeredRemindersRef.current]));
 
         showNotification(
             `🔔 ${reminder.title}`,
@@ -312,6 +318,7 @@ export function useNotificationManager() {
         setTimeout(() => {
             if (reminder.id) {
                 triggeredRemindersRef.current.delete(reminder.id);
+                sessionStorage.setItem('triggered-reminders', JSON.stringify([...triggeredRemindersRef.current]));
             }
         }, 120000);
     }, [showNotification, toggleReminderActive]);

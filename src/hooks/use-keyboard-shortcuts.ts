@@ -9,36 +9,21 @@ export type ShortcutAction =
   | 'goToToday'
   | 'goToNextPeriod'
   | 'goToPrevPeriod'
-  | 'goToDate'
   // View switching
   | 'dayView'
   | 'weekView'
   | 'monthView'
-  | 'yearView'
-  | 'scheduleView'
-  | 'customView'
   // Actions
   | 'createEvent'
-  | 'search'
   | 'refresh'
   | 'settings'
-  | 'print'
   | 'showShortcuts'
   | 'toggleBulkMode'
   // Event actions
   | 'deleteEvent'
   | 'editEvent'
   | 'saveEvent'
-  | 'cancelEdit'
-  | 'duplicateEvent'
-  // Selection
-  | 'selectNext'
-  | 'selectPrevious'
-  | 'selectEvent'
-  // Sidebar
-  | 'toggleSidebar'
-  | 'toggleCalendarList'
-  | 'toggleMiniCalendar';
+  | 'cancelEdit';
 
 // Shortcut definition
 export interface Shortcut {
@@ -48,50 +33,33 @@ export interface Shortcut {
   alt?: boolean;
   meta?: boolean;
   description: string;
-  category: 'navigation' | 'views' | 'actions' | 'events' | 'selection' | 'sidebar';
+  category: 'navigation' | 'views' | 'actions' | 'events';
 }
 
-// Default shortcuts matching Google Calendar
+// Default shortcuts
 export const DEFAULT_SHORTCUTS: Record<ShortcutAction, Shortcut> = {
   // Navigation
   goToToday: { key: 't', description: 'Go to today', category: 'navigation' },
   goToNextPeriod: { key: 'j', description: 'Go to next period', category: 'navigation' },
   goToPrevPeriod: { key: 'k', description: 'Go to previous period', category: 'navigation' },
-  goToDate: { key: 'g', description: 'Go to a specific date', category: 'navigation' },
-  
+
   // View switching
   dayView: { key: 'd', description: 'Day view', category: 'views' },
   weekView: { key: 'w', description: 'Week view', category: 'views' },
   monthView: { key: 'm', description: 'Month view', category: 'views' },
-  yearView: { key: 'y', description: 'Year view', category: 'views' },
-  scheduleView: { key: 'a', description: 'Schedule/Agenda view', category: 'views' },
-  customView: { key: 'x', description: 'Custom view', category: 'views' },
-  
+
   // Actions
   createEvent: { key: 'c', description: 'Create new event', category: 'actions' },
-  search: { key: '/', description: 'Search', category: 'actions' },
-  refresh: { key: 'r', description: 'Refresh calendar', category: 'actions' },
+  refresh: { key: 'r', description: 'Refresh', category: 'actions' },
   settings: { key: 's', description: 'Open settings', category: 'actions' },
-  print: { key: 'p', ctrl: true, description: 'Print', category: 'actions' },
-  showShortcuts: { key: '?', shift: true, description: 'Show keyboard shortcuts', category: 'actions' },
-  toggleBulkMode: { key: 'b', description: 'Toggle bulk select mode', category: 'actions' },
-  
+  showShortcuts: { key: '/', description: 'Show keyboard shortcuts', category: 'actions' },
+  toggleBulkMode: { key: 'b', description: 'Toggle bulk select', category: 'actions' },
+
   // Event actions
-  deleteEvent: { key: 'Delete', description: 'Delete selected event', category: 'events' },
-  editEvent: { key: 'e', description: 'Edit selected event', category: 'events' },
+  deleteEvent: { key: 'Delete', description: 'Delete open event', category: 'events' },
+  editEvent: { key: 'e', description: 'Edit event', category: 'events' },
   saveEvent: { key: 's', ctrl: true, description: 'Save event', category: 'events' },
-  cancelEdit: { key: 'Escape', description: 'Cancel/Close dialog', category: 'events' },
-  duplicateEvent: { key: 'd', ctrl: true, description: 'Duplicate event', category: 'events' },
-  
-  // Selection
-  selectNext: { key: 'Tab', description: 'Select next event', category: 'selection' },
-  selectPrevious: { key: 'Tab', shift: true, description: 'Select previous event', category: 'selection' },
-  selectEvent: { key: 'Enter', description: 'Open selected event', category: 'selection' },
-  
-  // Sidebar
-  toggleSidebar: { key: '[', description: 'Toggle sidebar', category: 'sidebar' },
-  toggleCalendarList: { key: ']', description: 'Toggle calendar list', category: 'sidebar' },
-  toggleMiniCalendar: { key: '\\', description: 'Toggle mini calendar', category: 'sidebar' },
+  cancelEdit: { key: 'Escape', description: 'Cancel / close', category: 'events' },
 };
 
 // Group shortcuts by category for display
@@ -100,8 +68,6 @@ export const SHORTCUT_CATEGORIES = {
   views: 'Views',
   actions: 'Actions',
   events: 'Event Actions',
-  selection: 'Selection',
-  sidebar: 'Sidebar',
 };
 
 interface UseKeyboardShortcutsOptions {
@@ -120,9 +86,7 @@ interface UseKeyboardShortcutsOptions {
   onEditEvent?: () => void;
   onSaveEvent?: () => void;
   // Other callbacks
-  onSearch?: () => void;
   onRefresh?: () => void;
-  onToggleSidebar?: () => void;
   onShowShortcuts?: () => void;
 }
 
@@ -139,9 +103,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     onDeleteEvent,
     onEditEvent,
     onSaveEvent,
-    onSearch,
     onRefresh,
-    onToggleSidebar,
     onShowShortcuts,
   } = options;
 
@@ -247,19 +209,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
       case 'monthView':
         onViewChange?.('month');
         break;
-      case 'yearView':
-        onViewChange?.('year');
-        break;
-      case 'scheduleView':
-        onViewChange?.('schedule');
-        break;
-        
+
       // Actions
       case 'createEvent':
         onCreateEvent?.();
-        break;
-      case 'search':
-        onSearch?.();
         break;
       case 'refresh':
         onRefresh?.();
@@ -270,7 +223,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
       case 'showShortcuts':
         onShowShortcuts?.();
         break;
-        
+
       // Event actions
       case 'deleteEvent':
         onDeleteEvent?.();
@@ -282,12 +235,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         onSaveEvent?.();
         break;
       case 'cancelEdit':
-        // Usually handled by the dialog/form
-        break;
-        
-      // Sidebar
-      case 'toggleSidebar':
-        onToggleSidebar?.();
+      case 'deleteEvent':
+      case 'editEvent':
+        // Handled at app level
         break;
     }
   }, [
@@ -301,9 +251,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     onDeleteEvent,
     onEditEvent,
     onSaveEvent,
-    onSearch,
     onRefresh,
-    onToggleSidebar,
     onShowShortcuts,
     navigatePeriod,
     navigate,

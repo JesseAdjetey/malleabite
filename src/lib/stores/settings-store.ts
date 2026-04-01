@@ -2,6 +2,63 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// ─── Rescheduling / Conflict Preferences ────────────────────────────────────
+
+export type RescheduleMode = 'off' | 'manual' | 'suggest' | 'auto';
+
+export type AutoRescheduleTarget = 'newer_event' | 'shorter_event' | 'lower_priority';
+
+export interface ReschedulingPreferences {
+  /** Master switch for the collision/conflict system */
+  mode: RescheduleMode;
+  /**
+   * Calendar IDs explicitly excluded from conflict checking.
+   * Empty array (default) = all calendars are checked.
+   */
+  conflictExcludedCalendarIds: string[];
+  /**
+   * @deprecated kept for backward compatibility; use conflictExcludedCalendarIds instead.
+   * null = all calendars. string[] = only these calendar IDs.
+   */
+  conflictCalendarIds: string[] | null;
+  /** Minimum gap required between consecutive events (minutes) */
+  minBufferMinutes: number;
+  /** Extra buffer added when an event has a location set (travel time) */
+  travelTimeBuffer: number;
+  /** Extra buffer before/after focusTime blocks */
+  focusBlockBuffer: number;
+  /** Work-day start hour (0-23) — used when finding alternative slots */
+  workdayStart: number;
+  /** Work-day end hour (0-23) */
+  workdayEnd: number;
+  /** Days of week to search (0=Sun … 6=Sat) */
+  workDays: number[];
+  /** Round rescheduled times to this interval */
+  snapToMinutes: 15 | 30;
+  /** Consecutive meeting limit before triggering a back-to-back warning */
+  maxConsecutiveMeetings: number;
+  /** Which event to move when auto-resolving a conflict */
+  autoRescheduleTarget: AutoRescheduleTarget;
+  /** How many days ahead to search for an alternative slot */
+  autoSearchDays: number;
+}
+
+export const DEFAULT_RESCHEDULING_PREFS: ReschedulingPreferences = {
+  mode: 'suggest',
+  conflictExcludedCalendarIds: [],
+  conflictCalendarIds: null,
+  minBufferMinutes: 10,
+  travelTimeBuffer: 15,
+  focusBlockBuffer: 30,
+  workdayStart: 8,
+  workdayEnd: 18,
+  workDays: [1, 2, 3, 4, 5],
+  snapToMinutes: 15,
+  maxConsecutiveMeetings: 3,
+  autoRescheduleTarget: 'newer_event',
+  autoSearchDays: 7,
+};
+
 export interface MallyVoiceOption {
   id: string;       // VAPI built-in voiceId
   label: string;
@@ -45,6 +102,9 @@ interface SettingsState {
    */
   mallyAutoMode: boolean;
   setMallyAutoMode: (value: boolean) => void;
+  /** Conflict detection and rescheduling preferences */
+  reschedulingPrefs: ReschedulingPreferences;
+  setReschedulingPrefs: (prefs: Partial<ReschedulingPreferences>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -62,6 +122,9 @@ export const useSettingsStore = create<SettingsState>()(
       setAiEnabledCalendarIds: (ids) => set({ aiEnabledCalendarIds: ids }),
       mallyAutoMode: false,
       setMallyAutoMode: (value) => set({ mallyAutoMode: value }),
+      reschedulingPrefs: DEFAULT_RESCHEDULING_PREFS,
+      setReschedulingPrefs: (prefs) =>
+        set((state) => ({ reschedulingPrefs: { ...state.reschedulingPrefs, ...prefs } })),
     }),
     {
       name: 'timegeist-settings',

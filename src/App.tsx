@@ -1,7 +1,7 @@
 
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { logger } from '@/lib/logger';
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { wrapTransition } from '@/lib/animations';
 import { ToastProvider } from "@/hooks/toast-context";
@@ -31,8 +31,9 @@ import { CountdownPanel } from '@/components/countdown/CountdownPanel';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
 import { KeyboardShortcutsDialog } from '@/components/keyboard/KeyboardShortcutsDialog';
-import { useViewStore, useDateStore } from '@/lib/store';
+import { useViewStore, useDateStore, useEventStore } from '@/lib/store';
 import { useBulkSelectionStore } from '@/lib/stores/bulk-selection-store';
+import { useEventCRUD } from '@/hooks/use-event-crud';
 import dayjs from 'dayjs';
 import { TranslationProvider } from '@/i18n/TranslationProvider';
 import '@/styles/ai-animations.css';
@@ -68,9 +69,12 @@ const AppRoutes = () => {
   const isAuthPage = location.pathname === '/auth';
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
+  const navigate = useNavigate();
   const { selectedView, setView } = useViewStore();
   const { userSelectedDate, setDate, selectedMonthIndex, setMonth } = useDateStore();
   const { isBulkMode, enableBulkMode, disableBulkMode } = useBulkSelectionStore();
+  const { selectedEvent, isEventSummaryOpen, closeEventSummary } = useEventStore();
+  const { removeEvent } = useEventCRUD();
 
   // Global notification manager for alarms and reminders
   // Must be inside AuthProvider to access useAuth
@@ -124,7 +128,7 @@ const AppRoutes = () => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-      if (!isInput && e.key === '?') setShortcutsOpen(prev => !prev);
+      if (!isInput && e.key === '/') setShortcutsOpen(prev => !prev);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -170,11 +174,43 @@ const AppRoutes = () => {
         case 'b':
           if (isBulkMode) disableBulkMode(); else enableBulkMode();
           break;
+        case 's':
+          navigate('/settings');
+          break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isAuthPage, selectedView, userSelectedDate, selectedMonthIndex, isBulkMode, setView, setDate, setMonth, enableBulkMode, disableBulkMode]);
+  }, [isAuthPage, selectedView, userSelectedDate, selectedMonthIndex, isBulkMode, setView, setDate, setMonth, enableBulkMode, disableBulkMode, navigate]);
+
+  // Delete key — removes the currently open event
+  useEffect(() => {
+    if (isAuthPage) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      if (isInput || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Delete' && selectedEvent && isEventSummaryOpen) {
+        removeEvent(selectedEvent.id);
+        closeEventSummary();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isAuthPage, selectedEvent, isEventSummaryOpen, removeEvent, closeEventSummary]);
+
+  // Ctrl+S — signal the open event form to save
+  useEffect(() => {
+    if (isAuthPage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('keyboard-save-event'));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isAuthPage]);
 
   return (
     <ThemeProvider isAuthPage={isAuthPage}>

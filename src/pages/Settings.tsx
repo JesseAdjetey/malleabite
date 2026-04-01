@@ -6,7 +6,8 @@ import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
-import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe, Volume2 } from 'lucide-react';
+import { SchedulingSettings } from '@/components/settings/SchedulingSettings';
+import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe, Volume2, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -26,7 +27,7 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language' | 'scheduling';
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   <motion.div
@@ -235,6 +236,13 @@ const Settings = () => {
               label="Tools"
               sublabel="Templates, Patterns, Analytics"
               onClick={() => goTo('tools')}
+            />
+            <GroupedListItem
+              icon={<CalendarClock className="h-4 w-4 text-rose-500" />}
+              iconBg="bg-rose-500/15"
+              label="Scheduling"
+              sublabel="Conflicts, buffers & auto-reschedule"
+              onClick={() => goTo('scheduling')}
             />
           </GroupedList>
 
@@ -544,6 +552,19 @@ const Settings = () => {
               </button>
             ))}
           </GroupedList>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // Scheduling Section
+  if (activeSection === 'scheduling') {
+    return (
+      <PageWrapper>
+        <div className="px-4 pt-6 max-w-lg mx-auto">
+          <BackButton title="Scheduling" />
+          <SectionTitle>Scheduling</SectionTitle>
+          <SchedulingSettings />
         </div>
       </PageWrapper>
     );

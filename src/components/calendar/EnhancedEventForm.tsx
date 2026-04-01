@@ -498,6 +498,15 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
     }
   };
 
+  // Ctrl+S / Cmd+S — save the event from anywhere on the page
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+  useEffect(() => {
+    const onSave = () => handleSubmitRef.current();
+    window.addEventListener('keyboard-save-event', onSave);
+    return () => window.removeEventListener('keyboard-save-event', onSave);
+  }, []);
+
   return (
     <div className="p-4 relative overflow-hidden">
       {/* Template mode indicator */}

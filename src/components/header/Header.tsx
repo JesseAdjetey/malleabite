@@ -162,6 +162,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       {/* Right Side Container */}
       <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm overflow-x-auto hide-scrollbar pointer-events-auto">
 
+        <span className="text-xs font-semibold tracking-widest uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 select-none flex-shrink-0">Beta</span>
+        <span className="text-muted-foreground/30">|</span>
+
         {/* Today Button */}
         <motion.button
           onClick={handleTodayClick}

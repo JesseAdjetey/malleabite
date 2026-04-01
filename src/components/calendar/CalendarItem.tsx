@@ -4,7 +4,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Check, GripVertical, MoreHorizontal, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Check, GripVertical, MoreHorizontal, Trash2, ArrowRightLeft, ShieldAlert, ShieldOff } from 'lucide-react';
 import { ConnectedCalendar, CalendarSource, CALENDAR_SOURCES } from '@/types/calendar';
 import { PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 import {
@@ -17,6 +17,7 @@ import {
 import { springs } from '@/lib/animations';
 import { useDraggable } from '@dnd-kit/core';
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
+import { useSettingsStore } from '@/lib/stores/settings-store';
 
 interface CalendarItemProps {
   calendar: ConnectedCalendar;
@@ -36,6 +37,20 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
     data: { type: 'calendar', calendar },
   });
   const isVisible = useCalendarFilterStore((state) => state.isCalendarVisible(calendar.id));
+
+  const { reschedulingPrefs, setReschedulingPrefs } = useSettingsStore();
+  const isConflictChecked =
+    reschedulingPrefs.mode !== 'off' &&
+    !reschedulingPrefs.conflictExcludedCalendarIds.includes(calendar.id);
+
+  const toggleConflictCheck = () => {
+    const excluded = reschedulingPrefs.conflictExcludedCalendarIds;
+    if (isConflictChecked) {
+      setReschedulingPrefs({ conflictExcludedCalendarIds: [...excluded, calendar.id] });
+    } else {
+      setReschedulingPrefs({ conflictExcludedCalendarIds: excluded.filter((id) => id !== calendar.id) });
+    }
+  };
 
   const sourceLabel = CALENDAR_SOURCES[calendar.source]?.label || calendar.source;
   const isPersonal = calendar.id === PERSONAL_CALENDAR_ID;
@@ -123,13 +138,29 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
             <MoreHorizontal size={14} className="text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuContent align="end" className="w-52">
           {onMoveToGroup && (
             <DropdownMenuItem onClick={() => onMoveToGroup(calendar.id)}>
               <ArrowRightLeft size={14} className="mr-2" />
               Move to Group
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem
+            onClick={toggleConflictCheck}
+            disabled={reschedulingPrefs.mode === 'off'}
+          >
+            {isConflictChecked ? (
+              <>
+                <ShieldOff size={14} className="mr-2 text-muted-foreground" />
+                Disable conflict check
+              </>
+            ) : (
+              <>
+                <ShieldAlert size={14} className="mr-2 text-amber-500" />
+                Enable conflict check
+              </>
+            )}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => onDelete(calendar.id)}

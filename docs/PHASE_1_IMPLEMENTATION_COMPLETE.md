@@ -29,7 +29,7 @@ Before the app can run, you **MUST**:
 ```typescript
 // Hardcoded credentials in source code
 const firebaseConfig = {
-  apiKey: "AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE", // EXPOSED!
+  apiKey: "YOUR_FIREBASE_API_KEY", // EXPOSED!
   // ... other keys exposed
 };
 ```

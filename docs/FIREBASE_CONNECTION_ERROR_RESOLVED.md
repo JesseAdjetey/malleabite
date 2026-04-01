@@ -50,7 +50,7 @@ if (import.meta.env.DEV) {
 
 ### 📋 **Your Firebase Project Configuration:**
 ```typescript
-apiKey: "AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE"
+apiKey: "YOUR_FIREBASE_API_KEY"
 authDomain: "malleabite-97d35.firebaseapp.com"
 projectId: "malleabite-97d35"
 storageBucket: "malleabite-97d35.firebasestorage.app"

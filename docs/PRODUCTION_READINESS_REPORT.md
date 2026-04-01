@@ -27,7 +27,7 @@ Malleabite is an intelligent personal planner with solid foundation and good UI/
 **Location:** `src/integrations/firebase/config.ts`
 ```typescript
 const firebaseConfig = {
-  apiKey: "AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE", // ❌ EXPOSED IN SOURCE
+  apiKey: "YOUR_FIREBASE_API_KEY", // ❌ EXPOSED IN SOURCE
   authDomain: "malleabite-97d35.firebaseapp.com",
   projectId: "malleabite-97d35",
   storageBucket: "malleabite-97d35.firebasestorage.app",

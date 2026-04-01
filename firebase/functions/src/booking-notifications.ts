@@ -2,12 +2,9 @@
 // Sends confirmation emails to guest and host, and creates a calendar event for the host.
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import * as nodemailer from 'nodemailer';
 import { defineSecret } from 'firebase-functions/params';
 
-const smtpUser = defineSecret('SMTP_USER');
-const smtpPass = defineSecret('SMTP_PASS');
-const smtpHost = defineSecret('SMTP_HOST');
+const sendgridApiKey = defineSecret('SENDGRID_API_KEY');
 const appBaseUrl = defineSecret('APP_BASE_URL');
 
 interface BookingConfirmationData {
@@ -23,8 +20,34 @@ interface BookingConfirmationData {
   timeZone: string;
 }
 
+const FROM_EMAIL = 'noreply@malleabite.com';
+
+async function sendEmail(apiKey: string, to: string, subject: string, html: string, attachments?: Array<{ content: string; filename: string; type: string; disposition: string }>) {
+  const body: any = {
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: FROM_EMAIL, name: 'Malleabite' },
+    subject,
+    content: [{ type: 'text/html', value: html }],
+  };
+  if (attachments) body.attachments = attachments;
+
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('[BookingNotifications] SendGrid error:', err);
+  }
+}
+
 export const onBookingCreated = onCall(
-  { secrets: [smtpUser, smtpPass, smtpHost, appBaseUrl] },
+  { secrets: [sendgridApiKey, appBaseUrl] },
   async (request) => {
     const data = request.data as BookingConfirmationData;
 
@@ -32,13 +55,11 @@ export const onBookingCreated = onCall(
       throw new HttpsError('invalid-argument', 'Missing required booking fields');
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(data.guestEmail)) {
       throw new HttpsError('invalid-argument', 'Invalid guest email address');
     }
 
-    // Fetch host profile for name / email
     const hostDoc = await admin.firestore().collection('users').doc(data.hostUserId).get();
     const hostData = hostDoc.data();
     const hostEmail = hostData?.email as string | undefined;
@@ -50,16 +71,10 @@ export const onBookingCreated = onCall(
       timeStyle: 'short',
     });
 
-    const transport = nodemailer.createTransport({
-      host: smtpHost.value(),
-      port: 587,
-      secure: false,
-      auth: { user: smtpUser.value(), pass: smtpPass.value() },
-    });
-
     const baseUrl = appBaseUrl.value() || 'https://malleabite.com';
+    const apiKey = sendgridApiKey.value();
 
-    // Build ICS attachment for calendar invite
+    // Build ICS attachment
     const icsContent = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -73,91 +88,86 @@ export const onBookingCreated = onCall(
       `SUMMARY:${data.title}`,
       `DESCRIPTION:Booked via Malleabite`,
       data.location ? `LOCATION:${data.location}` : '',
-      `ORGANIZER;CN=${hostName}:mailto:${hostEmail || smtpUser.value()}`,
+      `ORGANIZER;CN=${hostName}:mailto:${hostEmail || FROM_EMAIL}`,
       `ATTENDEE;CN=${data.guestName};RSVP=TRUE:mailto:${data.guestEmail}`,
       'END:VEVENT',
       'END:VCALENDAR',
     ].filter(Boolean).join('\r\n');
 
-    const icsAttachment = {
+    const icsAttachment = [{
+      content: Buffer.from(icsContent).toString('base64'),
       filename: 'invite.ics',
-      content: icsContent,
-      contentType: 'text/calendar; charset=utf-8; method=REQUEST',
-    };
+      type: 'text/calendar; method=REQUEST',
+      disposition: 'attachment',
+    }];
 
-    const emailPromises: Promise<unknown>[] = [];
+    const emailPromises: Promise<void>[] = [];
 
     // Guest confirmation email
-    emailPromises.push(
-      transport.sendMail({
-        from: `"Malleabite" <${smtpUser.value()}>`,
-        to: data.guestEmail,
-        subject: `Confirmed: ${data.title} with ${hostName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-            <h2 style="color:#3b82f6">Your appointment is confirmed</h2>
-            <p>Hi ${data.guestName},</p>
-            <p>Your booking with <strong>${hostName}</strong> has been confirmed.</p>
-            <table style="border-collapse:collapse;width:100%;margin:16px 0">
-              <tr><td style="padding:8px 0;color:#6b7280;width:120px">Event</td><td><strong>${data.title}</strong></td></tr>
-              <tr><td style="padding:8px 0;color:#6b7280">When</td><td>${startFormatted}</td></tr>
-              ${data.location ? `<tr><td style="padding:8px 0;color:#6b7280">Where</td><td>${data.location}</td></tr>` : ''}
-            </table>
-            <p style="color:#6b7280;font-size:14px">The calendar invite is attached. Add it to your calendar to get reminders.</p>
-          </div>
-        `,
-        attachments: [icsAttachment],
-      })
-    );
+    emailPromises.push(sendEmail(
+      apiKey,
+      data.guestEmail,
+      `Confirmed: ${data.title} with ${hostName}`,
+      `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2 style="color:#3b82f6">Your appointment is confirmed</h2>
+          <p>Hi ${data.guestName},</p>
+          <p>Your booking with <strong>${hostName}</strong> has been confirmed.</p>
+          <table style="border-collapse:collapse;width:100%;margin:16px 0">
+            <tr><td style="padding:8px 0;color:#6b7280;width:120px">Event</td><td><strong>${data.title}</strong></td></tr>
+            <tr><td style="padding:8px 0;color:#6b7280">When</td><td>${startFormatted}</td></tr>
+            ${data.location ? `<tr><td style="padding:8px 0;color:#6b7280">Where</td><td>${data.location}</td></tr>` : ''}
+          </table>
+          <p style="color:#6b7280;font-size:14px">The calendar invite is attached. Add it to your calendar to get reminders.</p>
+        </div>
+      `,
+      icsAttachment,
+    ));
 
     // Host notification email
     if (hostEmail) {
-      emailPromises.push(
-        transport.sendMail({
-          from: `"Malleabite" <${smtpUser.value()}>`,
-          to: hostEmail,
-          subject: `New booking: ${data.title} — ${data.guestName}`,
-          html: `
-            <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
-              <h2 style="color:#3b82f6">New appointment booked</h2>
-              <p>Someone has booked time on your calendar.</p>
-              <table style="border-collapse:collapse;width:100%;margin:16px 0">
-                <tr><td style="padding:8px 0;color:#6b7280;width:120px">Guest</td><td><strong>${data.guestName}</strong> (${data.guestEmail})</td></tr>
-                <tr><td style="padding:8px 0;color:#6b7280">Event</td><td>${data.title}</td></tr>
-                <tr><td style="padding:8px 0;color:#6b7280">When</td><td>${startFormatted}</td></tr>
-                ${data.location ? `<tr><td style="padding:8px 0;color:#6b7280">Where</td><td>${data.location}</td></tr>` : ''}
-              </table>
-              <a href="${baseUrl}/settings?tab=bookings" style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:8px">View Booking</a>
-            </div>
-          `,
-          attachments: [icsAttachment],
-        })
-      );
+      emailPromises.push(sendEmail(
+        apiKey,
+        hostEmail,
+        `New booking: ${data.title} — ${data.guestName}`,
+        `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+            <h2 style="color:#3b82f6">New appointment booked</h2>
+            <p>Someone has booked time on your calendar.</p>
+            <table style="border-collapse:collapse;width:100%;margin:16px 0">
+              <tr><td style="padding:8px 0;color:#6b7280;width:120px">Guest</td><td><strong>${data.guestName}</strong> (${data.guestEmail})</td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280">Event</td><td>${data.title}</td></tr>
+              <tr><td style="padding:8px 0;color:#6b7280">When</td><td>${startFormatted}</td></tr>
+              ${data.location ? `<tr><td style="padding:8px 0;color:#6b7280">Where</td><td>${data.location}</td></tr>` : ''}
+            </table>
+            <a href="${baseUrl}/settings?tab=bookings" style="display:inline-block;background:#3b82f6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:8px">View Booking</a>
+          </div>
+        `,
+        icsAttachment,
+      ));
     }
 
     await Promise.allSettled(emailPromises);
 
     // Persist a calendar event on the host's Malleabite calendar
-    const calendarEventsRef = admin
-      .firestore()
+    await admin.firestore()
       .collection('users')
       .doc(data.hostUserId)
-      .collection('events');
-
-    await calendarEventsRef.add({
-      title: `${data.title} — ${data.guestName}`,
-      startsAt: data.startsAt,
-      endsAt: data.endsAt,
-      date: data.startsAt.split('T')[0],
-      location: data.location || '',
-      description: `Booked by ${data.guestName} (${data.guestEmail})`,
-      color: '#3b82f6',
-      isLocked: true,
-      source: 'booking',
-      bookingId: data.bookingId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+      .collection('events')
+      .add({
+        title: `${data.title} — ${data.guestName}`,
+        startsAt: data.startsAt,
+        endsAt: data.endsAt,
+        date: data.startsAt.split('T')[0],
+        location: data.location || '',
+        description: `Booked by ${data.guestName} (${data.guestEmail})`,
+        color: '#3b82f6',
+        isLocked: true,
+        source: 'booking',
+        bookingId: data.bookingId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
     return { success: true };
   }

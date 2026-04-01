@@ -569,6 +569,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     }
     overlayWakePausedRef.current = false;
     overlayAbortRetryRef.current = 0;
+    deepgramUnavailableRef.current = false;
     setVoiceSessionActive(false);
     wasVoiceActivatedRef.current = false;
     // Clear any pending TTS completion callback to prevent stale restarts
@@ -712,6 +713,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const overlayWakePausedRef = useRef(false);
   // Retry counter for transient aborted errors — reset on each new speech round
   const overlayAbortRetryRef = useRef(0);
+  // Set to true when Deepgram fails — skip it for the rest of the session
+  const deepgramUnavailableRef = useRef(false);
 
   const startOverlayListening = useCallback(async (isRetry = false) => {
     if (!isRetry) overlayAbortRetryRef.current = 0;
@@ -728,7 +731,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     // Cancel any lingering speechSynthesis that might block the audio pipeline.
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
-    if (deepgramSTT.isAvailable) {
+    if (deepgramSTT.isAvailable && !deepgramUnavailableRef.current) {
       // ── Deepgram path: real-time WebSocket STT (Nova-2, proper VAD) ──
       await deepgramSTT.ensureStopped(isRetry ? 80 : 150);
       if (!voiceOverlayOpenRef.current) return;
@@ -765,23 +768,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       const onError = (err: string) => {
         setIsRecording(false);
         if (!voiceOverlayOpenRef.current) return;
-        console.error('[Mally] Deepgram error:', err);
-        // Cap retries: after 2 Deepgram failures, fall through to Web Speech API
-        if (overlayAbortRetryRef.current < 2) {
-          overlayAbortRetryRef.current++;
-          setTimeout(() => startOverlayListening(true), 500);
-        } else {
-          // Deepgram unavailable — switch to Web Speech API for this session
-          console.warn('[Mally] Deepgram failed repeatedly, switching to Web Speech API');
-          setTimeout(() => speechService.startListeningWithRetry(
-            (result) => {
-              overlayAbortRetryRef.current = 0;
-              setOverlayTranscript(result.transcript);
-              if (result.isFinal) handleOverlayVoiceMessage(result.transcript);
-            },
-            () => { setIsRecording(false); },
-          ).catch(() => setIsRecording(false)), 300);
-        }
+        console.warn('[Mally] Deepgram unavailable, switching to Web Speech API:', err);
+        deepgramUnavailableRef.current = true;
+        setTimeout(() => startOverlayListening(true), 300);
       };
 
       deepgramSTT.startListening(onResult, onError);

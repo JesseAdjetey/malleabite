@@ -199,13 +199,28 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     };
   }, []);
 
-  // Pre-warm VAPI WebRTC on mount so the first "Hey Mally" is instant
+  // Pre-warm VAPI WebRTC on first user gesture — AudioContext requires a gesture
+  // to start, and Vapi (Daily.co WebRTC) needs it unlocked before connecting.
   useEffect(() => {
-    if (mallyVapi.isAvailable) {
-      // Small delay so the rest of the app can finish mounting first
-      const t = setTimeout(() => mallyVapi.preWarm(mallyVoice), 2000);
-      return () => clearTimeout(t);
-    }
+    if (!mallyVapi.isAvailable) return;
+    let preWarmed = false;
+    const onGesture = () => {
+      if (preWarmed) return;
+      preWarmed = true;
+      unlockAudioContext();
+      mallyVapi.preWarm(mallyVoice);
+      window.removeEventListener('click', onGesture, true);
+      window.removeEventListener('touchstart', onGesture, true);
+      window.removeEventListener('keydown', onGesture, true);
+    };
+    window.addEventListener('click', onGesture, true);
+    window.addEventListener('touchstart', onGesture, true);
+    window.addEventListener('keydown', onGesture, true);
+    return () => {
+      window.removeEventListener('click', onGesture, true);
+      window.removeEventListener('touchstart', onGesture, true);
+      window.removeEventListener('keydown', onGesture, true);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wire TTS speaking state to component — SINGLE source of truth for re-listening.

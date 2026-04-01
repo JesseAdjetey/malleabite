@@ -25,8 +25,8 @@ const UndoRedoToolbar: React.FC<UndoRedoToolbarProps> = ({ className }) => {
               variant="ghost"
               size="sm"
               onClick={performUndo}
-              disabled={!canUndo}
-              className="h-8 w-8 p-0 text-gray-700 dark:text-white"
+              disabled={true}
+              className="h-8 w-8 p-0 text-gray-700 dark:text-white opacity-30"
             >
               <Undo2 size={16} />
             </Button>
@@ -43,8 +43,8 @@ const UndoRedoToolbar: React.FC<UndoRedoToolbarProps> = ({ className }) => {
               variant="ghost"
               size="sm"
               onClick={performRedo}
-              disabled={!canRedo}
-              className="h-8 w-8 p-0 text-gray-700 dark:text-white"
+              disabled={true}
+              className="h-8 w-8 p-0 text-gray-700 dark:text-white opacity-30"
             >
               <Redo2 size={16} />
             </Button>

@@ -1,13 +1,12 @@
 
 import React, { useState } from 'react';
 import UserProfile from '@/components/UserProfile';
-import { CalendarImportExport } from '@/components/calendar/CalendarImportExport';
 import { GoogleCalendarSync } from '@/components/integrations/GoogleCalendarSync';
 import { SlackNotifications } from '@/components/integrations/SlackNotifications';
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
 import { SchedulingSettings } from '@/components/settings/SchedulingSettings';
-import { LogOut, Mic, MicOff, FileUp, ChevronLeft, Crown, Plug2, Palette, Wrench, FileText, Zap, MoreHorizontal, BarChart3, Globe, Volume2, CalendarClock } from 'lucide-react';
+import { LogOut, Mic, MicOff, ChevronLeft, Crown, Plug2, Palette, Globe, Volume2, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -27,7 +26,7 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'import' | 'integrations' | 'appearance' | 'tools' | 'language' | 'scheduling';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'integrations' | 'appearance' | 'language' | 'scheduling';
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   <motion.div
@@ -153,10 +152,7 @@ const Settings = () => {
               <ChevronLeft className="h-4 w-4 text-muted-foreground/50 rotate-180" />
             </button>
 
-            <button
-              onClick={() => { haptics.light(); navigate(isPro ? '/billing' : '/pricing'); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors active:bg-muted/60"
-            >
+            <div className="w-full flex items-center gap-3 px-4 py-3 text-left">
               <div className={cn(
                 "w-8 h-8 rounded-lg flex items-center justify-center",
                 isPro ? "bg-purple-600" : "bg-gradient-to-br from-amber-500 to-orange-500"
@@ -164,17 +160,17 @@ const Settings = () => {
                 <Crown className="h-4 w-4 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-subheadline">{isPro ? 'Pro Plan' : 'Free Plan'}</div>
-                <div className="text-caption1 text-muted-foreground truncate">
-                  {isPro ? 'Manage subscription' : 'Upgrade for unlimited features'}
+                <div className="text-subheadline">{isPro ? 'Pro Plan' : '1 Week Trial'}</div>
+                <div className="text-caption1 text-muted-foreground">
+                  {isPro ? 'Manage subscription' : 'Early tester — 1 week full access'}
                 </div>
               </div>
               {!isPro && (
-                <span className="px-2 py-0.5 bg-primary text-primary-foreground text-caption2 font-semibold rounded-full">
-                  UPGRADE
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 text-caption2 font-semibold rounded-full border border-amber-500/30">
+                  TRIAL
                 </span>
               )}
-            </button>
+            </div>
           </GroupedList>
 
           {/* Preferences */}
@@ -217,25 +213,11 @@ const Settings = () => {
               }
             />
             <GroupedListItem
-              icon={<FileUp className="h-4 w-4 text-orange-500" />}
-              iconBg="bg-orange-500/15"
-              label="Import & Export"
-              sublabel="Backup or restore your data"
-              onClick={() => goTo('import')}
-            />
-            <GroupedListItem
-              icon={<Plug2 className="h-4 w-4 text-teal-500" />}
-              iconBg="bg-teal-500/15"
+              icon={<Plug2 className="h-4 w-4 text-teal-500/40" />}
+              iconBg="bg-teal-500/8"
               label="Integrations"
-              sublabel="Google Calendar, Slack & more"
-              onClick={() => goTo('integrations')}
-            />
-            <GroupedListItem
-              icon={<Wrench className="h-4 w-4 text-gray-500" />}
-              iconBg="bg-gray-500/15"
-              label="Tools"
-              sublabel="Templates, Patterns, Analytics"
-              onClick={() => goTo('tools')}
+              sublabel="Coming soon"
+              className="opacity-40 pointer-events-none select-none"
             />
             <GroupedListItem
               icon={<CalendarClock className="h-4 w-4 text-rose-500" />}
@@ -442,19 +424,6 @@ const Settings = () => {
     );
   }
 
-  // Import/Export Section
-  if (activeSection === 'import') {
-    return (
-      <PageWrapper>
-        <div className="px-4 pt-6 max-w-lg mx-auto">
-          <BackButton title="Import & Export" />
-          <SectionTitle>Import & Export</SectionTitle>
-          <CalendarImportExport />
-        </div>
-      </PageWrapper>
-    );
-  }
-
   // Integrations Section
   if (activeSection === 'integrations') {
     return (
@@ -477,48 +446,6 @@ const Settings = () => {
     );
   }
 
-  // Tools Section
-  if (activeSection === 'tools') {
-    return (
-      <PageWrapper>
-        <div className="px-4 pt-6 max-w-lg mx-auto">
-          <BackButton title="Tools" />
-          <SectionTitle>Tools</SectionTitle>
-
-          <GroupedList>
-            <GroupedListItem
-              icon={<FileText className="h-4 w-4 text-blue-500" />}
-              iconBg="bg-blue-500/15"
-              label="Templates"
-              sublabel="Create events from saved templates"
-              onClick={() => navigate('/templates')}
-            />
-            <GroupedListItem
-              icon={<Zap className="h-4 w-4 text-yellow-500" />}
-              iconBg="bg-yellow-500/15"
-              label="Quick Schedule"
-              sublabel="Rapidly add multiple events"
-              onClick={() => navigate('/quick-schedule')}
-            />
-            <GroupedListItem
-              icon={<MoreHorizontal className="h-4 w-4 text-purple-500" />}
-              iconBg="bg-purple-500/15"
-              label="Patterns"
-              sublabel="Discover scheduling patterns"
-              onClick={() => navigate('/patterns')}
-            />
-            <GroupedListItem
-              icon={<BarChart3 className="h-4 w-4 text-teal-500" />}
-              iconBg="bg-teal-500/15"
-              label="Analytics"
-              sublabel="View productivity insights"
-              onClick={() => navigate('/analytics')}
-            />
-          </GroupedList>
-        </div>
-      </PageWrapper>
-    );
-  }
 
   // Language Section
   if (activeSection === 'language') {

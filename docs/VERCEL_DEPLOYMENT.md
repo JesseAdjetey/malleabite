@@ -11,7 +11,7 @@
 Go to your Vercel project → Settings → Environment Variables and add:
 
 ```
-VITE_FIREBASE_API_KEY=AIzaSyBJN1TZnchrGUNzgkyo6p1QEqaH3ceflVE
+VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
 VITE_FIREBASE_AUTH_DOMAIN=malleabite-97d35.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=malleabite-97d35
 VITE_FIREBASE_STORAGE_BUCKET=malleabite-97d35.firebasestorage.app

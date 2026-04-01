@@ -6,6 +6,7 @@ export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
 export { onGroupMeetUpdated, confirmGroupMeetSlot } from './group-meets';
 export { getGoogleCalendarAuthUrl, googleCalendarOAuthCallback, refreshGoogleCalendarAccessToken, listGoogleCalendarsForAccount, } from './google-calendar-oauth';
 export { onCalendarEventActionWritten, sendPendingActionNotifications, } from './action-notifications';
+export { onBookingCreated } from './booking-notifications';
 /**
  * Process AI requests for intelligent scheduling with Gemini AI
  */

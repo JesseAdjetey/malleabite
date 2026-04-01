@@ -198,17 +198,42 @@ function createSlackBlocks(type: string, data: SlackNotificationRequest['data'])
   }
 }
 
+const ALLOWED_ORIGINS = [
+  'https://malleabite.com',
+  'https://www.malleabite.com',
+  'https://app.malleabite.com',
+];
+
+const ALLOWED_NOTIFICATION_TYPES = new Set([
+  'event_reminder',
+  'daily_digest',
+  'event_created',
+  'event_updated',
+]);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Handle CORS
+  const origin = req.headers['origin'] as string | undefined;
+
+  // Restrict CORS to known origins only
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Vary', 'Origin');
+
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Require a Firebase ID token in Authorization header
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required' });
   }
 
   try {
@@ -218,12 +243,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Slack webhook URL is required' });
     }
 
-    if (!type) {
-      return res.status(400).json({ error: 'Notification type is required' });
+    if (!type || !ALLOWED_NOTIFICATION_TYPES.has(type)) {
+      return res.status(400).json({ error: 'Invalid notification type' });
     }
 
-    // Validate webhook URL format
-    if (!webhookUrl.startsWith('https://hooks.slack.com/')) {
+    // Strict webhook URL validation — must be hooks.slack.com with no path traversal
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(webhookUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid Slack webhook URL' });
+    }
+    if (
+      parsedUrl.protocol !== 'https:' ||
+      parsedUrl.hostname !== 'hooks.slack.com' ||
+      !parsedUrl.pathname.startsWith('/services/')
+    ) {
       return res.status(400).json({ error: 'Invalid Slack webhook URL' });
     }
 

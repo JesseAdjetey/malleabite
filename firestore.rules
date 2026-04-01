@@ -173,9 +173,11 @@ service cloud.firestore {
 
     // Snapshot Events (saved calendar events)
     match /snapshot_events/{eventId} {
-      allow read, write: if isAuthenticated();
-      // Note: We allow broader access here since snapshots are keyed by snapshotId
-      // which is only known to the owner. Consider adding snapshotId validation
+      allow read, delete: if isOwner(resource.data.userId);
+      allow create: if isValidOwner()
+        && request.resource.data.keys().hasAll(['userId', 'snapshotId']);
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
     }
 
     // Eisenhower Items
@@ -591,11 +593,12 @@ service cloud.firestore {
       // Only authenticated users can create, and only as organizer
       allow create: if isAuthenticated() &&
         request.resource.data.organizerId == request.auth.uid;
-      // Organizer can update anything; unauthenticated guests can update
-      // participants array only (for availability submission via public page)
+      // Organizer can update anything; guests can only update participants array
+      // when the session is in 'collecting' status (availability submission)
       allow update: if
         (isAuthenticated() && resource.data.organizerId == request.auth.uid) ||
-        resource.data.status == 'collecting';
+        (resource.data.status == 'collecting'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']));
       allow delete: if isAuthenticated() &&
         resource.data.organizerId == request.auth.uid;
     }

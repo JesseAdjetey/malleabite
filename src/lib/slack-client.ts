@@ -1,5 +1,11 @@
 // Slack Notification Client
-// Handles sending notifications to Slack from the frontend
+// Webhook URLs are stored in Firestore (user_settings/{userId}.slackWebhookUrl)
+// and never in localStorage — they are retrieved server-side via the authenticated
+// /api/slack-notify endpoint.
+
+import { getAuth } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
 
 interface SlackNotificationData {
   eventTitle?: string;
@@ -14,46 +20,69 @@ interface SlackNotificationData {
 
 type NotificationType = 'event_reminder' | 'daily_digest' | 'event_created' | 'event_updated';
 
-const SLACK_WEBHOOK_KEY = 'malleabite_slack_webhook';
+// --- Webhook URL storage in Firestore ---
 
-export function getSlackWebhook(): string | null {
-  return localStorage.getItem(SLACK_WEBHOOK_KEY);
+export async function getSlackWebhook(): Promise<string | null> {
+  const user = getAuth().currentUser;
+  if (!user) return null;
+  try {
+    const snap = await getDoc(doc(db, 'user_settings', user.uid));
+    return snap.exists() ? (snap.data().slackWebhookUrl ?? null) : null;
+  } catch {
+    return null;
+  }
 }
 
-export function setSlackWebhook(webhookUrl: string): void {
-  localStorage.setItem(SLACK_WEBHOOK_KEY, webhookUrl);
+export async function setSlackWebhook(webhookUrl: string): Promise<void> {
+  const user = getAuth().currentUser;
+  if (!user) throw new Error('Not authenticated');
+  const ref = doc(db, 'user_settings', user.uid);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, { slackWebhookUrl: webhookUrl });
+  } else {
+    await setDoc(ref, { userId: user.uid, slackWebhookUrl: webhookUrl });
+  }
 }
 
-export function removeSlackWebhook(): void {
-  localStorage.removeItem(SLACK_WEBHOOK_KEY);
+export async function removeSlackWebhook(): Promise<void> {
+  const user = getAuth().currentUser;
+  if (!user) return;
+  await updateDoc(doc(db, 'user_settings', user.uid), { slackWebhookUrl: null });
 }
 
-export function isSlackConnected(): boolean {
-  return !!getSlackWebhook();
+export async function isSlackConnected(): Promise<boolean> {
+  return !!(await getSlackWebhook());
+}
+
+// --- Notification sending ---
+
+async function getAuthToken(): Promise<string> {
+  const user = getAuth().currentUser;
+  if (!user) throw new Error('Not authenticated');
+  return user.getIdToken();
 }
 
 export async function sendSlackNotification(
   type: NotificationType,
   data: SlackNotificationData
 ): Promise<boolean> {
-  const webhookUrl = getSlackWebhook();
-  
+  const webhookUrl = await getSlackWebhook();
+
   if (!webhookUrl) {
     console.warn('Slack webhook not configured');
     return false;
   }
 
   try {
+    const token = await getAuthToken();
     const response = await fetch('/api/slack-notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        webhookUrl,
-        type,
-        data,
-      }),
+      body: JSON.stringify({ webhookUrl, type, data }),
     });
 
     if (!response.ok) {
@@ -126,25 +155,24 @@ export async function sendDailyDigest(
   userName: string,
   events: Array<{ title: string; time: string }>
 ): Promise<boolean> {
-  return sendSlackNotification('daily_digest', {
-    userName,
-    events,
-  });
+  return sendSlackNotification('daily_digest', { userName, events });
 }
 
 // Test webhook connection
 export async function testSlackWebhook(webhookUrl: string): Promise<boolean> {
   try {
+    const token = await getAuthToken();
     const response = await fetch('/api/slack-notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
         webhookUrl,
         type: 'event_created',
         data: {
-          eventTitle: '🎉 Malleabite Connected!',
+          eventTitle: 'Malleabite Connected!',
           eventDate: new Date().toLocaleDateString(),
           eventTime: new Date().toLocaleTimeString(),
         },

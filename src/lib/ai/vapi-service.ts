@@ -662,39 +662,25 @@ class MallyVapiService {
     const vapi = this.ensureVapi();
 
     try {
-      const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID as string | undefined;
-      if (assistantId) {
-        await vapi.start(assistantId);
-      } else {
-        const customLlmUrl = import.meta.env.VITE_VAPI_LLM_URL as string | undefined;
-        await vapi.start({
-          name: 'Mally-Standby',
-          transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-          model: customLlmUrl
-            ? {
-                provider: 'custom-llm',
-                url: customLlmUrl,
-                model: 'gemini-2.5-flash',
-                messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
-              }
-            : {
-                provider: 'openai',
-                model: 'gpt-4o-mini',
-                tools: buildMallyTools(),
-                messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
-                temperature: 0.7,
-                maxTokens: 300,
-              },
-          voice: { provider: 'vapi', voiceId },
-          silenceTimeoutSeconds: 120,
-          maxDurationSeconds: 180,
-          backgroundSound: 'off',
-          clientMessages: [
-            'conversation-update', 'function-call', 'hang', 'speech-update',
-            'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
-          ] as any,
-        } as any);
-      }
+      await vapi.start({
+        name: 'Mally-Standby',
+        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+        model: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
+          temperature: 0.7,
+          maxTokens: 300,
+        },
+        voice: { provider: 'vapi', voiceId },
+        silenceTimeoutSeconds: 120,
+        maxDurationSeconds: 180,
+        backgroundSound: 'off',
+        clientMessages: [
+          'conversation-update', 'function-call', 'hang', 'speech-update',
+          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
+        ] as any,
+      } as any);
       // call-start handler will mute mic and set _preWarmed = true
     } catch (err) {
       console.warn('[MallyVapi] Pre-warm failed (will cold-start on activation):', err);
@@ -793,43 +779,28 @@ class MallyVapiService {
         }
       } catch {}
 
-      const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID as string | undefined;
       const vapi = this.ensureVapi();
-      if (assistantId) {
-        await vapi.start(assistantId, {
-          variableValues: { systemPrompt: options.systemPrompt },
-        } as any);
-      } else {
-        const customLlmUrl = import.meta.env.VITE_VAPI_LLM_URL as string | undefined;
-        await vapi.start({
-          name: 'Mally',
-          ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
-          transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-          model: customLlmUrl
-            ? {
-                provider: 'custom-llm',
-                url: customLlmUrl,
-                model: 'gemini-2.5-flash',
-                messages: [{ role: 'system', content: options.systemPrompt }],
-              }
-            : {
-                provider: 'openai',
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'system', content: options.systemPrompt }],
-                tools: buildMallyTools(),
-                temperature: 0.7,
-                maxTokens: 300,
-              },
-          voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
-          silenceTimeoutSeconds: 30,
-          maxDurationSeconds: 300,
-          backgroundSound: 'off',
-          clientMessages: [
-            'conversation-update', 'function-call', 'hang', 'speech-update',
-            'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
-          ],
-        } as any);
-      }
+      await vapi.start({
+        name: 'Mally',
+        ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+        model: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'system', content: options.systemPrompt }],
+          tools: buildMallyTools(),
+          temperature: 0.7,
+          maxTokens: 300,
+        },
+        voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
+        silenceTimeoutSeconds: 30,
+        maxDurationSeconds: 300,
+        backgroundSound: 'off',
+        clientMessages: [
+          'conversation-update', 'function-call', 'hang', 'speech-update',
+          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
+        ],
+      } as any);
     } catch (err: any) {
       console.error('[MallyVapi] Failed to start session:', JSON.stringify(err, null, 2));
       this.callbacks.onError?.(err);

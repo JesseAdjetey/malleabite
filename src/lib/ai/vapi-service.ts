@@ -21,7 +21,7 @@ export interface VapiCallbacks {
 }
 
 export interface VapiSessionOptions {
-  systemPrompt: string;
+  systemPrompt?: string;
   firstMessage?: string;
   voiceId?: string;
 }
@@ -598,11 +598,11 @@ class MallyVapiService {
         await vapi.start(assistantId, {
           assistantOverrides: {
             ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
-            variableValues: { systemPrompt: options.systemPrompt },
+            ...(options.systemPrompt ? { variableValues: { systemPrompt: options.systemPrompt } } : {}),
           },
         } as any);
       } else {
-        // Inline config — requires OpenAI + Deepgram provider keys in Vapi dashboard settings
+        // Inline config — keep this intentionally minimal for a reliable Vapi-only fallback
         await vapi.start({
           name: 'Mally',
           ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
@@ -610,8 +610,7 @@ class MallyVapiService {
           model: {
             provider: 'openai',
             model: 'gpt-4o-mini',
-            messages: [{ role: 'system', content: options.systemPrompt }],
-            tools: buildMallyTools(),
+            ...(options.systemPrompt ? { messages: [{ role: 'system', content: options.systemPrompt }] } : {}),
             temperature: 0.7,
             maxTokens: 300,
           },
@@ -628,6 +627,11 @@ class MallyVapiService {
     } finally {
       this._startingSession = false;
     }
+  }
+
+  // Keep this as a safe no-op so settings voice switching cannot break at runtime.
+  preWarm(_voiceId?: string) {
+    this.ensureVapi();
   }
 
   /** Stop the current voice session */

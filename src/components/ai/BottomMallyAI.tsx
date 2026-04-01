@@ -746,11 +746,19 @@ RULES:
       },
       onCallEnd: () => {
         console.log('[Mally] VAPI session ended');
+        const endedDuringConnect = isVapiConnectingRef.current;
         setIsVapiConnecting(false);
+        setOverlayProcessing(false);
+        setIsRecording(false);
         if (voiceSessionStartRef.current) {
           const minutes = Math.ceil((Date.now() - voiceSessionStartRef.current) / 60_000);
           incrementVoiceMinutes(minutes);
           voiceSessionStartRef.current = null;
+        }
+        if (endedDuringConnect) {
+          setOverlayResponse('Connection ended. Tap orb to try again.');
+          toast.error('Voice disconnected before connecting. Tap orb to retry.');
+          return;
         }
         closeVoiceOverlay();
       },
@@ -775,7 +783,9 @@ RULES:
       onError: (err) => {
         console.error('[Mally] VAPI error:', err);
         setIsVapiConnecting(false);
-        closeVoiceOverlay();
+        setOverlayProcessing(false);
+        setIsRecording(false);
+        setOverlayResponse('Connection failed. Tap orb to try again.');
         toast.error('Voice connection failed. Please try again.');
       },
     });
@@ -790,7 +800,9 @@ RULES:
         console.warn('[Mally] VAPI connection timeout');
         mallyVapi.stop();
         setIsVapiConnecting(false);
-        closeVoiceOverlay();
+        setOverlayProcessing(false);
+        setIsRecording(false);
+        setOverlayResponse('Still trying to connect. Tap orb to retry.');
         toast.error('Could not connect to voice. Please try again.');
       }
     }, 10_000);
@@ -804,7 +816,9 @@ RULES:
     } catch (err) {
       console.error('[Mally] VAPI session failed:', err);
       setIsVapiConnecting(false);
-      closeVoiceOverlay();
+      setOverlayProcessing(false);
+      setIsRecording(false);
+      setOverlayResponse('Voice session failed. Tap orb to try again.');
       toast.error('Voice session failed. Please try again.');
     } finally {
       clearTimeout(connectTimeoutId);

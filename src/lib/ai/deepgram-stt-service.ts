@@ -3,8 +3,11 @@
 // Streams raw PCM from the mic directly to Deepgram Nova-2 over WebSocket —
 // gives real-time transcripts, proper VAD, and consistent cross-browser quality.
 //
-// Requires: VITE_DEEPGRAM_API_KEY environment variable
-// Cost: ~$0.0043/min (vs $0.05–0.10/min with VAPI)
+// The real Deepgram API key is stored in Firebase Secrets (server-side only).
+// This service fetches a short-lived token (60s TTL) from the getDeepgramToken
+// Cloud Function before each session — the key is never exposed in the client bundle.
+
+import { getAuth } from 'firebase/auth';
 
 interface SpeechResult {
   transcript: string;
@@ -16,6 +19,7 @@ type OnResultCallback = (result: SpeechResult) => void;
 type OnErrorCallback = (error: string) => void;
 
 const DEEPGRAM_WS_URL = 'wss://api.deepgram.com/v1/listen';
+const TOKEN_ENDPOINT = 'https://us-central1-malleabite-97d35.cloudfunctions.net/getDeepgramToken';
 
 class DeepgramSTTService {
   private socket: WebSocket | null = null;
@@ -27,7 +31,9 @@ class DeepgramSTTService {
   private _stopped = false;
 
   get isListening(): boolean { return this._listening; }
-  get isAvailable(): boolean { return !!import.meta.env.VITE_DEEPGRAM_API_KEY; }
+
+  // Available if Cloud Function URL is defined (always true in production)
+  get isAvailable(): boolean { return true; }
 
   /** Stop and fully release all resources */
   async stop(): Promise<void> {
@@ -73,19 +79,37 @@ class DeepgramSTTService {
     }
   }
 
+  /** Fetch a short-lived token from the Cloud Function */
+  private async fetchToken(): Promise<string> {
+    const user = getAuth().currentUser;
+    if (!user) throw new Error('Not authenticated');
+    const idToken = await user.getIdToken();
+
+    const response = await fetch(TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${idToken}` },
+    });
+
+    if (!response.ok) throw new Error('Failed to get Deepgram token');
+    const data = await response.json() as { token: string };
+    return data.token;
+  }
+
   /** Start streaming mic audio to Deepgram */
   async startListening(
     onResult: OnResultCallback,
     onError: OnErrorCallback,
   ): Promise<void> {
-    const apiKey = import.meta.env.VITE_DEEPGRAM_API_KEY;
-    if (!apiKey) {
-      onError('Deepgram API key not configured');
-      return;
-    }
-
     this._stopped = false;
     this._cleanup(); // Ensure clean state
+
+    let token: string;
+    try {
+      token = await this.fetchToken();
+    } catch (e: any) {
+      onError(e?.message || 'Failed to get Deepgram token');
+      return;
+    }
 
     // ── 1. Open WebSocket to Deepgram ──────────────────────────────────────
     const params = new URLSearchParams({
@@ -106,7 +130,7 @@ class DeepgramSTTService {
     let socket: WebSocket;
 
     try {
-      socket = new WebSocket(url, ['token', apiKey]);
+      socket = new WebSocket(url, ['token', token]);
     } catch (e: any) {
       onError(e?.message || 'Failed to connect to Deepgram');
       return;
@@ -155,9 +179,6 @@ class DeepgramSTTService {
         // Utterance end — Deepgram's VAD says speaker stopped
         if (data.type === 'UtteranceEnd') {
           console.log('[DeepgramSTT] Utterance ended');
-          // Fire a final=true signal with whatever was last transcribed
-          // The Results message with is_final=true should already have fired,
-          // but this is a safety net to ensure the overlay processes the utterance.
         }
       } catch { /* ignore parse errors */ }
     };
@@ -171,7 +192,7 @@ class DeepgramSTTService {
       this._listening = false;
       if (!this._stopped && !micReady) {
         // Closed before mic started — likely auth failure
-        onError(event.code === 1008 ? 'Invalid Deepgram API key' : 'Deepgram connection closed');
+        onError(event.code === 1008 ? 'Invalid Deepgram token' : 'Deepgram connection closed');
       }
     };
   }

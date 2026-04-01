@@ -42,6 +42,12 @@ export {
 // Export booking confirmation handler
 export { onBookingCreated } from './booking-notifications';
 
+// Export Deepgram temporary token endpoint (real key stays server-side)
+export { getDeepgramToken } from './deepgram-token';
+
+// Export Picovoice access key endpoint (real key stays server-side)
+export { getPicovoiceKey } from './picovoice-key';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

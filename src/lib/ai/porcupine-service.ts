@@ -2,25 +2,25 @@
 // Zero network calls during continuous listening. Runs entirely in the browser.
 //
 // ─── Setup ────────────────────────────────────────────────────────────────────
-// 1. Get a free AccessKey from https://console.picovoice.ai
+// 1. Set Firebase Secret: firebase functions:secrets:set PICOVOICE_ACCESS_KEY
 // 2. Train a "Hey Mally" custom wake word on the Picovoice Console (free, ~5 min)
 // 3. Download the .ppn keyword file, base64-encode it:
 //      powershell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("hey-mally.ppn"))
 //      macOS/Linux: base64 hey-mally.ppn
 // 4. Run: npm run setup:porcupine   (downloads the acoustic model to public/)
-// 5. Set environment variables in .env.local:
-//      VITE_PICOVOICE_ACCESS_KEY=your-access-key
+// 5. Set in .env.local (keyword only — access key is now server-side):
 //      VITE_PICOVOICE_KEYWORD_B64=<base64 of hey-mally.ppn>
 //
-// If these env vars are absent, this service returns isConfigured()=false and
+// If the keyword env var is absent, this service returns isConfigured()=false and
 // use-wake-word.ts transparently falls back to the existing Web Speech API path.
 // ─────────────────────────────────────────────────────────────────────────────
 import { PorcupineWorker } from '@picovoice/porcupine-web';
+import { getAuth } from 'firebase/auth';
 
-const ACCESS_KEY   = import.meta.env.VITE_PICOVOICE_ACCESS_KEY  as string | undefined;
 const KEYWORD_B64  = import.meta.env.VITE_PICOVOICE_KEYWORD_B64 as string | undefined;
 // Optional: serve the .ppn from /public instead of encoding it inline
-const KEYWORD_PATH = import.meta.env.VITE_PICOVOICE_KEYWORD_PATH as string | undefined;
+const KEYWORD_PATH  = import.meta.env.VITE_PICOVOICE_KEYWORD_PATH as string | undefined;
+const KEY_ENDPOINT  = 'https://us-central1-malleabite-97d35.cloudfunctions.net/getPicovoiceKey';
 // Acoustic model served from /public after running `npm run setup:porcupine`
 const MODEL_PATH   = (import.meta.env.VITE_PICOVOICE_MODEL_PATH as string | undefined)
                      ?? '/porcupine-params.pv';
@@ -40,15 +40,30 @@ class PorcupineWakeWordService {
 
   get isRunning() { return this._isRunning; }
 
-  /** Returns true when both env vars are set AND WebAssembly is available. */
+  /** Returns true when the keyword is configured AND WebAssembly is available. */
   isConfigured(): boolean {
-    const configured = !!(ACCESS_KEY && (KEYWORD_B64 || KEYWORD_PATH) && typeof WebAssembly !== 'undefined');
+    const configured = !!(KEYWORD_B64 || KEYWORD_PATH) && typeof WebAssembly !== 'undefined';
     console.info('[Porcupine] isConfigured:', configured, {
-      hasAccessKey: !!ACCESS_KEY,
       hasKeyword: !!(KEYWORD_B64 || KEYWORD_PATH),
       hasWasm: typeof WebAssembly !== 'undefined',
     });
     return configured;
+  }
+
+  /** Fetch the Picovoice access key from the authenticated Cloud Function. */
+  private async fetchAccessKey(): Promise<string> {
+    const user = getAuth().currentUser;
+    if (!user) throw new Error('Not authenticated');
+    const idToken = await user.getIdToken();
+
+    const response = await fetch(KEY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${idToken}` },
+    });
+
+    if (!response.ok) throw new Error('Failed to get Picovoice key');
+    const data = await response.json() as { accessKey: string };
+    return data.accessKey;
   }
 
   /**
@@ -61,13 +76,16 @@ class PorcupineWakeWordService {
     if (this._isRunning) return true;
 
     try {
-      // ── 1. Initialise Porcupine WebWorker ─────────────────────────────────
+      // ── 1. Fetch access key from server ───────────────────────────────────
+      const accessKey = await this.fetchAccessKey();
+
+      // ── 2. Initialise Porcupine WebWorker ─────────────────────────────────
       const keyword = KEYWORD_B64
         ? ({ base64: KEYWORD_B64,     label: 'Hey Mally', sensitivity: 0.65 } as const)
         : ({ publicPath: KEYWORD_PATH!, label: 'Hey Mally', sensitivity: 0.65 } as const);
 
       this._worker = await PorcupineWorker.create(
-        ACCESS_KEY!,
+        accessKey,
         keyword,
         (detection) => {
           if (detection.label === 'Hey Mally' && this._isRunning) {

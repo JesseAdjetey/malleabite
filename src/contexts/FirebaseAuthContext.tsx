@@ -30,7 +30,7 @@ export const FirebaseAuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('Firebase Auth state changed:', user?.email);
+      console.log('Firebase Auth state changed:', user ? 'signed-in' : 'signed-out');
       setUser(user);
       setLoading(false);
     });

@@ -119,9 +119,7 @@ export class FirebaseFunctions {
         throw new Error('User must be authenticated');
       }
 
-      // Force token refresh to ensure it's valid
-      const token = await currentUser.getIdToken(true);
-      console.log('Auth token obtained:', token ? 'YES' : 'NO', 'User:', currentUser.uid);
+      const token = await currentUser.getIdToken();
 
       // Make direct HTTP call with Authorization header
       const functionUrl = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processAIRequest';

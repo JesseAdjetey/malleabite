@@ -15,7 +15,7 @@ import * as admin from 'firebase-admin';
 const picovoiceAccessKey = defineSecret('PICOVOICE_ACCESS_KEY');
 
 export const getPicovoiceKey = onRequest(
-  { secrets: [picovoiceAccessKey], cors: ['https://malleabite.com', 'https://app.malleabite.com'] },
+  { secrets: [picovoiceAccessKey], cors: ['https://malleabite.com', 'https://www.malleabite.com', 'https://app.malleabite.com'] },
   async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });

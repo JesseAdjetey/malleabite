@@ -17,7 +17,7 @@ import { auditLog, trackFailure } from './audit-logger';
 const deepgramApiKey = defineSecret('DEEPGRAM_API_KEY');
 
 export const getDeepgramToken = onRequest(
-  { secrets: [deepgramApiKey], cors: ['https://malleabite.com', 'https://app.malleabite.com'] },
+  { secrets: [deepgramApiKey], cors: ['https://malleabite.com', 'https://www.malleabite.com', 'https://app.malleabite.com'] },
   async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });

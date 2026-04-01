@@ -13,6 +13,7 @@ interface MallyVoiceOverlayProps {
   transcript: string;
   responseText: string;
   onClose: () => void;
+  onStart?: () => void;     // Tap orb to start session (user gesture required)
   onInterrupt?: () => void; // Tap orb while speaking to interrupt and listen
 }
 
@@ -124,6 +125,7 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
   transcript,
   responseText,
   onClose,
+  onStart,
   onInterrupt,
 }) => {
   const [displayedResponse, setDisplayedResponse] = useState('');
@@ -213,12 +215,16 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.3, opacity: 0 }}
               transition={{ type: 'spring', damping: 20, stiffness: 200, delay: 0.1 }}
-              onClick={isSpeaking && onInterrupt ? onInterrupt : undefined}
+              onClick={
+                isSpeaking && onInterrupt ? onInterrupt :
+                !isConnecting && !isListening && !isProcessing && !isSpeaking && onStart ? onStart :
+                undefined
+              }
               className={cn(
                 'select-none',
-                isSpeaking && onInterrupt && 'cursor-pointer active:scale-95 transition-transform'
+                (isSpeaking && onInterrupt || (!isConnecting && !isListening && !isProcessing && !isSpeaking && onStart)) && 'cursor-pointer active:scale-95 transition-transform'
               )}
-              title={isSpeaking ? 'Tap to interrupt' : undefined}
+              title={isSpeaking ? 'Tap to interrupt' : (!isConnecting && !isListening && !isProcessing && !isSpeaking) ? 'Tap to speak' : undefined}
             >
               <MallyOrb
                 isListening={isListening}
@@ -264,7 +270,12 @@ export const MallyVoiceOverlay: React.FC<MallyVoiceOverlayProps> = ({
                   </span>
                 </div>
               )}
-              {!isListening && !isProcessing && !isSpeaking && !isConnecting && (
+              {!isListening && !isProcessing && !isSpeaking && !isConnecting && onStart && (
+                <span className="text-sm font-medium text-purple-600 dark:text-purple-400 animate-pulse">
+                  Tap orb to speak
+                </span>
+              )}
+              {!isListening && !isProcessing && !isSpeaking && !isConnecting && !onStart && (
                 <span className="text-sm text-muted-foreground">
                   Say something...
                 </span>

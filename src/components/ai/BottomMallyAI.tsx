@@ -827,16 +827,7 @@ RULES:
       setOverlayResponse('');
       haptics.medium();
       sounds.play("heyMally");
-
-      // Ensure AudioContext is unlocked
-      unlockAudioContext();
-
-      // Kill the wake word mic so Vapi can use it
-      pauseWakeWord?.();
-      overlayWakePausedRef.current = true;
-
-      await speechService.ensureStopped(100);
-      startVoiceAgentSession();
+      // Don't start Vapi here — wait for user to tap the orb (user gesture required for AudioContext)
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
@@ -1761,6 +1752,13 @@ RULES:
         transcript={overlayTranscript}
         responseText={overlayResponse}
         onClose={closeVoiceOverlay}
+        onStart={!isVapiConnecting && !isRecording && !isSpeaking && !overlayProcessing ? async () => {
+          unlockAudioContext();
+          pauseWakeWord?.();
+          overlayWakePausedRef.current = true;
+          await speechService.ensureStopped(100);
+          startVoiceAgentSession();
+        } : undefined}
         onInterrupt={handleOverlayInterrupt}
       />
 

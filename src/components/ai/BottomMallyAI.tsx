@@ -570,6 +570,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     overlayWakePausedRef.current = false;
     overlayAbortRetryRef.current = 0;
     deepgramUnavailableRef.current = false;
+    overlayListeningActiveRef.current = false;
     setVoiceSessionActive(false);
     wasVoiceActivatedRef.current = false;
     // Clear any pending TTS completion callback to prevent stale restarts
@@ -715,9 +716,14 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const overlayAbortRetryRef = useRef(0);
   // Set to true when Deepgram fails — skip it for the rest of the session
   const deepgramUnavailableRef = useRef(false);
+  // Prevent concurrent startOverlayListening calls from racing
+  const overlayListeningActiveRef = useRef(false);
 
   const startOverlayListening = useCallback(async (isRetry = false) => {
     if (!isRetry) overlayAbortRetryRef.current = 0;
+    // Deduplicate: if a listen session is already starting/active, ignore
+    if (overlayListeningActiveRef.current) return;
+    overlayListeningActiveRef.current = true;
     setOverlayTranscript('');
     // Keep previous overlayResponse visible so user can re-read while formulating next input
 
@@ -734,7 +740,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     if (deepgramSTT.isAvailable && !deepgramUnavailableRef.current) {
       // ── Deepgram path: real-time WebSocket STT (Nova-2, proper VAD) ──
       await deepgramSTT.ensureStopped(isRetry ? 80 : 150);
-      if (!voiceOverlayOpenRef.current) return;
+      if (!voiceOverlayOpenRef.current) { overlayListeningActiveRef.current = false; return; }
+      overlayListeningActiveRef.current = false; // Listening is now active; allow future calls
       setIsRecording(true);
 
       const onResult = (result: { transcript: string; isFinal: boolean; confidence?: number }) => {
@@ -777,7 +784,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     } else {
       // ── Web Speech API fallback ──
       await speechService.ensureStopped(isRetry ? 100 : 200);
-      if (!voiceOverlayOpenRef.current) return;
+      if (!voiceOverlayOpenRef.current) { overlayListeningActiveRef.current = false; return; }
+      overlayListeningActiveRef.current = false; // Listening is now active; allow future calls
       setIsRecording(true);
 
       await speechService.startListeningWithRetry(

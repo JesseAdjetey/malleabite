@@ -34,6 +34,13 @@ dist-ssr
 *.sw?
 .vercel
 
+# Android sensitive credential files (contain API keys and OAuth client IDs)
+android/app/google-services.json
+
+# Firebase Functions build artifacts (compiled from src/, never commit)
+firebase/functions/lib/
+firebase/functions/tsconfig.tsbuildinfo
+
 # Capacitor native platform build artifacts
 ios/App/Pods/
 ios/.symlinks/

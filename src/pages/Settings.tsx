@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useSettingsStore, MALLY_VOICE_OPTIONS } from '@/lib/stores/settings-store';
+import { mallyVapi } from '@/lib/ai/vapi-service';
 import { sounds } from '@/lib/sounds';
 import { useAutoTranslateSafe } from '@/i18n/TranslationProvider';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/i18n/config';
@@ -347,7 +348,13 @@ const Settings = () => {
                       "w-full flex items-center justify-between px-4 py-3 transition-colors active:bg-muted/50",
                       i < arr.length - 1 && "border-b border-separator/30"
                     )}
-                    onClick={() => { haptics.light(); setMallyVoice(voice.id); }}
+                    onClick={() => {
+                      haptics.light();
+                      setMallyVoice(voice.id);
+                      // Re-warm with new voice so next "Hey Mally" uses it immediately
+                      mallyVapi.forceCleanup();
+                      setTimeout(() => mallyVapi.preWarm(voice.id), 300);
+                    }}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-subheadline">{voice.label}</span>

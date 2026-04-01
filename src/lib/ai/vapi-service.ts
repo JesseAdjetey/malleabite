@@ -852,11 +852,23 @@ class MallyVapiService {
 
 export const mallyVapi = new MallyVapiService();
 
+// Read the persisted voice preference from localStorage before React mounts.
+function getPersistedVoice(): string {
+  try {
+    const raw = localStorage.getItem('timegeist-settings');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed?.state?.mallyVoice || 'Lily';
+    }
+  } catch {}
+  return 'Lily';
+}
+
 // Auto pre-warm as soon as the module loads — no auth needed for Vapi.
 // This runs when the JS bundle is parsed, ~1-2s before Firebase auth resolves,
 // so by the time the user says "Hey Mally" the WebRTC connection is already live.
 if (typeof window !== 'undefined') {
-  setTimeout(() => mallyVapi.preWarm(), 800);
+  setTimeout(() => mallyVapi.preWarm(getPersistedVoice()), 800);
 
   // HMR cleanup: destroy old instance when module reloads during development
   if (import.meta.hot) {

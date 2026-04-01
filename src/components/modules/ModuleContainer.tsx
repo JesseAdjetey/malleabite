@@ -176,7 +176,6 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
             transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
-            style={{ overflow: 'hidden' }}
           >
             {children}
           </motion.div>

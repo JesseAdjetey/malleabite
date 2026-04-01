@@ -814,20 +814,6 @@ RULES:
   // Listen for Hey Mally activation — Siri-like full-screen voice overlay
   useEffect(() => {
     const handleHeyMallyActivation = async () => {
-      // Voice is a paid feature — require Pro or Teams subscription
-      if (!(subscription?.isPro || subscription?.isTeams)) {
-        toast.info('Voice is a Pro feature. Upgrade to Pro to use Hey Mally.', { duration: 4000 });
-        return;
-      }
-      // Enforce monthly voice minute cap
-      if (!limits.canUseVoice) {
-        toast.info(
-          `You've used all ${limits.voiceMinutesLimit} voice minutes this month. Resets on the 1st.`,
-          { duration: 5000 }
-        );
-        return;
-      }
-
       if (!mallyVapi.isAvailable) {
         toast.error('Voice is not configured. Please contact support.');
         return;
@@ -855,7 +841,7 @@ RULES:
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [startVoiceAgentSession, limits.canUseVoice, limits.voiceMinutesLimit, subscription]);
+  }, [startVoiceAgentSession]);
 
   // Auto-dismiss overlay after inactivity (like Siri)
   useEffect(() => {

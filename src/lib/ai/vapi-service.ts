@@ -780,27 +780,36 @@ class MallyVapiService {
       } catch {}
 
       const vapi = this.ensureVapi();
-      await vapi.start({
-        name: 'Mally',
-        ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
-        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: options.systemPrompt }],
-          tools: buildMallyTools(),
-          temperature: 0.7,
-          maxTokens: 300,
-        },
-        voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
-        silenceTimeoutSeconds: 30,
-        maxDurationSeconds: 300,
-        backgroundSound: 'off',
-        clientMessages: [
-          'conversation-update', 'function-call', 'hang', 'speech-update',
-          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
-        ],
-      } as any);
+      const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID;
+
+      if (assistantId) {
+        // Use dashboard assistant with dynamic context injected via overrides
+        await vapi.start(assistantId, {
+          variableValues: {
+            systemPrompt: options.systemPrompt,
+            ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+          },
+        } as any);
+      } else {
+        // Fallback: inline config (requires provider keys in Vapi dashboard)
+        await vapi.start({
+          name: 'Mally',
+          ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+          transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+          model: {
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'system', content: options.systemPrompt }],
+            tools: buildMallyTools(),
+            temperature: 0.7,
+            maxTokens: 300,
+          },
+          voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
+          silenceTimeoutSeconds: 30,
+          maxDurationSeconds: 300,
+          backgroundSound: 'off',
+        } as any);
+      }
     } catch (err: any) {
       console.error('[MallyVapi] Failed to start session:', JSON.stringify(err, null, 2));
       this.callbacks.onError?.(err);

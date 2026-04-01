@@ -211,14 +211,20 @@ exports.processSchedulingStream = (0, https_1.onRequest)({
         const now = new Date();
         const startRange = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const endRange = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        const snap = await db.collection('calendar_events')
+        const aiEnabledCalendarIds = clientContext?.aiEnabledCalendarIds ?? null;
+        let eventsQuery = db.collection('calendar_events')
             .where('userId', '==', userId)
             .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(startRange))
             .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(endRange))
             .where('isArchived', '==', false)
-            .orderBy('startsAt', 'asc').limit(50).get();
+            .orderBy('startsAt', 'asc');
+        // If user restricted which calendars Mally can see, apply the filter
+        if (aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0) {
+            eventsQuery = eventsQuery.where('calendarId', 'in', aiEnabledCalendarIds.slice(0, 30));
+        }
+        const snap = await eventsQuery.limit(50).get();
         const events = [];
-        snap.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
+        snap.forEach((doc) => events.push({ id: doc.id, ...doc.data() }));
         const eventsContext = formatEventsForAI(events);
         // Build calendar groups context
         const groupsContext = (clientContext.calendarGroups || []).length > 0
@@ -242,9 +248,15 @@ exports.processSchedulingStream = (0, https_1.onRequest)({
             : 'No todo lists loaded.';
         const genAI = new generative_ai_1.GoogleGenerativeAI(geminiApiKey.value());
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const autoMode = clientContext?.autoMode === true;
         const systemPrompt = `You are Mally, a warm and intelligent scheduling assistant.
 Current Time: ${clientContext.currentTime || new Date().toISOString()}
 User Timezone: ${clientContext.timeZone || 'UTC'}
+${autoMode ? `
+AUTO MODE — ACTIVE: NEVER ask the user ANY question. Make all decisions yourself using context and smart defaults. Pick the best option and act immediately. State what you did in one brief sentence.
+` : `
+EXECUTION RULE: If the user's intent is clear, execute immediately — don't ask "would you like me to", don't ask for confirmation. Only ask a question when a critical piece of information is completely missing AND cannot be inferred.
+`}
 
 EXISTING EVENTS:
 ${eventsContext || 'No events scheduled.'}
@@ -311,6 +323,8 @@ RULES:
 - Never claim you "don't have the ability" for page/module operations — you DO support page-specific module/list actions.
 - If user specifies a page, include pageName/targetPageName in action data.
 - If user asks to move a module to another page, use move_module.
+- NEVER ask "what time?", "what title?", "which list?", "are you sure?", or ANY clarifying question if you can pick a reasonable default.
+- NEVER say "I'll need a bit more info" or "could you clarify" — just pick the most sensible option and go.
 - ALWAYS include both SPEECH: and --- and JSON`;
         const formattedHistory = history.map(h => ({
             role: h.role === 'user' ? 'user' : 'model',

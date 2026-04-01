@@ -11,10 +11,14 @@ import CurrentTimeIndicator from "./CurrentTimeIndicator";
 import { calculateEventHeight, calculateEventPosition, getTimeInfo } from "../event-utils/touch-handlers";
 import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overlap";
 import { useEventResize } from "@/hooks/use-event-resize";
+import { useConflictMap } from "@/hooks/use-conflict-detection";
+import { RescheduleOptionsSheet } from "@/components/calendar/RescheduleOptionsSheet";
 
 interface DayColumnProps {
   currentDate: dayjs.Dayjs;
   dayEvents: CalendarEventType[];
+  /** Full event list used for alternative-slot search. Falls back to dayEvents. */
+  allEvents?: CalendarEventType[];
   currentTime: dayjs.Dayjs;
   onTimeSlotClick: (day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -29,15 +33,13 @@ interface DayColumnProps {
   onResizeEvent?: (event: CalendarEventType, newStart: Date, newEnd: Date) => void;
   // Context menu handlers
   onDeleteEvent?: (eventId: string) => void;
-  onDuplicateEvent?: (event: CalendarEventType) => void;
   onColorChange?: (eventId: string, color: string) => void;
-  onAddAlarm?: (event: CalendarEventType) => void;
-  onAddTodo?: (event: CalendarEventType) => void;
 }
 
 const DayColumn: React.FC<DayColumnProps> = ({
   currentDate,
   dayEvents,
+  allEvents,
   currentTime,
   onTimeSlotClick,
   onDragOver,
@@ -51,13 +53,15 @@ const DayColumn: React.FC<DayColumnProps> = ({
   draggingBulkEventId,
   onResizeEvent,
   onDeleteEvent,
-  onDuplicateEvent,
   onColorChange,
-  onAddAlarm,
-  onAddTodo,
 }) => {
   const hourHeight = 80; // px per hour
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+
+  // Conflict detection
+  const { conflicts, isEnabled: conflictEnabled } = useConflictMap(dayEvents);
+  // Reschedule sheet state
+  const [rescheduleEvent, setRescheduleEvent] = useState<CalendarEventType | null>(null);
 
   // Live resize preview: track the event being resized and its new times
   const [liveResize, setLiveResize] = useState<{
@@ -205,13 +209,12 @@ const DayColumn: React.FC<DayColumnProps> = ({
             ) : (
               <EventContextMenu
                 event={event}
+                hasConflict={conflictEnabled && conflicts.has(event.id)}
                 onEdit={openEventSummary}
                 onDelete={onDeleteEvent}
-                onDuplicate={onDuplicateEvent}
                 onColorChange={onColorChange}
                 onLockToggle={(eventId, locked) => toggleEventLock(eventId, locked)}
-                onAddAlarm={onAddAlarm}
-                onAddTodo={onAddTodo}
+                onReschedule={() => setRescheduleEvent(event)}
               >
                 <div className="h-full relative">
                   {/* Top resize handle — adjusts start time */}
@@ -283,6 +286,17 @@ const DayColumn: React.FC<DayColumnProps> = ({
         currentTime={currentTime}
         isCurrentDay={isCurrentDay(currentDate)}
       />
+
+      {/* Reschedule sheet — opened via right-click "Reschedule…" */}
+      {rescheduleEvent && (
+        <RescheduleOptionsSheet
+          event={rescheduleEvent}
+          allEvents={allEvents ?? dayEvents}
+          conflicts={conflicts.get(rescheduleEvent.id) ?? []}
+          open={!!rescheduleEvent}
+          onOpenChange={(open) => { if (!open) setRescheduleEvent(null); }}
+        />
+      )}
     </div>
   );
 };

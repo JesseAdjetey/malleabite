@@ -57,19 +57,13 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
           onClick={() => handleSelect('alarms')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
-          Alarms
+          Reminders
         </button>
         <button
           onClick={() => handleSelect('eisenhower')}
           className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Eisenhower Matrix
-        </button>
-        <button
-          onClick={() => handleSelect('invites')}
-          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
-        >
-          Event Invites
         </button>
         <button
           onClick={() => handleSelect('booking')}

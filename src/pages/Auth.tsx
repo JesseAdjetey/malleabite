@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext.unified';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronRight, Mail, Moon, Sun, Laptop, CalendarDays, CheckSquare, Bell, Sparkles, MessageCircle, RefreshCw, ArrowRight, Blocks } from 'lucide-react';
+import { ChevronRight, Mail, Moon, Sun, Laptop, CalendarDays, CheckSquare, Bell, Sparkles, MessageCircle, RefreshCw, ArrowRight, Blocks, Keyboard, Zap } from 'lucide-react';
 import { authSchema, sanitizeInput } from '@/lib/validation';
 import { logger } from '@/lib/logger';
 import { ZodError } from 'zod';
@@ -183,6 +183,7 @@ const Auth = () => {
 
   return (
     <GridBackground className="bg-background text-foreground font-mono overflow-x-hidden selection:bg-purple-500/30">
+      <span className="fixed top-5 left-5 z-[200] text-sm font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 select-none">Beta</span>
       <div className="flex flex-col items-center w-full min-h-screen pt-4 pb-12 px-4 md:px-8">
 
         {/* Top Navbar Pill */}
@@ -194,7 +195,7 @@ const Auth = () => {
           </div>
 
           {/* Center: Logo */}
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex justify-center items-center">
             <img src="/logo-quadrant.svg" alt="Malleabite Logo" className="w-11 h-11 md:w-14 md:h-14 transition-transform hover:scale-105" />
           </div>
 
@@ -227,24 +228,10 @@ const Auth = () => {
             <p className="mt-6 text-base md:text-lg text-foreground/90 max-w-2xl mx-auto leading-relaxed font-sans tracking-tight">
               Malleabite is a unified smart planner that combines your daily to-do lists, routines, and external schedules into a single customizable workspace.
             </p>
-
-            <div className="mt-8 relative max-w-2xl mx-auto p-4 md:p-5 rounded-2xl bg-card border border-border/60 shadow-sm text-left flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-5">
-              <div className="p-2 md:p-3 bg-muted rounded-xl shrink-0">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" className="w-6 h-6 md:w-8 md:h-8 object-contain" />
-              </div>
-              <div className="text-center md:text-left">
-                <h4 className="font-semibold text-foreground text-sm md:text-base mb-1.5 flex items-center justify-center md:justify-start gap-2">
-                  Google Calendar Data Access
-                </h4>
-                <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground font-medium">Why we request permissions:</strong> Malleabite requires read & write access to your Google Calendar. This allows the app to securely sync your external schedule so you can actively view, create, edit, and delete Google Calendar events seamlessly within your Malleabite workspace.
-                </p>
-              </div>
-            </div>
           </div>
 
           {/* Features Spread */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-16 xl:gap-20 px-4 lg:px-8">
+          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 px-4 lg:px-8">
 
             {/* Feature 1: Modular Ecosystem */}
             <div className="flex flex-col group p-6 rounded-3xl border border-transparent hover:border-border hover:bg-card/40 hover:shadow-sm transition-all duration-500 relative overflow-hidden">
@@ -333,10 +320,45 @@ const Auth = () => {
               <div className="text-center md:text-left">
                 <h3 className="text-foreground font-semibold text-xl mb-3 flex items-center justify-center md:justify-start gap-2">
                   <RefreshCw className="w-5 h-5 text-emerald-500" />
-                  Google Calendar Sync
+                  Calendar Sync
                 </h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Connect your favorite Google Calendars to directly view, safely create, edit, and delete events. Maintain total two-way control of your external schedule right from your unified Malleabite command center.
+                  Connect your calendars for full two-way sync — view, create, edit, and delete events directly from your Malleabite workspace without ever switching tabs.
+                </p>
+              </div>
+            </div>
+
+            {/* Feature 4: Calendar Ease of Use */}
+            <div className="flex flex-col group p-6 rounded-3xl border border-transparent hover:border-border hover:bg-card/40 hover:shadow-sm transition-all duration-500 relative overflow-hidden">
+              <div className="w-full h-48 mb-8 rounded-2xl bg-muted/20 border border-border/50 relative flex items-center justify-center overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+                {/* Shortcut keys floating in */}
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-2 items-center opacity-0 group-hover:opacity-100 transition-all duration-500 -translate-y-2 group-hover:translate-y-0">
+                    <kbd className="px-2.5 py-1 text-xs font-mono font-bold bg-background border border-border rounded-lg shadow-sm text-violet-400">B</kbd>
+                    <kbd className="px-2 py-1 text-[10px] font-mono font-bold bg-background border border-border rounded-lg shadow-sm text-amber-400">⌥+Drag</kbd>
+                  </div>
+                  <div className="w-10 h-10 bg-background border border-border rounded-xl shadow-sm flex items-center justify-center transition-all duration-300 group-hover:border-violet-500/40 group-hover:scale-110">
+                    <Keyboard className="w-5 h-5 text-violet-500" />
+                  </div>
+                  <div className="flex flex-col gap-2 items-center opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-2 group-hover:translate-y-0">
+                    <kbd className="px-2.5 py-1 text-xs font-mono font-bold bg-background border border-border rounded-lg shadow-sm text-emerald-400">⇧+Click</kbd>
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-background border border-border rounded-lg shadow-sm">
+                      <Zap className="w-3 h-3 text-yellow-400" />
+                      <span className="text-[10px] font-mono font-bold text-yellow-400">Actions</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center md:text-left">
+                <h3 className="text-foreground font-semibold text-xl mb-3 flex items-center justify-center md:justify-start gap-2">
+                  <Keyboard className="w-5 h-5 text-violet-500" />
+                  Calendar, Your Way
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Built for speed. Bulk-select events with <span className="font-medium text-foreground">B</span>, multi-pick with <span className="font-medium text-foreground">⇧+Click</span>, duplicate with <span className="font-medium text-foreground">⌥+Drag</span>, and trigger automated <span className="font-medium text-foreground">Mally Actions</span> before events start — interactions you won't find anywhere else.
                 </p>
               </div>
             </div>

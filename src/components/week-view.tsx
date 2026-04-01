@@ -696,21 +696,6 @@ const WeekView = () => {
     }
   };
 
-  const handleDuplicateEvent = async (event: CalendarEventType) => {
-    const duplicatedEvent: CalendarEventType = {
-      ...event,
-      id: crypto.randomUUID(),
-      title: `${event.title} (Copy)`,
-    };
-    const result = await addEvent(duplicatedEvent);
-    if (result.success) {
-      trackCreateEvent(duplicatedEvent); // Track for undo
-      toast.success("Event duplicated");
-    } else {
-      toast.error("Failed to duplicate event");
-    }
-  };
-
   const handleColorChange = async (eventId: string, color: string) => {
     const event = events.find(e => e.id === eventId);
     if (event) {
@@ -720,12 +705,6 @@ const WeekView = () => {
       trackUpdateEvent(previousEvent, updatedEvent); // Track for undo
       toast.success("Color updated");
     }
-  };
-
-  const handleAddAlarmToEvent = (event: CalendarEventType) => {
-    // Open the event summary which has alarm functionality
-    openEventSummary(event);
-    toast.info("Edit the event to add an alarm");
   };
 
   const handleResizeEvent = useCallback(async (event: CalendarEventType, newStart: Date, newEnd: Date) => {
@@ -770,13 +749,6 @@ const WeekView = () => {
     await updateEvent(updatedEvent);
   }, [updateEvent, handleRecurringEventDrop]);
 
-  const handleAddTodoFromEvent = async (event: CalendarEventType) => {
-    const todoId = await handleCreateTodoFromEvent(event);
-    if (todoId) {
-      await updateEvent({ ...event, isTodo: true, todoId });
-      toast.success("Todo created from event");
-    }
-  };
 
   return (
     <>
@@ -814,10 +786,7 @@ const WeekView = () => {
         isSelected={isSelected}
         onToggleSelection={toggleSelection}
         onDeleteEvent={handleDeleteEvent}
-        onDuplicateEvent={handleDuplicateEvent}
         onColorChange={handleColorChange}
-        onAddAlarm={handleAddAlarmToEvent}
-        onAddTodo={handleAddTodoFromEvent}
         onLockToggle={toggleEventLock}
       />
       </motion.div>
@@ -874,10 +843,7 @@ const WeekView = () => {
                   }}
                   draggingBulkEventId={draggingBulkEventId}
                   onDeleteEvent={handleDeleteEvent}
-                  onDuplicateEvent={handleDuplicateEvent}
                   onColorChange={handleColorChange}
-                  onAddAlarm={handleAddAlarmToEvent}
-                  onAddTodo={handleAddTodoFromEvent}
                   onResizeEvent={handleResizeEvent}
                 />
               );

@@ -24,11 +24,9 @@ interface AllDaySectionBaseProps {
   onToggleSelection?: (eventId: string) => void;
   // Context menu handlers (optional – used in week view)
   onDeleteEvent?: (eventId: string) => void;
-  onDuplicateEvent?: (event: CalendarEventType) => void;
   onColorChange?: (eventId: string, color: string) => void;
-  onAddAlarm?: (event: CalendarEventType) => void;
-  onAddTodo?: (event: CalendarEventType) => void;
   onLockToggle?: (id: string, isLocked: boolean) => void;
+  onReschedule?: (event: CalendarEventType) => void;
 }
 
 // ─── Week All-Day Row ────────────────────────────────────────────────────────
@@ -52,11 +50,9 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
   isSelected = () => false,
   onToggleSelection = () => {},
   onDeleteEvent,
-  onDuplicateEvent,
   onColorChange,
-  onAddAlarm,
-  onAddTodo,
   onLockToggle,
+  onReschedule,
   onAllDayEventDrop,
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -166,7 +162,6 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
                       event={event}
                       onEdit={onEventClick}
                       onDelete={onDeleteEvent}
-                      onDuplicate={onDuplicateEvent}
                       onColorChange={onColorChange}
                       onLockToggle={
                         onLockToggle
@@ -174,8 +169,7 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
                               onLockToggle(eventId, locked)
                           : undefined
                       }
-                      onAddAlarm={onAddAlarm}
-                      onAddTodo={onAddTodo}
+                      onReschedule={onReschedule ? () => onReschedule(event) : undefined}
                     >
                       <CalendarEvent
                         event={event}

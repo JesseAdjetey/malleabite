@@ -66,9 +66,21 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
           </div>
         </ScrollArea>
 
+        <div className="space-y-3 mt-2">
+          <h3 className="text-sm font-semibold text-primary border-b border-border pb-1">
+            Mouse &amp; Gestures
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            <ShortcutRow description="Bulk select mode" shortcut="B" />
+            <ShortcutRow description="Add to bulk selection" shortcut="Shift+Click" />
+            <ShortcutRow description="Duplicate event" shortcut="⌥+Drag" />
+            <ShortcutRow description="Move event" shortcut="Drag" />
+          </div>
+        </div>
+
         <div className="pt-4 border-t border-border text-xs text-muted-foreground">
           <p>
-            Press <kbd className="kbd">?</kbd> to show/hide this dialog anytime
+            Press <kbd className="kbd">/</kbd> to show/hide this dialog anytime
           </p>
         </div>
       </DialogContent>

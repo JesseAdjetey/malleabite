@@ -414,15 +414,22 @@ export const processAIRequest = onRequest(
       let eisenhowerContext = 'No priority items.';
       let alarmsContext = 'No alarms set.';
 
-      // Fetch events
+      // Fetch events (optionally filtered by AI-enabled calendars)
       try {
-        const eventsSnapshot = await db.collection('calendar_events')
-          .where('userId', '==', userId)
-          .limit(20)
-          .get();
+        const aiEnabledCalendarIds: string[] | null = (clientContext as any)?.aiEnabledCalendarIds ?? null;
+        let eventsQuery: any = db.collection('calendar_events').where('userId', '==', userId);
+
+        // If the user has restricted which calendars Mally can see, apply the filter.
+        // Firestore 'in' queries support up to 30 values.
+        if (aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0) {
+          const ids = aiEnabledCalendarIds.slice(0, 30);
+          eventsQuery = eventsQuery.where('calendarId', 'in', ids);
+        }
+
+        const eventsSnapshot = await eventsQuery.limit(20).get();
 
         const events: any[] = [];
-        eventsSnapshot.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
+        eventsSnapshot.forEach((doc: any) => events.push({ id: doc.id, ...doc.data() }));
         if (events.length > 0) {
           eventsContext = formatEventsForAI(events);
         }
@@ -611,6 +618,24 @@ This is CRITICAL to your personality. You must distinguish between:
 - Don't ask "would you like me to..." when they already told you to
 - Don't add unsolicited productivity tips to simple commands
 - Don't second-guess clear instructions
+
+${(clientContext as any)?.autoMode ? `
+═══════════════════════════════════════════════════
+  AUTO MODE — ACTIVE (ZERO QUESTIONS)
+═══════════════════════════════════════════════════
+
+The user has enabled AUTO MODE. This is a strict constraint:
+- **NEVER ask ANY question.** Not for title, time, duration, list, calendar — nothing.
+- Make all decisions yourself using context, memory, and smart defaults.
+- Pick the most reasonable option and execute it immediately.
+- Briefly state what you did and why (one sentence max).
+- If truly ambiguous, make the most common-sense choice and mention the assumption.
+
+Examples in AUTO MODE:
+- "Schedule gym" → Create "Gym" at your next free morning slot, 1 hour. Done.
+- "Add a todo" → If title is implied by context, add it. If not, pick "Task" as title.
+- "Remind me about the meeting" → Set a 10-minute-before reminder on the next upcoming meeting.
+` : ''}
 
 ═══════════════════════════════════════════════════
   PERSISTENT MEMORY (YOU REMEMBER ACROSS SESSIONS)

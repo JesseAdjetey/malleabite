@@ -589,6 +589,16 @@ service cloud.firestore {
       allow write: if false; // Cloud Functions only
     }
 
+    // Feedback — users can submit, no client reads (admin reads via Firebase Console)
+    match /feedback/{feedbackId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(['message', 'createdAt'])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 5000;
+      allow read, update, delete: if false;
+    }
+
     // Group Meet Sessions — public read (link sharing), auth required to create
     match /group_meets/{sessionId} {
       // Anyone with the link can read (public meet page for guests)

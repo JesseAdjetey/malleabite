@@ -1,9 +1,9 @@
 // Mally Vapi Voice AI Service
 // Uses Vapi's managed WebRTC voice sessions for full-duplex AI conversations.
 //
-// Requires: VITE_VAPI_PUBLIC_KEY (+ optionally VITE_VAPI_ASSISTANT_ID)
-// Without VITE_VAPI_ASSISTANT_ID the inline config path is used, which requires
-// OpenAI + Deepgram provider keys to be configured in the Vapi dashboard.
+// Requires: VITE_VAPI_PUBLIC_KEY
+// This service intentionally uses a simple inline Vapi configuration so only the
+// public key is required on the frontend. Prompt/voice are passed at session start.
 
 import Vapi from '@vapi-ai/web';
 
@@ -591,35 +591,27 @@ class MallyVapiService {
       }
 
       const vapi = this.ensureVapi();
-      const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID;
 
-      if (assistantId) {
-        // Dashboard assistant — uses Vapi's built-in provider keys
-        await vapi.start(assistantId, {
-          assistantOverrides: {
-            ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
-            ...(options.systemPrompt ? { variableValues: { systemPrompt: options.systemPrompt } } : {}),
-          },
-        } as any);
-      } else {
-        // Inline config — keep this intentionally minimal for a reliable Vapi-only fallback
-        await vapi.start({
-          name: 'Mally',
-          ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
-          transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-          model: {
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            ...(options.systemPrompt ? { messages: [{ role: 'system', content: options.systemPrompt }] } : {}),
-            temperature: 0.7,
-            maxTokens: 300,
-          },
-          voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
-          silenceTimeoutSeconds: 30,
-          maxDurationSeconds: 300,
-          backgroundSound: 'off',
-        } as any);
-      }
+      console.log('[MallyVapi] startSession', {
+        voiceId: options.voiceId ?? 'Lily',
+      });
+
+      await vapi.start({
+        name: 'Mally',
+        ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+        model: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          ...(options.systemPrompt ? { messages: [{ role: 'system', content: options.systemPrompt }] } : {}),
+          temperature: 0.7,
+          maxTokens: 300,
+        },
+        voice: { provider: 'vapi', voiceId: options.voiceId ?? 'Lily' },
+        silenceTimeoutSeconds: 30,
+        maxDurationSeconds: 300,
+        backgroundSound: 'off',
+      } as any);
     } catch (err: any) {
       console.error('[MallyVapi] Failed to start session:', JSON.stringify(err, null, 2));
       this.callbacks.onError?.(err);

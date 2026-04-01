@@ -833,20 +833,30 @@ RULES:
         return;
       }
 
+      if (isVapiConnectingRef.current || mallyVapi.isActive) {
+        return;
+      }
+
       overlayWakePausedRef.current = false;
       wasVoiceActivatedRef.current = true;
       setVoiceSessionActive(true);
       setVoiceOverlayOpen(true);
       setOverlayTranscript('');
       setOverlayResponse('');
+      setOverlayProcessing(false);
       haptics.medium();
       sounds.play("heyMally");
-      // Don't start Vapi here — wait for user to tap the orb (user gesture required for AudioContext)
+
+      unlockAudioContext();
+      pauseWakeWord?.();
+      overlayWakePausedRef.current = true;
+      await speechService.ensureStopped(100);
+      startVoiceAgentSession();
     };
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, []);
+  }, [pauseWakeWord, startVoiceAgentSession]);
 
   // Auto-dismiss overlay after inactivity (like Siri)
   useEffect(() => {
@@ -1766,13 +1776,6 @@ RULES:
         transcript={overlayTranscript}
         responseText={overlayResponse}
         onClose={closeVoiceOverlay}
-        onStart={!isVapiConnecting && !isRecording && !isSpeaking && !overlayProcessing ? async () => {
-          unlockAudioContext();
-          pauseWakeWord?.();
-          overlayWakePausedRef.current = true;
-          await speechService.ensureStopped(100);
-          startVoiceAgentSession();
-        } : undefined}
         onInterrupt={handleOverlayInterrupt}
       />
 

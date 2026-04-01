@@ -832,7 +832,7 @@ RULES:
 
     window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
     return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [startVoiceAgentSession]);
+  }, []);
 
   // Auto-dismiss overlay after inactivity (like Siri)
   useEffect(() => {

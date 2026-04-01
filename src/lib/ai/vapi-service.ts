@@ -1,44 +1,28 @@
 // Mally Vapi Voice AI Service
-// Replaces custom STT + TTS + VAD pipeline with Vapi's managed WebRTC voice sessions.
+// Uses Vapi's managed WebRTC voice sessions for full-duplex AI conversations.
 //
-// Architecture:
-//   - Wake word (Porcupine) triggers vapiService.startSession() → full-duplex conversation
-//   - Vapi handles: STT (Deepgram) → LLM (GPT-4o) → TTS (Vapi/ElevenLabs) → VAD/barge-in
-//   - Client-side tool calls for calendar/todo/pomodoro + real-time data (weather/stocks/flights/search)
-//   - vapiService.stop() ends session, mic returns to wake word listener
-//
-// Opt-in via VITE_VAPI_PUBLIC_KEY env variable.
-// When the key is absent, the existing custom pipeline is used as fallback.
+// Requires: VITE_VAPI_PUBLIC_KEY (+ optionally VITE_VAPI_ASSISTANT_ID)
+// Without VITE_VAPI_ASSISTANT_ID the inline config path is used, which requires
+// OpenAI + Deepgram provider keys to be configured in the Vapi dashboard.
 
 import Vapi from '@vapi-ai/web';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface VapiCallbacks {
-  /** User speech transcript (partial or final) */
   onUserTranscript?: (text: string, isFinal: boolean) => void;
-  /** Assistant speech transcript (what she's saying) */
   onAssistantTranscript?: (text: string, isFinal: boolean) => void;
-  /** User started speaking */
   onUserSpeechStart?: () => void;
-  /** User stopped speaking */
   onUserSpeechEnd?: () => void;
-  /** Call has connected and is active */
   onCallStart?: () => void;
-  /** Call has ended (either side) */
   onCallEnd?: () => void;
-  /** A tool/function call from the LLM — return result string */
   onToolCall?: (name: string, args: Record<string, any>) => Promise<string>;
-  /** Error occurred */
   onError?: (error: any) => void;
 }
 
 export interface VapiSessionOptions {
-  /** Dynamic system prompt with calendar context */
   systemPrompt: string;
-  /** First message Mally says when the call starts */
   firstMessage?: string;
-  /** VAPI built-in voiceId (e.g. 'Lily', 'Elliot'). Defaults to 'Lily'. */
   voiceId?: string;
 }
 
@@ -227,7 +211,6 @@ function buildMallyTools(): any[] {
         parameters: { type: 'object', properties: {} },
       },
     },
-    // ── Real-time data tools ──
     {
       type: 'function',
       messages: [
@@ -304,7 +287,6 @@ function buildMallyTools(): any[] {
         },
       },
     },
-    // ── Event management ──
     {
       type: 'function',
       messages: [
@@ -345,7 +327,6 @@ function buildMallyTools(): any[] {
         },
       },
     },
-    // ── Todo management ──
     {
       type: 'function',
       messages: [
@@ -382,7 +363,6 @@ function buildMallyTools(): any[] {
         },
       },
     },
-    // ── Eisenhower / Priority Matrix ──
     {
       type: 'function',
       messages: [
@@ -406,7 +386,6 @@ function buildMallyTools(): any[] {
         },
       },
     },
-    // ── Goals ──
     {
       type: 'function',
       messages: [
@@ -428,7 +407,6 @@ function buildMallyTools(): any[] {
         },
       },
     },
-    // ── Alarm management ──
     {
       type: 'function',
       messages: [
@@ -456,22 +434,17 @@ class MallyVapiService {
   private vapi: Vapi | null = null;
   private callbacks: VapiCallbacks = {};
   private _isActive = false;
-  private _isPreWarming = false;  // WebRTC handshake in progress (background)
-  private _preWarmed = false;     // Connection ready, mic muted, waiting to activate
   private _isSpeaking = false;
   private _speakingTimer: ReturnType<typeof setTimeout> | null = null;
   private _onSpeakingChange: ((speaking: boolean) => void) | null = null;
   private _eventsAttached = false;
-  private _intentionalStop = false;  // True when we killed the call on purpose (don't re-warm)
-  private _startingSession = false;  // Debounce rapid "Hey Mally" activations
+  private _startingSession = false;
 
   // ── Getters ──
 
   get isAvailable(): boolean { return !!(import.meta.env.VITE_VAPI_PUBLIC_KEY); }
   get isActive(): boolean { return this._isActive; }
   get isSpeaking(): boolean { return this._isSpeaking; }
-  /** True when pre-warm connected and ready — next startSession() will be instant */
-  get isPreWarmed(): boolean { return this._preWarmed; }
 
   // ── Callbacks ──
 
@@ -510,70 +483,34 @@ class MallyVapiService {
 
     v.on('call-start', () => {
       this._isActive = true;
-      if (this._isPreWarming) {
-        // Background pre-warm connected — mute immediately, mark ready
-        console.log('[MallyVapi] ✓ Pre-warm ready — instant activation available');
-        this._preWarmed = true;
-        this._isPreWarming = false;
-        v.setMuted(true); // Silent standby — no audio until user activates
-      } else {
-        console.log('[MallyVapi] Call started');
-        this.callbacks.onCallStart?.();
-      }
+      console.log('[MallyVapi] Call started');
+      this.callbacks.onCallStart?.();
     });
 
     v.on('call-end', () => {
-      const wasPreWarm = this._preWarmed || this._isPreWarming;
-      const wasIntentional = this._intentionalStop;
       this._isActive = false;
-      this._preWarmed = false;
-      this._isPreWarming = false;
-      this._intentionalStop = false;
       this.setSpeaking(false);
       if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
-      
-      if (wasIntentional) {
-        // We stopped the call on purpose (e.g. during forceCleanup for a new session)
-        // Don't re-warm — the caller is about to start a new session
-        console.log('[MallyVapi] Call ended (intentional cleanup)');
-        return;
-      }
-      
-      if (wasPreWarm) {
-        // Pre-warm timed out naturally — restart it
-        console.log('[MallyVapi] Pre-warm timed out, re-warming in 3s...');
-        setTimeout(() => this.preWarm(), 3000);
-      } else {
-        console.log('[MallyVapi] Call ended');
-        this.callbacks.onCallEnd?.();
-      }
+      console.log('[MallyVapi] Call ended');
+      this.callbacks.onCallEnd?.();
     });
 
     v.on('speech-start', () => {
-      if (this._preWarmed) return; // Ignore during standby
       this.setSpeaking(false);
       if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
       this.callbacks.onUserSpeechStart?.();
     });
 
     v.on('speech-end', () => {
-      if (this._preWarmed) return;
       this.callbacks.onUserSpeechEnd?.();
     });
 
     v.on('message', (msg: any) => {
-      if (this._preWarmed) return; // Ignore all messages during standby
       this.handleMessage(msg);
     });
 
     v.on('error', (err: any) => {
-      if (this._isPreWarming || this._preWarmed) {
-        console.warn('[MallyVapi] Pre-warm error (non-critical) — will cold-start on next activation:', err?.type);
-        this._intentionalStop = true;
-        this.forceCleanup();
-        return;
-      }
-      console.error('[MallyVapi] Error type:', err?.type, '| stage:', err?.stage, '| error:', err?.error?.message ?? err?.error?.error ?? JSON.stringify(err?.error));
+      console.error('[MallyVapi] Error:', err?.type, err?.error?.message ?? JSON.stringify(err?.error));
       this.callbacks.onError?.(err);
     });
   }
@@ -638,160 +575,34 @@ class MallyVapiService {
 
   // ── Public API ──
 
-  /**
-   * Pre-warm: establish WebRTC in background BEFORE "Hey Mally" is spoken.
-   * When startSession() is called next, connection is already live → instant activation.
-   * Call this: on user login, after each session ends.
-   */
-  async preWarm(voiceId = 'Lily'): Promise<void> {
-    if (!this.isAvailable) return;
-    // If already pre-warming or pre-warmed, no-op
-    if (this._isPreWarming || this._preWarmed) return;
-    // Don't pre-warm while a real session is starting
-    if (this._startingSession) return;
-
-    // Force cleanup any zombie/timed-out call first to avoid "multiple call instances"
-    if (this._isActive || this.vapi) {
-      this._intentionalStop = true;
-      this.forceCleanup();
-      await new Promise(r => setTimeout(r, 300)); // Let Daily.co SDK fully release
-    }
-
-    console.log('[MallyVapi] Pre-warming WebRTC connection...');
-    this._isPreWarming = true;
-    const vapi = this.ensureVapi();
-
-    try {
-      await vapi.start({
-        name: 'Mally-Standby',
-        transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-        model: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          messages: [{ role: 'system', content: 'Standby. You are Mally. Wait silently for the user.' }],
-          temperature: 0.7,
-          maxTokens: 300,
-        },
-        voice: { provider: 'vapi', voiceId },
-        silenceTimeoutSeconds: 120,
-        maxDurationSeconds: 180,
-        backgroundSound: 'off',
-        clientMessages: [
-          'conversation-update', 'function-call', 'hang', 'speech-update',
-          'status-update', 'transcript', 'tool-calls', 'tool-calls-result', 'user-interrupted',
-        ] as any,
-      } as any);
-      // call-start handler will mute mic and set _preWarmed = true
-    } catch (err) {
-      console.warn('[MallyVapi] Pre-warm failed (will cold-start on activation):', err);
-      this._isPreWarming = false;
-      this._preWarmed = false;
-    }
-  }
-
-  /** Activate the pre-warmed session with full context — no WebRTC delay */
-  private activatePreWarmed(options: VapiSessionOptions): void {
-    const vapi = this.vapi!;
-    this._preWarmed = false; // No longer in standby
-
-    // Inject the full context system prompt
-    try {
-      vapi.send({
-        type: 'add-message',
-        message: { role: 'system', content: options.systemPrompt } as any,
-      });
-    } catch (e) {
-      console.warn('[MallyVapi] Could not inject system prompt:', e);
-    }
-
-    // Un-mute → user can now speak, Vapi is live
-    vapi.setMuted(false);
-
-    // Say the greeting so the user immediately hears Mally (like Siri's "What can I help you with?")
-    // We delay a beat so the audio pipeline has time to fully open after unmute.
-    if (options.firstMessage) {
-      setTimeout(() => {
-        try {
-          console.log('[MallyVapi] Saying greeting:', options.firstMessage);
-          vapi.say(options.firstMessage!, /* endCallAfterSpoken */ false);
-        } catch (e) {
-          console.warn('[MallyVapi] Could not say greeting:', e);
-        }
-      }, 150);
-    }
-
-    // Fire onCallStart so the component shows the overlay as ready
-    this.callbacks.onCallStart?.();
-  }
-
-  /** Start a voice session — instant if pre-warmed, otherwise cold-starts WebRTC */
+  /** Start a voice session. Must be called from within a user gesture (tap/click). */
   async startSession(options: VapiSessionOptions): Promise<void> {
-    // Debounce rapid "Hey Mally" activations
     if (this._startingSession) {
       console.log('[MallyVapi] Session start already in progress, ignoring');
       return;
     }
     this._startingSession = true;
-    // Reset intentional stop flag — this is a fresh session
-    this._intentionalStop = false;
 
     try {
-      // ── Fast path: pre-warm connection already live ──
-      if (this._preWarmed && this._isActive && this.vapi) {
-        console.log('[MallyVapi] ✓ Instant activation via pre-warm');
-        this.activatePreWarmed(options);
-        this._startingSession = false;  // Reset here since finally won't run after return
-        return;
-      }
-
-      // ── If pre-warming in progress, wait for it (up to 3s) ──
-      if (this._isPreWarming && this.vapi) {
-        console.log('[MallyVapi] Pre-warm in progress, waiting...');
-        const startWait = Date.now();
-        while (this._isPreWarming && Date.now() - startWait < 3000) {
-          await new Promise(r => setTimeout(r, 100));
-        }
-        // Check if pre-warm completed while we waited
-        if (this._preWarmed && this._isActive && this.vapi) {
-          console.log('[MallyVapi] ✓ Pre-warm completed while waiting — instant activation');
-          this.activatePreWarmed(options);
-          return;
-        }
-        // Pre-warm didn't complete in time — fall through to cold start
-        console.log('[MallyVapi] Pre-warm did not complete in time, cold starting');
-      }
-
-      // ── Cold start: establish WebRTC from scratch ──
-      // Clean up any stale session first to avoid "multiple call instances"
-      if (this._isActive || this._isPreWarming || this.vapi) {
-        console.log('[MallyVapi] Cleaning up before cold start');
-        this._intentionalStop = true;  // Prevent call-end from scheduling new pre-warm
+      // Clean up any stale session first
+      if (this._isActive || this.vapi) {
         this.forceCleanup();
         await new Promise(r => setTimeout(r, 300));
       }
-
-      // Ensure AudioContext is running before Vapi tries to acquire the mic
-      try {
-        const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
-        if (AudioContextClass) {
-          const ctx = new AudioContextClass();
-          if (ctx.state === 'suspended') await ctx.resume();
-        }
-      } catch {}
 
       const vapi = this.ensureVapi();
       const assistantId = import.meta.env.VITE_VAPI_ASSISTANT_ID;
 
       if (assistantId) {
-        // Use dashboard assistant with dynamic context injected via overrides
+        // Dashboard assistant — uses Vapi's built-in provider keys
         await vapi.start(assistantId, {
-          variableValues: {
-            systemPrompt: options.systemPrompt,
+          assistantOverrides: {
             ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
+            variableValues: { systemPrompt: options.systemPrompt },
           },
         } as any);
       } else {
-        // Fallback: inline config (requires provider keys in Vapi dashboard)
+        // Inline config — requires OpenAI + Deepgram provider keys in Vapi dashboard settings
         await vapi.start({
           name: 'Mally',
           ...(options.firstMessage ? { firstMessage: options.firstMessage } : {}),
@@ -823,23 +634,17 @@ class MallyVapiService {
   stop() {
     if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
     this.setSpeaking(false);
-    this._preWarmed = false;
-    this._isPreWarming = false;
     try { this.vapi?.stop(); } catch {}
     this._isActive = false;
   }
 
-  /** Force cleanup - destroy Vapi instance entirely (use before re-creating) */
+  /** Destroy Vapi instance entirely */
   forceCleanup() {
     if (this._speakingTimer) { clearTimeout(this._speakingTimer); this._speakingTimer = null; }
     this.setSpeaking(false);
-    this._preWarmed = false;
-    this._isPreWarming = false;
     this._isActive = false;
-    this._intentionalStop = false;  // Reset so next session isn't affected
     if (this.vapi) {
       try { this.vapi.stop(); } catch {}
-      // Remove all listeners and destroy instance to avoid "multiple call instances"
       try { (this.vapi as any).removeAllListeners?.(); } catch {}
       this.vapi = null;
       this._eventsAttached = false;
@@ -853,14 +658,9 @@ class MallyVapiService {
 
 export const mallyVapi = new MallyVapiService();
 
-// Read the persisted voice preference from localStorage before React mounts.
-
-if (typeof window !== 'undefined') {
-  // HMR cleanup: destroy old instance when module reloads during development
-  if (import.meta.hot) {
-    import.meta.hot.dispose(() => {
-      console.log('[MallyVapi] HMR cleanup - destroying instance');
-      mallyVapi.forceCleanup();
-    });
-  }
+if (typeof window !== 'undefined' && import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    console.log('[MallyVapi] HMR cleanup');
+    mallyVapi.forceCleanup();
+  });
 }

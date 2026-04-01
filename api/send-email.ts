@@ -2,6 +2,7 @@
 // This is a Vercel Edge Function
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { rateLimit, getIp } from './_rate-limit';
 
 interface EmailRequest {
   type: 'event_reminder' | 'daily_digest' | 'weekly_summary' | 'welcome' | 'subscription_confirmation';
@@ -273,6 +274,12 @@ const templates = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { allowed, retryAfter } = rateLimit(getIp(req), 'send-email', 10, 60_000);
+  if (!allowed) {
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many requests' });
   }
 
   const { type, to, data } = req.body as EmailRequest;

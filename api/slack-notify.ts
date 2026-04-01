@@ -1,5 +1,6 @@
 // Slack Notification API Route
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { rateLimit, getIp } from './_rate-limit';
 
 interface SlackNotificationRequest {
   webhookUrl: string;
@@ -212,6 +213,12 @@ const ALLOWED_NOTIFICATION_TYPES = new Set([
 ]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const { allowed, retryAfter } = rateLimit(getIp(req), 'slack-notify', 20, 60_000);
+  if (!allowed) {
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
   const origin = req.headers['origin'] as string | undefined;
 
   // Restrict CORS to known origins only

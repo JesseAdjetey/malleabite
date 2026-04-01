@@ -1,5 +1,6 @@
 // Feedback API Route
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { rateLimit, getIp } from './_rate-limit';
 
 interface FeedbackData {
   type: 'bug' | 'feature' | 'question' | 'other';
@@ -13,6 +14,12 @@ interface FeedbackData {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { allowed, retryAfter } = rateLimit(getIp(req), 'feedback', 5, 60_000);
+  if (!allowed) {
+    res.setHeader('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many requests' });
   }
 
   try {

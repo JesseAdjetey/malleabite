@@ -23,7 +23,9 @@ type SoundName =
   | "pageSwitch"    // sidebar page navigation — paper-turn swoosh
   | "lightClick"    // very subtle click for minor UI buttons
   | "typingKey"     // mechanical key press during typing
-  | "micOn";        // Mally mic activated — ready ping
+  | "micOn"         // Mally mic activated — ready ping
+  | "feedbackOpen"  // feedback tab click — papery flick
+  | "todayClick";   // today button / shortcut — soft anchor chime
 
 const STORAGE_KEY = "mally-sounds-enabled";
 const RATE_LIMITS: Record<SoundName, number> = {
@@ -47,12 +49,15 @@ const RATE_LIMITS: Record<SoundName, number> = {
   lightClick:    60,
   typingKey:     60,
   micOn:         400,
+  feedbackOpen:  200,
+  todayClick:    300,
 };
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private lastPlayed: Partial<Record<SoundName, number>> = {};
   private _enabled: boolean;
+  private paperRustleNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   constructor() {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -120,7 +125,101 @@ class SoundEngine {
       case "lightClick":  this._lightClick(ctx, t); break;
       case "typingKey":   this._typingKey(ctx, t); break;
       case "micOn":       this._micOn(ctx, t); break;
+      case "feedbackOpen": this._feedbackOpen(ctx, t); break;
+      case "todayClick":   this._todayClick(ctx, t); break;
     }
+  }
+
+  /** Soft two-note anchor chime for "go to today" — 200ms */
+  private _todayClick(ctx: AudioContext, t: number) {
+    // E5 quick hit → C5 soft landing — "you are here"
+    [[659.25, 0, 0.032, 0.09], [523.25, 0.055, 0.042, 0.16]].forEach(([freq, delay, peak, decay]) => {
+      const onset = t + delay;
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, onset);
+      g.gain.linearRampToValueAtTime(peak, onset + 0.007);
+      g.gain.exponentialRampToValueAtTime(0.001, onset + decay);
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start(onset);
+      osc.stop(onset + decay + 0.01);
+    });
+  }
+
+  /** Papery "shk" flick for feedback tab click — bandpass noise sweep, 80ms */
+  private _feedbackOpen(ctx: AudioContext, t: number) {
+    const len = Math.floor(ctx.sampleRate * 0.08);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.35));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    filt.type = "bandpass";
+    filt.frequency.setValueAtTime(900, t);
+    filt.frequency.exponentialRampToValueAtTime(3000, t + 0.06);
+    filt.Q.value = 0.9;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0, t);
+    gain.gain.linearRampToValueAtTime(0.12, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    src.connect(filt);
+    filt.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(t);
+  }
+
+  /** Start a continuous looping paper rustle — call stopPaperRustle() to end it */
+  startPaperRustle() {
+    if (!this._enabled || this.paperRustleNode) return;
+    const ctx = this.getCtx();
+    if (!ctx) return;
+
+    // 40ms bandpass-filtered noise, looped seamlessly
+    const len = Math.floor(ctx.sampleRate * 0.04);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+
+    const filt = ctx.createBiquadFilter();
+    filt.type = "bandpass";
+    filt.frequency.value = 2200;
+    filt.Q.value = 0.7;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.028, ctx.currentTime + 0.03);
+
+    src.connect(filt);
+    filt.connect(gain);
+    gain.connect(ctx.destination);
+    src.start();
+
+    this.paperRustleNode = { src, gain };
+  }
+
+  /** Fade out and stop the looping paper rustle */
+  stopPaperRustle() {
+    if (!this.paperRustleNode) return;
+    const ctx = this.getCtx();
+    if (!ctx) return;
+
+    const { src, gain } = this.paperRustleNode;
+    const t = ctx.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(gain.gain.value, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    try { src.stop(t + 0.08); } catch { /* already stopped */ }
+    this.paperRustleNode = null;
   }
 
   // ── Individual sounds ────────────────────────────────────────────────────
@@ -490,8 +589,8 @@ class SoundEngine {
     osc.frequency.exponentialRampToValueAtTime(1400, t + 0.18);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0, t);
-    g.gain.linearRampToValueAtTime(0.09, t + 0.025);
-    g.gain.setValueAtTime(0.09, t + 0.1);
+    g.gain.linearRampToValueAtTime(0.045, t + 0.025);
+    g.gain.setValueAtTime(0.045, t + 0.1);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
     osc.connect(g);
     g.connect(ctx.destination);
@@ -504,7 +603,7 @@ class SoundEngine {
     osc2.frequency.exponentialRampToValueAtTime(2800, t + 0.14);
     const g2 = ctx.createGain();
     g2.gain.setValueAtTime(0.0, t);
-    g2.gain.linearRampToValueAtTime(0.04, t + 0.02);
+    g2.gain.linearRampToValueAtTime(0.02, t + 0.02);
     g2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
     osc2.connect(g2);
     g2.connect(ctx.destination);
@@ -513,38 +612,35 @@ class SoundEngine {
   }
 
   /**
-   * Mellow descending tone for switching to dark theme — 200ms.
-   * Gentle mid-range drop, no scary sub-bass.
+   * Soft muffled exhale for dark theme — 220ms.
+   * Filtered noise only (no tones), low-pass sweeps down — like a room going quiet.
    */
   private _themeNight(ctx: AudioContext, t: number) {
-    // Warm descending tone: A4 → E4 — comfortable mid range, no ultra-low bass
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(440, t);
-    osc.frequency.exponentialRampToValueAtTime(260, t + 0.16);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0, t);
-    g.gain.linearRampToValueAtTime(0.07, t + 0.018);
-    g.gain.setValueAtTime(0.07, t + 0.08);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.19); // clean cut-off, no drag
-    osc.connect(g);
-    g.connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.21);
+    const len = Math.floor(ctx.sampleRate * 0.22);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.55));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
 
-    // Soft harmonic 5th above — adds warmth, keeps it "night" not "scary"
-    const osc2 = ctx.createOscillator();
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(660, t);
-    osc2.frequency.exponentialRampToValueAtTime(390, t + 0.14);
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(0.0, t + 0.01);
-    g2.gain.linearRampToValueAtTime(0.028, t + 0.03);
-    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.17);
-    osc2.connect(g2);
-    g2.connect(ctx.destination);
-    osc2.start(t);
-    osc2.stop(t + 0.19);
+    // Low-pass descends from 350Hz → 70Hz — muffles to near silence
+    const filt = ctx.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.frequency.setValueAtTime(350, t);
+    filt.frequency.exponentialRampToValueAtTime(70, t + 0.18);
+    filt.Q.value = 0.4;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0, t);
+    gain.gain.linearRampToValueAtTime(0.07, t + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+    src.connect(filt);
+    filt.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(t);
   }
 
   /** Soft neutral ping for switching to system theme — 150ms */
@@ -574,36 +670,20 @@ class SoundEngine {
     osc2.stop(t + 0.09);
   }
 
-  /** Soft double-chime when event dialog opens — 200ms */
+  /** Very soft tap when event dialog opens — 80ms */
   private _eventOpen(ctx: AudioContext, t: number) {
-    // Two quick bell tones: E5 then A5
-    [[659.25, 0], [880, 0.07]].forEach(([freq, delay]) => {
-      const onset = t + delay;
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, onset);
-      g.gain.linearRampToValueAtTime(0.065, onset + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.001, onset + 0.18);
-      osc.connect(g);
-      g.connect(ctx.destination);
-      osc.start(onset);
-      osc.stop(onset + 0.2);
-
-      // Bell shimmer
-      const osc2 = ctx.createOscillator();
-      osc2.type = "sine";
-      osc2.frequency.value = freq * 2.756;
-      const g2 = ctx.createGain();
-      g2.gain.setValueAtTime(0, onset);
-      g2.gain.linearRampToValueAtTime(0.018, onset + 0.006);
-      g2.gain.exponentialRampToValueAtTime(0.001, onset + 0.1);
-      osc2.connect(g2);
-      g2.connect(ctx.destination);
-      osc2.start(onset);
-      osc2.stop(onset + 0.12);
-    });
+    // Single gentle sine tap at C5 — unobtrusive, matches a light touch
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = 523.25;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.02, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.09);
   }
 
   /** Sidebar page navigation — light paper-turn swish, 90ms */

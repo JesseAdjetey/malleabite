@@ -2,6 +2,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
+import { sounds } from '@/lib/sounds';
 
 // Define all available shortcuts
 export type ShortcutAction =
@@ -191,6 +192,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
     switch (matchedAction) {
       // Navigation
       case 'goToToday':
+        sounds.play("todayClick");
         onDateChange?.(new Date());
         break;
       case 'goToNextPeriod':

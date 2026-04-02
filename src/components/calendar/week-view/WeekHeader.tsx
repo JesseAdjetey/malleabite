@@ -65,6 +65,7 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
   const dayCellRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<"left" | "right" | null>(null);
+  const lastRibbonTickIdx = useRef<number>(-1);
 
   // Label for the dropdown badge
   const rangeLabel =
@@ -104,6 +105,7 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      lastRibbonTickIdx.current = -1;
       setDragging(side);
     },
     []
@@ -113,6 +115,10 @@ const WeekHeader: React.FC<WeekHeaderProps> = ({ userSelectedDate }) => {
     (e: React.PointerEvent) => {
       if (!dragging) return;
       const idx = getDayIndexFromPointer(e.clientX);
+      if (idx !== lastRibbonTickIdx.current) {
+        sounds.play("dragTick");
+        lastRibbonTickIdx.current = idx;
+      }
       if (dragging === "left") {
         setRangeStart(Math.min(idx, rangeEnd));
       } else {

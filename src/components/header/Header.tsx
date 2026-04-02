@@ -71,6 +71,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const handleTodayClick = () => {
     haptics.light();
+    sounds.play("todayClick");
     switch (selectedView) {
       case "Month":
         setMonth(dayjs().month());
@@ -89,7 +90,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const handlePrevClick = () => {
     haptics.selection();
-    sounds.play("viewSwipe");
+    sounds.play("pageSwitch");
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex - 1);
@@ -107,7 +108,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const handleNextClick = () => {
     haptics.selection();
-    sounds.play("viewSwipe");
+    sounds.play("pageSwitch");
     switch (selectedView) {
       case "Month":
         setMonth(selectedMonthIndex + 1);

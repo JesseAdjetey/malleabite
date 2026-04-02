@@ -6,6 +6,7 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { useToast } from '@/hooks/use-toast';
+import { sounds } from '@/lib/sounds';
 
 const PHRASES = [
   "what broke today?",
@@ -87,6 +88,7 @@ export function FeedbackEdgeTab() {
       if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
         drag.current.moved = true;
         drag.current.mode = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+        sounds.play("feedbackOpen");
       }
       return;
     }
@@ -108,6 +110,7 @@ export function FeedbackEdgeTab() {
 
     if (!moved) {
       // Pure click
+      sounds.play("feedbackOpen");
       open ? springClose() : springOpen();
       return;
     }

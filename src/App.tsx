@@ -87,7 +87,7 @@ const AppRoutes = () => {
   useFCM();
 
   // Handle deep link from FCM notification tap: /?pendingActionEvent=<eventId>
-  const { events: calendarEvents } = useCalendarEvents();
+  const { events: calendarEvents, fetchEvents } = useCalendarEvents();
   const { setPending } = useActionRunnerStore();
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -174,6 +174,12 @@ const AppRoutes = () => {
         case 'b':
           if (isBulkMode) disableBulkMode(); else enableBulkMode();
           break;
+        case 'c':
+          window.dispatchEvent(new Event('open-add-event'));
+          break;
+        case 'r':
+          fetchEvents();
+          break;
         case 's':
           navigate('/settings');
           break;
@@ -181,7 +187,7 @@ const AppRoutes = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isAuthPage, selectedView, userSelectedDate, selectedMonthIndex, isBulkMode, setView, setDate, setMonth, enableBulkMode, disableBulkMode, navigate]);
+  }, [isAuthPage, selectedView, userSelectedDate, selectedMonthIndex, isBulkMode, setView, setDate, setMonth, enableBulkMode, disableBulkMode, navigate, fetchEvents]);
 
   // Delete key — removes the currently open event
   useEffect(() => {

@@ -6,19 +6,17 @@ import { SlackNotifications } from '@/components/integrations/SlackNotifications
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
 import { SchedulingSettings } from '@/components/settings/SchedulingSettings';
-import { LogOut, Mic, MicOff, ChevronLeft, Crown, Plug2, Palette, Globe, Volume2, CalendarClock } from 'lucide-react';
+import { LogOut, ChevronLeft, Crown, Plug2, Palette, Globe, Volume2, CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { toast } from '@/components/ui/use-toast';
-import { useHeyMally } from '@/contexts/HeyMallyContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useSubscription } from '@/hooks/use-subscription';
 import { useThemeStore } from '@/lib/stores/theme-store';
-import { useSettingsStore, MALLY_VOICE_OPTIONS } from '@/lib/stores/settings-store';
-import { mallyVapi } from '@/lib/ai/vapi-service';
+import { useSettingsStore } from '@/lib/stores/settings-store';
 import { sounds } from '@/lib/sounds';
 import { useAutoTranslateSafe } from '@/i18n/TranslationProvider';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '@/i18n/config';
@@ -27,7 +25,7 @@ import { haptics } from '@/lib/haptics';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
-type SettingsSection = 'main' | 'profile' | 'focus' | 'voice' | 'integrations' | 'appearance' | 'language' | 'scheduling';
+type SettingsSection = 'main' | 'profile' | 'focus' | 'integrations' | 'appearance' | 'language' | 'scheduling';
 
 const PageWrapper = ({ children }: { children: React.ReactNode }) => (
   <motion.div
@@ -45,14 +43,7 @@ const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const {
-    isWakeWordEnabled,
-    isListening,
-    isSupported,
-    toggleWakeWord,
-    error: wakeWordError
-  } = useHeyMally();
-  const { aiAutoExecute, setAiAutoExecute, mallyVoice, setMallyVoice } = useSettingsStore();
+  const { aiAutoExecute, setAiAutoExecute } = useSettingsStore();
   const [soundsEnabled, setSoundsEnabled] = useState(sounds.enabled);
   const handleToggleSounds = (val: boolean) => { sounds.setEnabled(val); setSoundsEnabled(val); };
   const { subscription } = useSubscription();
@@ -200,20 +191,7 @@ const Settings = () => {
                 <Switch checked={soundsEnabled} onCheckedChange={handleToggleSounds} />
               }
             />
-            <GroupedListItem
-              icon={<Mic className="h-4 w-4 text-green-500" />}
-              iconBg="bg-green-500/15"
-              label="Voice Control"
-              sublabel={isWakeWordEnabled ? '"Hey Mally" is active' : 'Enable hands-free'}
-              onClick={() => goTo('voice')}
-              rightElement={
-                <div className={cn(
-                  "w-2.5 h-2.5 rounded-full",
-                  isWakeWordEnabled ? "bg-green-500" : "bg-muted-foreground/20"
-                )} />
-              }
-            />
-            <GroupedListItem
+<GroupedListItem
               icon={<Plug2 className="h-4 w-4 text-teal-500/40" />}
               iconBg="bg-teal-500/8"
               label="Integrations"
@@ -254,145 +232,6 @@ const Settings = () => {
           <BackButton title="Profile" />
           <SectionTitle>Profile</SectionTitle>
           <UserProfile />
-        </div>
-      </PageWrapper>
-    );
-  }
-
-  // Voice Control Section
-  if (activeSection === 'voice') {
-    return (
-      <PageWrapper>
-        <div className="px-4 pt-6 max-w-lg mx-auto">
-          <BackButton title="Voice Control" />
-          <SectionTitle>Voice Control</SectionTitle>
-
-          {/* Hero Toggle */}
-          <GroupedList className="mb-6">
-            <div className="flex items-center justify-between px-4 py-4">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
-                  isWakeWordEnabled ? "bg-green-500/15" : "bg-muted"
-                )}>
-                  {isWakeWordEnabled ? (
-                    <div className="relative">
-                      <Mic className="h-5 w-5 text-green-500" />
-                      {isListening && (
-                        <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-green-500 rounded-full animate-ping" />
-                      )}
-                    </div>
-                  ) : (
-                    <MicOff className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div>
-                  <div className="text-subheadline font-medium">Hey Mally</div>
-                  <div className="text-caption1 text-muted-foreground">
-                    {isWakeWordEnabled ? (isListening ? 'Listening...' : 'Active') : 'Disabled'}
-                  </div>
-                </div>
-              </div>
-              <Switch
-                checked={isWakeWordEnabled}
-                onCheckedChange={() => { haptics.medium(); toggleWakeWord(); }}
-                disabled={!isSupported}
-              />
-            </div>
-          </GroupedList>
-
-          {!isSupported && (
-            <div className="px-4 py-3 mb-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/20">
-              <p className="text-footnote text-yellow-600 dark:text-yellow-400">
-                Voice activation requires Chrome, Edge, or Safari
-              </p>
-            </div>
-          )}
-
-          {wakeWordError && (
-            <div className="px-4 py-3 mb-4 bg-destructive/10 rounded-2xl border border-destructive/20">
-              <p className="text-footnote text-destructive">{wakeWordError}</p>
-            </div>
-          )}
-
-          {/* AI Behavior */}
-          <GroupedListHeader>AI Behavior</GroupedListHeader>
-          <GroupedList className="mb-6">
-            <div className="flex items-center justify-between px-4 py-4">
-              <div>
-                <div className="text-subheadline font-medium">Auto-execute actions</div>
-                <div className="text-caption1 text-muted-foreground">
-                  {aiAutoExecute ? 'Mally acts immediately' : 'Confirm before Mally acts'}
-                </div>
-              </div>
-              <Switch
-                checked={aiAutoExecute}
-                onCheckedChange={(v) => { haptics.medium(); setAiAutoExecute(v); }}
-              />
-            </div>
-          </GroupedList>
-
-          {/* Mally Voice */}
-          <GroupedListHeader>Mally's Voice</GroupedListHeader>
-          <GroupedList className="mb-6">
-            {(['female', 'male'] as const).map((gender, gi) => (
-              <div key={gender}>
-                {gi > 0 && <div className="h-px bg-separator/30 mx-4" />}
-                <div className="px-4 pt-3 pb-1 text-caption1 font-medium text-muted-foreground uppercase tracking-wide">
-                  {gender === 'female' ? 'Female' : 'Male'}
-                </div>
-                {MALLY_VOICE_OPTIONS.filter(v => v.gender === gender).map((voice, i, arr) => (
-                  <button
-                    key={voice.id}
-                    className={cn(
-                      "w-full flex items-center justify-between px-4 py-3 transition-colors active:bg-muted/50",
-                      i < arr.length - 1 && "border-b border-separator/30"
-                    )}
-                    onClick={() => {
-                      haptics.light();
-                      setMallyVoice(voice.id);
-                      // Re-warm with new voice so next "Hey Mally" uses it immediately
-                      mallyVapi.forceCleanup();
-                      setTimeout(() => mallyVapi.preWarm(voice.id), 300);
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-subheadline">{voice.label}</span>
-                      {voice.accent && (
-                        <span className="text-caption1 text-muted-foreground">· {voice.accent}</span>
-                      )}
-                    </div>
-                    {mallyVoice === voice.id && (
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </GroupedList>
-
-          {/* How it works */}
-          <GroupedListHeader>How it works</GroupedListHeader>
-          <GroupedList className="mb-4">
-            {[
-              { step: '1', text: 'Enable the toggle above' },
-              { step: '2', text: 'Allow microphone access' },
-              { step: '3', text: 'Say "Hey Mally" clearly' },
-              { step: '4', text: 'Speak your request' },
-            ].map((item, i) => (
-              <div key={item.step} className={cn(
-                "flex items-center gap-3 px-4 py-3",
-                i < 3 && "border-b border-separator/30"
-              )}>
-                <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-caption1 font-semibold text-primary">
-                  {item.step}
-                </div>
-                <span className="text-subheadline">{item.text}</span>
-              </div>
-            ))}
-          </GroupedList>
         </div>
       </PageWrapper>
     );

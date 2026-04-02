@@ -23,8 +23,7 @@ type SoundName =
   | "pageSwitch"    // sidebar page navigation — paper-turn swoosh
   | "lightClick"    // very subtle click for minor UI buttons
   | "typingKey"     // mechanical key press during typing
-  | "micOn"         // Mally mic activated — ready ping
-  | "heyMally";     // Hey Mally wake word — quick ethereal zing
+  | "micOn";        // Mally mic activated — ready ping
 
 const STORAGE_KEY = "mally-sounds-enabled";
 const RATE_LIMITS: Record<SoundName, number> = {
@@ -48,7 +47,6 @@ const RATE_LIMITS: Record<SoundName, number> = {
   lightClick:    60,
   typingKey:     60,
   micOn:         400,
-  heyMally:      600,
 };
 
 class SoundEngine {
@@ -122,7 +120,6 @@ class SoundEngine {
       case "lightClick":  this._lightClick(ctx, t); break;
       case "typingKey":   this._typingKey(ctx, t); break;
       case "micOn":       this._micOn(ctx, t); break;
-      case "heyMally":    this._heyMally(ctx, t); break;
     }
   }
 
@@ -721,41 +718,6 @@ class SoundEngine {
     nsrc.start(t);
   }
 
-  /** Hey Mally wake word — quick ethereal shimmer zing, 200ms */
-  private _heyMally(ctx: AudioContext, t: number) {
-    const master = ctx.createGain();
-    master.gain.value = 0.55;
-    master.connect(ctx.destination);
-
-    // Quick upward sparkle — C6 → G6
-    [[1046.5, 0], [1318.5, 0.05], [1568, 0.1]].forEach(([freq, delay]) => {
-      const onset = t + delay;
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, onset);
-      g.gain.linearRampToValueAtTime(0.08, onset + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, onset + 0.15);
-      osc.connect(g);
-      g.connect(master);
-      osc.start(onset);
-      osc.stop(onset + 0.18);
-
-      // Shimmer
-      const osc2 = ctx.createOscillator();
-      osc2.type = "sine";
-      osc2.frequency.value = freq * 2.1;
-      const g2 = ctx.createGain();
-      g2.gain.setValueAtTime(0, onset);
-      g2.gain.linearRampToValueAtTime(0.025, onset + 0.008);
-      g2.gain.exponentialRampToValueAtTime(0.001, onset + 0.08);
-      osc2.connect(g2);
-      g2.connect(master);
-      osc2.start(onset);
-      osc2.stop(onset + 0.1);
-    });
-  }
 }
 
 export const sounds = new SoundEngine();

@@ -10,14 +10,8 @@ export {
   createPortalSession,
 } from './stripe-webhooks';
 
-// Export TTS (Text-to-Speech) handler
-export { synthesizeSpeech } from './tts';
-
 // Export scheduling streaming handler
 export { processSchedulingStream } from './scheduling';
-
-// Export VAPI custom LLM endpoint (Gemini wrapped in OpenAI-compatible SSE)
-export { vapiLlm } from './vapi-llm';
 
 // Export WhatsApp Bot handlers
 export { whatsappWebhook, generateWhatsAppLinkCode } from './whatsapp-webhook';
@@ -41,12 +35,6 @@ export {
 
 // Export booking confirmation handler
 export { onBookingCreated } from './booking-notifications';
-
-// Export Deepgram temporary token endpoint (real key stays server-side)
-export { getDeepgramToken } from './deepgram-token';
-
-// Export Picovoice access key endpoint (real key stays server-side)
-export { getPicovoiceKey } from './picovoice-key';
 
 // Initialize Firebase Admin
 admin.initializeApp();

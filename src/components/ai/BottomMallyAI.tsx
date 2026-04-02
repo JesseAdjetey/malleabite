@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Send,
-  Mic,
   X,
   ChevronDown,
   ChevronUp,
@@ -18,8 +17,6 @@ import {
   Loader2,
   Image as ImageIcon,
   Minimize2,
-  Volume2,
-  VolumeX,
   Zap,
   Star,
   Code2,
@@ -44,13 +41,9 @@ import { useProactiveSuggestions, ProactiveSuggestion } from "@/hooks/use-proact
 import { logger } from "@/lib/logger";
 import { useThemeStore } from "@/lib/stores/theme-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
-import { useHeyMallySafe } from "@/contexts/HeyMallyContext";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
-import { mallyTTS, unlockAudioContext } from "@/lib/ai/tts-service";
-import { speechService } from "@/lib/ai/speech-recognition-service";
-import { mallyVapi } from "@/lib/ai/vapi-service";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
 import { MentionPopover } from "./MentionPopover";
@@ -60,7 +53,6 @@ import { useEventStore } from "@/lib/store";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
-import { MallyVoiceOverlay } from "./MallyVoiceOverlay";
 import { RichMessageRenderer } from "./RichMessageRenderer";
 import { ActionProgress } from "./ActionProgress";
 import type { RichMessage, SuggestionChip, PendingAction, ActionCardData } from "./rich-message-types";
@@ -148,43 +140,14 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const wasVoiceActivatedRef = useRef(false);
-  const [voiceSessionActive, setVoiceSessionActive] = useState(false);
-  const voiceSessionActiveRef = useRef(false); // ref mirror for use in callbacks
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // VAD — auto-submit interim transcript after silence instead of waiting for isFinal
-  const vadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isMuted, setIsMuted] = useState(() => {
-    const saved = localStorage.getItem('mally-voice-muted');
-    return saved !== null ? saved === 'true' : false; // Voice ON by default
-  });
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  // Siri-like full-screen voice overlay state
-  const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false);
-  const [isVapiConnecting, setIsVapiConnecting] = useState(false);
-  const isVapiConnectingRef = useRef(false);
-  const voiceSessionStartRef = useRef<number | null>(null);
-  // Keep ref in sync so closures (setTimeout, callbacks) can read fresh value
-  useEffect(() => { isVapiConnectingRef.current = isVapiConnecting; }, [isVapiConnecting]);
-  const [overlayTranscript, setOverlayTranscript] = useState('');
-  const [overlayResponse, setOverlayResponse] = useState('');
-  const [overlayProcessing, setOverlayProcessing] = useState(false);
-  // True while Vapi WebRTC session is being established (before call-start fires)
-  // Track which message is being read aloud (null = none)
-  const [readingMessageId, setReadingMessageId] = useState<string | null>(null);
 
   // Refs that mirror state — used inside callbacks/timers to avoid stale closures
-  const isRecordingRef = useRef(false);
   const isLoadingRef = useRef(false);
-  const overlayProcessingRef = useRef(false);
-  useEffect(() => { voiceSessionActiveRef.current = voiceSessionActive; }, [voiceSessionActive]);
-  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
-  useEffect(() => { overlayProcessingRef.current = overlayProcessing; }, [overlayProcessing]);
 
   // Play whoosh when AI panel text area expands (text box focus)
   useEffect(() => {
@@ -198,41 +161,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
   }, []);
-
-
-  // Wire TTS speaking state to component — SINGLE source of truth for re-listening.
-  // Handles both overlay and non-overlay voice paths using refs (not closures on React state).
-  useEffect(() => {
-    mallyTTS.onSpeakingChange((speaking) => {
-      setIsSpeaking(speaking);
-
-      // Only act on TTS finishing (speaking → not speaking)
-      if (speaking || !wasVoiceActivatedRef.current) return;
-
-      // Overlay path: Vapi manages its own turn-taking — nothing to do here.
-      if (voiceOverlayOpenRef.current) return;
-
-      // ── NON-OVERLAY PATH: inline voice session ──
-      if (voiceSessionActiveRef.current) {
-        setTimeout(async () => {
-          if (voiceSessionActiveRef.current && !isRecordingRef.current && !isLoadingRef.current) {
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-            await speechService.ensureStopped(100);
-            startVoiceListeningRef.current?.();
-          }
-        }, 200);
-      } else {
-        // Legacy behavior: auto-dismiss after single voice command
-        setTimeout(() => {
-          if (!isRecordingRef.current && !isLoadingRef.current) {
-            wasVoiceActivatedRef.current = false;
-            setIsExpanded(false);
-          }
-        }, 3000);
-      }
-    });
-    return () => mallyTTS.onSpeakingChange(() => { });
-  }, []); // No deps — all checks use refs, so this is stable
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
   const [uploadedImage, setUploadedImage] = useState<{
     dataUrl: string;
@@ -250,7 +178,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   // Settings
   const {
     aiAutoExecute,
-    mallyVoice,
     aiEnabledCalendarIds,
     setAiEnabledCalendarIds,
     mallyAutoMode,
@@ -259,9 +186,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
 
   const { user } = useAuth();
-  const { limits, incrementAICount, incrementVoiceMinutes, triggerUpgradePrompt } = useUsageLimits();
+  const { limits, incrementAICount, triggerUpgradePrompt } = useUsageLimits();
   const { subscription } = useSubscription();
-  const { pauseWakeWord, resumeWakeWord } = useHeyMallySafe();
   const {
     executeAction,
     buildContext,
@@ -302,13 +228,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos, memory: userMemory });
   const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
 
-  // ── Pre-warm Firebase TTS + AI functions on login to eliminate cold-start latency ──
+  // ── Pre-warm AI functions on login to eliminate cold-start latency ──
   useEffect(() => {
     if (!user?.uid) return;
-    // Warm TTS cache with common short phrases (plays from cache in <300ms after warming)
-    mallyTTS.warmCommonPhrases();
-    // Ping TTS Cloud function to keep it warm (avoids 2-3s cold start)
-    mallyTTS.pingTTSFunction();
     // Ping AI streaming function — fire-and-forget
     const t = setTimeout(async () => {
       try {
@@ -381,105 +303,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     return () => clearTimeout(timer);
   }, [user?.uid, lists, activeListId]);
 
-  // Text-to-speech using Google Cloud TTS with Web Speech fallback
-  const speak = useCallback(async (text: string) => {
-    if (isMuted) return;
-    try {
-      await mallyTTS.speak({ text });
-    } catch {
-      mallyTTS.speakFallback(text);
-    }
-  }, [isMuted]);
-
-  // ─── Voice Session Helpers ──────────────────────────────────────────────────
-
-  // End the voice conversation session
-  const endVoiceSession = useCallback(() => {
-    if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
-    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-    if (isRecording) {
-      speechService.stopListening();
-      setIsRecording(false);
-    }
-    setVoiceSessionActive(false);
-    wasVoiceActivatedRef.current = false;
-    setIsExpanded(false);
-    setInputText('');
-    mallyTTS.onComplete(null); // Clear pending TTS completion callback
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    resumeWakeWord?.();
-    mallyTTS.stop();
-    toast.info("Voice session ended", { duration: 2000 });
-  }, [isRecording, resumeWakeWord]);
-
-  // Start listening for the next voice command in the session
-  const startVoiceListening = useCallback(async () => {
-    if (!voiceSessionActiveRef.current) return;
-
-    const available = await speechService.isAvailable();
-    if (!available) return;
-
-    // Ensure clean mic release — cancel speechSynthesis that might conflict
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    await speechService.ensureStopped(150);
-
-    setIsRecording(true);
-    setInputText('');
-    pauseWakeWord?.();
-    haptics.light();
-
-    // Silence timer: if no final result within 12s, prompt user
-    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    silenceTimerRef.current = setTimeout(() => {
-      if (!voiceSessionActiveRef.current) return;
-      setMessages(prev => [...prev, {
-        id: crypto.randomUUID(),
-        text: "Still listening... say something or I'll close shortly.",
-        sender: 'ai',
-        timestamp: new Date(),
-      }]);
-      // Extended silence: close after 10 more seconds
-      inactivityTimerRef.current = setTimeout(() => {
-        if (voiceSessionActiveRef.current) {
-          endVoiceSession();
-        }
-      }, 10000);
-    }, 12000);
-
-    await speechService.startListening(
-      (result) => {
-        setInputText(result.transcript);
-        if (result.isFinal) {
-          // Clear silence timers since user spoke
-          if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-          if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
-          setIsRecording(false);
-
-          // Check if user wants to end the session
-          if (isDismissalPhrase(result.transcript)) {
-            endVoiceSession();
-            return;
-          }
-
-          setTimeout(() => handleSendMessage(result.transcript), 100);
-        }
-      },
-      () => {
-        setIsRecording(false);
-        // On error during voice session, try to re-listen after a brief pause
-        if (voiceSessionActiveRef.current) {
-          setTimeout(() => startVoiceListening(), 1000);
-        } else {
-          resumeWakeWord?.();
-        }
-      }
-    );
-  }, [pauseWakeWord, resumeWakeWord, endVoiceSession]);
-
-  // Stable ref for startVoiceListening so TTS callback can access it
-  const startVoiceListeningRef = useRef(startVoiceListening);
-  useEffect(() => { startVoiceListeningRef.current = startVoiceListening; }, [startVoiceListening]);
-
   // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -500,7 +323,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       if (e.key !== 'Escape') return;
       if (isExpanded) {
         e.stopPropagation();
-        if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); }
+        setIsExpanded(false);
       } else if (!isMinimized) {
         e.stopPropagation();
         setIsMinimized(true);
@@ -512,363 +335,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
 
   // Auto-retract when navigating to a different page
   useEffect(() => {
-    // End voice session if active
-    if (voiceSessionActiveRef.current) {
-      if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; }
-      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
-      setVoiceSessionActive(false);
-      wasVoiceActivatedRef.current = false;
-    }
     setIsExpanded(false);
     setIsMinimized(true);
-    mallyTTS.onComplete(null);
-    mallyTTS.stop();
-    if (isRecording) {
-      speechService.stopListening();
-      setIsRecording(false);
-      resumeWakeWord?.();
-    }
   }, [location.pathname]);
 
-  // Close the Siri-like voice overlay and end voice session
-  const closeVoiceOverlay = useCallback(() => {
-    setVoiceOverlayOpen(false);
-    setOverlayTranscript('');
-    setOverlayResponse('');
-    setOverlayProcessing(false);
-    setIsVapiConnecting(false);
-    setIsSpeaking(false);
-    mallyVapi.stop();
-    if (isRecording) {
-      speechService.stopListening();
-      setIsRecording(false);
-    }
-    overlayWakePausedRef.current = false;
-    setVoiceSessionActive(false);
-    wasVoiceActivatedRef.current = false;
-    // Clear any pending TTS completion callback to prevent stale restarts
-    mallyTTS.onComplete(null);
-    resumeWakeWord?.();
-    mallyTTS.stop();
-  }, [isRecording, resumeWakeWord]);
-
-  // Handle sending a voice message from the overlay — uses streaming Gemini for Siri-like speed.
-  // Pipeline:
-  //   1. Reset TTS stream queue
-  //   2. Fire streaming request to Firebase (Gemini streaming endpoint)
-  //   3. Each 'speech' chunk → enqueueChunk() to TTS (starts playing on first sentence boundary)
-  //   4. Also update overlayResponse progressively (text appears as speech streams)
-  //   5. 'done' event → execute actions, add to chat history
-  //   Falls back to the classic non-streaming path if streaming endpoint unavailable.
-  const handleOverlayVoiceMessage = useCallback(async (transcript: string) => {
-    // Cancel any pending VAD timer
-    if (vadTimerRef.current) { clearTimeout(vadTimerRef.current); vadTimerRef.current = null; }
-
-    setOverlayProcessing(true);
-    setOverlayTranscript(transcript);
-    setIsRecording(false);
-
-    if (isDismissalPhrase(transcript)) {
-      closeVoiceOverlay();
-      return;
-    }
-
-    const context = buildContext();
-    const messageHistory = messages
-      .filter(m => !m.isLoading && m.text !== 'Thinking...')
-      .slice(-10)
-      .map(m => ({ role: (m.sender === 'user' ? 'user' : 'model') as 'user' | 'model', parts: m.text || '' }));
-
-    let usedStreamingPath = false;
-
-    try {
-      // ── STREAMING PATH ─────────────────────────────────────────────────────
-      usedStreamingPath = true;
-      mallyTTS.resetStreamQueue();
-      let speechText = '';
-      let actionsToExecute: any[] = [];
-
-      for await (const event of FirebaseFunctions.processSchedulingStreamEvents({
-        userMessage: transcript,
-        userId: user?.uid || '',
-        context: JSON.stringify(context),
-        history: messageHistory,
-      })) {
-        if (event.type === 'speech' && event.text) {
-          speechText += event.text;
-          setOverlayResponse(speechText); // progressive display
-          if (!isMuted) mallyTTS.enqueueChunk(event.text, false); // start TTS immediately
-        } else if (event.type === 'speech_done') {
-          if (!isMuted) mallyTTS.enqueueChunk('', true); // flush remaining
-          setOverlayProcessing(false);
-        } else if (event.type === 'done') {
-          const finalText = event.speechText || speechText;
-          setOverlayResponse(finalText);
-          actionsToExecute = event.actions || [];
-          // If speech_done wasn't emitted (unexpected), flush now
-          if (!isMuted && mallyTTS.isSpeaking === false) {
-            mallyTTS.enqueueChunk('', true);
-          }
-          // Execute calendar/todo actions
-          for (const action of actionsToExecute) {
-            const ok = await executeAction(action);
-            if (ok) haptics.success();
-          }
-          await incrementAICount();
-          setMessages(prev => [
-            ...prev,
-            { id: crypto.randomUUID(), text: transcript, sender: 'user' as const, timestamp: new Date() },
-            { id: crypto.randomUUID(), text: finalText, sender: 'ai' as const, timestamp: new Date() },
-          ]);
-          setOverlayProcessing(false);
-        } else if (event.type === 'error') {
-          throw new Error(event.message || 'Stream error');
-        }
-      }
-    } catch (streamError: any) {
-      // ── FALLBACK: classic non-streaming path ──────────────────────────────
-      if (usedStreamingPath) {
-        console.warn('[Mally] Streaming path failed, falling back to classic:', streamError?.message);
-      }
-      mallyTTS.stop();
-      mallyTTS.resetStreamQueue();
-      try {
-        const response = await FirebaseFunctions.processScheduling({
-          userMessage: transcript,
-          userId: user?.uid || '',
-          context: JSON.stringify(context),
-          history: messageHistory,
-        });
-        await incrementAICount();
-        const aiResponse = response.message || "I couldn't process that.";
-        if (response.action) { const ok = await executeAction(response.action); if (ok) haptics.success(); }
-        if ((response as any).actions) { for (const a of (response as any).actions) { const ok = await executeAction(a); if (ok) haptics.success(); } }
-        setOverlayResponse(aiResponse);
-        setOverlayProcessing(false);
-        // Pipelined TTS — sentences play back-to-back with parallel prefetch
-        if (!isMuted) {
-          mallyTTS.speakPipelined(
-            { text: aiResponse },
-            (idx, _total, sentence) => {
-              if (idx > 0) setOverlayResponse(prev => prev); // keep full text visible
-            },
-          );
-        }
-        setMessages(prev => [
-          ...prev,
-          { id: crypto.randomUUID(), text: transcript, sender: 'user' as const, timestamp: new Date() },
-          { id: crypto.randomUUID(), text: aiResponse, sender: 'ai' as const, timestamp: new Date() },
-        ]);
-      } catch (fallbackError) {
-        logger.error('VoiceOverlay', 'Both streaming and classic path failed', fallbackError as Error);
-        const errMsg = "Sorry, I encountered an error. Please try again.";
-        setOverlayResponse(errMsg);
-        if (!isMuted) mallyTTS.speakFallback(errMsg);
-      } finally {
-        setOverlayProcessing(false); // always clear processing state
-      }
-    }
-
-  }, [user?.uid, messages, isMuted, buildContext, incrementAICount, executeAction, closeVoiceOverlay]);
-
-  // Start listening in overlay mode
-  const voiceOverlayOpenRef = useRef(false);
-  useEffect(() => { voiceOverlayOpenRef.current = voiceOverlayOpen; }, [voiceOverlayOpen]);
-
-  // Track whether overlay wake-word pause was already applied for this session
-  const overlayWakePausedRef = useRef(false);
-  // Interrupt Mally mid-speech — Vapi handles barge-in natively
-  const handleOverlayInterrupt = useCallback(() => {
-    // Vapi handles barge-in natively — user just speaks
-  }, []);
-
-  // Start a VAPI voice session — full-duplex with native barge-in and pre-warm
-  const startVoiceAgentSession = useCallback(async () => {
-    const context = buildContext();
-    const now = new Date();
-
-    const eventsSummary = (context.events || []).slice(0, 20).map((e: any) =>
-      `• [ID:${e.id}] ${e.title} (${new Date(e.start).toLocaleString()} – ${new Date(e.end).toLocaleString()})`
-    ).join('\n') || 'No events scheduled.';
-
-    const todosSummary = (context.todos || []).slice(0, 20).map((t: any) =>
-      `• [ID:${t.id}] ${t.completed ? '✓' : '○'} ${t.text}`
-    ).join('\n') || 'No tasks.';
-
-    const alarmsSummary = (context.alarms || []).slice(0, 10).map((a: any) =>
-      `• [ID:${a.id}] ${a.title} at ${a.time}`
-    ).join('\n') || 'No alarms.';
-
-    const systemPrompt = `You are Mally, a warm, witty, and intelligent personal productivity assistant. You speak conversationally — short, clear sentences. Never use markdown since you are speaking out loud.
-
-Current Time: ${now.toLocaleString()}
-Timezone: ${context.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone}
-
-CALENDAR EVENTS (use ID for update/delete):
-${eventsSummary}
-
-TODOS (use ID for complete/delete):
-${todosSummary}
-
-ALARMS (use ID for delete):
-${alarmsSummary}
-
-RULES:
-- Be conversational, warm, and concise (1-3 sentences per response)
-- Always use the exact ID when updating or deleting — never guess an ID
-- Match events/todos by title to find their ID when user refers to them by name
-- Default event duration is 1 hour unless specified
-- Use ISO8601 datetime format for tool parameters
-- Be proactive: suggest time slots, flag conflicts, offer alternatives`;
-
-    mallyVapi.setCallbacks({
-      onUserTranscript: (text, isFinal) => {
-        if (!isFinal) setOverlayTranscript(text);
-      },
-      onAssistantTranscript: (text) => {
-        setOverlayProcessing(false);
-        setOverlayResponse(text);
-      },
-      onUserSpeechStart: () => {
-        setIsRecording(true);
-        setOverlayTranscript('');
-        setOverlayProcessing(false);
-      },
-      onUserSpeechEnd: () => {
-        setIsRecording(false);
-        setOverlayProcessing(true);
-      },
-      onCallStart: () => {
-        console.log('[Mally] VAPI session connected');
-        voiceSessionStartRef.current = Date.now();
-        setIsVapiConnecting(false);
-        setOverlayProcessing(false);
-      },
-      onCallEnd: () => {
-        console.log('[Mally] VAPI session ended');
-        const endedDuringConnect = isVapiConnectingRef.current;
-        setIsVapiConnecting(false);
-        setOverlayProcessing(false);
-        setIsRecording(false);
-        if (voiceSessionStartRef.current) {
-          const minutes = Math.ceil((Date.now() - voiceSessionStartRef.current) / 60_000);
-          incrementVoiceMinutes(minutes);
-          voiceSessionStartRef.current = null;
-        }
-        if (endedDuringConnect) {
-          setOverlayResponse('Connection ended. Tap orb to try again.');
-          toast.error('Voice disconnected before connecting. Tap orb to retry.');
-          return;
-        }
-        closeVoiceOverlay();
-      },
-      onToolCall: async (name, args) => {
-        if (name === 'get_weather') {
-          const result = await getWeather(args.location);
-          return result ? formatWeather(result) : `Couldn't get weather for "${args.location}".`;
-        }
-        if (name === 'search_web') {
-          const results = await searchWeb(args.query);
-          return results.length ? formatSearch(results) : `No results for "${args.query}".`;
-        }
-        if (name === 'reschedule_event') {
-          const ok = await executeAction({ type: 'update_event', data: { eventId: args.eventId, start: args.newStart, end: args.newEnd } });
-          if (ok) haptics.success();
-          return ok ? 'Event rescheduled.' : 'Failed to reschedule.';
-        }
-        const ok = await executeAction({ type: name, data: args });
-        if (ok) haptics.success();
-        return ok ? 'Done.' : 'Failed.';
-      },
-      onError: (err) => {
-        console.error('[Mally] VAPI error:', err);
-        setIsVapiConnecting(false);
-        setOverlayProcessing(false);
-        setIsRecording(false);
-        setOverlayResponse('Connection failed. Tap orb to try again.');
-        toast.error('Voice connection failed. Please try again.');
-      },
-    });
-
-    mallyVapi.onSpeakingChange((speaking) => setIsSpeaking(speaking));
-
-    setIsVapiConnecting(true);
-
-    // Safety timeout: if Vapi hasn't fired call-start within 10s, close overlay
-    const connectTimeoutId = setTimeout(() => {
-      if (voiceOverlayOpenRef.current && isVapiConnectingRef.current) {
-        console.warn('[Mally] VAPI connection timeout');
-        mallyVapi.stop();
-        setIsVapiConnecting(false);
-        setOverlayProcessing(false);
-        setIsRecording(false);
-        setOverlayResponse('Still trying to connect. Tap orb to retry.');
-        toast.error('Could not connect to voice. Please try again.');
-      }
-    }, 10_000);
-
-    try {
-      await mallyVapi.startSession({
-        systemPrompt,
-        firstMessage: 'Hey! What do you need?',
-        voiceId: mallyVoice,
-      });
-    } catch (err) {
-      console.error('[Mally] VAPI session failed:', err);
-      setIsVapiConnecting(false);
-      setOverlayProcessing(false);
-      setIsRecording(false);
-      setOverlayResponse('Voice session failed. Tap orb to try again.');
-      toast.error('Voice session failed. Please try again.');
-    } finally {
-      clearTimeout(connectTimeoutId);
-    }
-  }, [buildContext, executeAction, closeVoiceOverlay]);
-
-  // Listen for Hey Mally activation — Siri-like full-screen voice overlay
-  useEffect(() => {
-    const handleHeyMallyActivation = async () => {
-      if (!mallyVapi.isAvailable) {
-        toast.error('Voice is not configured. Please contact support.');
-        return;
-      }
-
-      if (isVapiConnectingRef.current || mallyVapi.isActive) {
-        return;
-      }
-
-      overlayWakePausedRef.current = false;
-      wasVoiceActivatedRef.current = true;
-      setVoiceSessionActive(true);
-      setVoiceOverlayOpen(true);
-      setOverlayTranscript('');
-      setOverlayResponse('');
-      setOverlayProcessing(false);
-      haptics.medium();
-      sounds.play("heyMally");
-
-      unlockAudioContext();
-      pauseWakeWord?.();
-      overlayWakePausedRef.current = true;
-      await speechService.ensureStopped(100);
-      startVoiceAgentSession();
-    };
-
-    window.addEventListener('heyMallyActivated', handleHeyMallyActivation);
-    return () => window.removeEventListener('heyMallyActivated', handleHeyMallyActivation);
-  }, [pauseWakeWord, startVoiceAgentSession]);
-
-  // Auto-dismiss overlay after inactivity (like Siri)
-  useEffect(() => {
-    if (!voiceOverlayOpen) return;
-    // If nothing is happening for 30s, close overlay (longer timeout = less frustrating)
-    const timeout = setTimeout(() => {
-      if (!isRecording && !isSpeaking && !overlayProcessing) {
-        closeVoiceOverlay();
-      }
-    }, 30000);
-    return () => clearTimeout(timeout);
-  }, [voiceOverlayOpen, isRecording, isSpeaking, overlayProcessing, overlayTranscript, overlayResponse, closeVoiceOverlay]);
 
   // Handle image upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1718,67 +1188,9 @@ RULES:
     inputRef.current?.focus();
   };
 
-  // Toggle voice recording (mic button in chat bar)
-  const toggleRecording = async () => {
-    if (isRecording) {
-      setIsRecording(false);
-      resumeWakeWord?.();
-      // On native, stopListening returns the final transcript
-      const transcript = await speechService.stopListening();
-      if (transcript) {
-        setInputText(transcript);
-        setTimeout(() => handleSendMessage(transcript), 100);
-      }
-    } else {
-      const available = await speechService.isAvailable();
-      if (!available) {
-        toast.error('Speech recognition not supported on this device');
-        return;
-      }
-
-      // Pause wake word and wait for it to fully release the microphone
-      pauseWakeWord?.();
-      await speechService.ensureStopped(300);
-
-      setIsRecording(true);
-      setIsExpanded(true);
-      haptics.medium();
-      sounds.play("micOn");
-
-      await speechService.startListening(
-        (result) => {
-          setInputText(result.transcript);
-          if (result.isFinal) {
-            setIsRecording(false);
-            resumeWakeWord?.();
-            setTimeout(() => handleSendMessage(result.transcript), 100);
-          }
-        },
-        (error) => {
-          console.error('[Mally] Speech recognition error:', error);
-          setIsRecording(false);
-          resumeWakeWord?.();
-          toast.error('Voice recognition failed. Please try again.');
-        }
-      );
-    }
-  };
 
   return (
     <>
-      {/* Siri-like full-screen voice overlay for Hey Mally activation */}
-      <MallyVoiceOverlay
-        isOpen={voiceOverlayOpen}
-        isListening={isRecording && voiceOverlayOpen}
-        isSpeaking={isSpeaking && voiceOverlayOpen}
-        isProcessing={overlayProcessing}
-        isConnecting={isVapiConnecting}
-        transcript={overlayTranscript}
-        responseText={overlayResponse}
-        onClose={closeVoiceOverlay}
-        onInterrupt={handleOverlayInterrupt}
-      />
-
       {/* Step 1: dark+blur overlay when expanded — click collapses (removes blur) but keeps panel */}
       <AnimatePresence>
         {isExpanded && (
@@ -1786,7 +1198,7 @@ RULES:
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => { if (voiceSessionActiveRef.current) { endVoiceSession(); } else { setIsExpanded(false); } }}
+            onClick={() => { setIsExpanded(false); }}
             className="fixed inset-0 bg-white/50 dark:bg-black/40 backdrop-blur-sm z-40"
           />
         )}
@@ -1959,11 +1371,6 @@ RULES:
                               )}>
                                 <Bot className="h-4 w-4 text-white" />
                               </div>
-                              {isSpeaking && index === messages.length - 1 && (
-                                <div className="mally-speaking">
-                                  <div className="bar" /><div className="bar" /><div className="bar" /><div className="bar" /><div className="bar" />
-                                </div>
-                              )}
                             </div>
                           )}
                           <div
@@ -2049,38 +1456,6 @@ RULES:
                                   ))}
                                 </div>
                               </div>
-                            )}
-                            {/* Read aloud button for AI messages */}
-                            {message.sender === "ai" && !message.isLoading && message.text && (
-                              <button
-                                onClick={() => {
-                                  if (readingMessageId === message.id) {
-                                    // Stop reading
-                                    mallyTTS.stop();
-                                    setReadingMessageId(null);
-                                  } else {
-                                    // Start reading this message
-                                    setReadingMessageId(message.id);
-                                    mallyTTS.speak({ text: message.text }).finally(() => {
-                                      setReadingMessageId(null);
-                                    });
-                                  }
-                                }}
-                                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-purple-500 transition-colors"
-                                title={readingMessageId === message.id ? "Stop reading" : "Read aloud"}
-                              >
-                                {readingMessageId === message.id ? (
-                                  <>
-                                    <VolumeX size={12} />
-                                    <span>Stop</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Volume2 size={12} />
-                                    <span>Read aloud</span>
-                                  </>
-                                )}
-                              </button>
                             )}
                           </div>
                           {message.sender === "user" && (
@@ -2274,39 +1649,8 @@ RULES:
                   />
                 </div>
 
-                {/* Voice button */}
-                <button
-                  onClick={toggleRecording}
-                  disabled={isLoading}
-                  className={cn(
-                    "p-2.5 rounded-full transition-all",
-                    isRecording
-                      ? "bg-red-500 text-white animate-pulse"
-                      : "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Mic className="h-5 w-5" />
-                </button>
 
-                {/* Mute/Unmute button */}
-                <button
-                  onClick={() => {
-                    const newVal = !isMuted;
-                    setIsMuted(newVal);
-                    localStorage.setItem('mally-voice-muted', String(newVal));
-                  }}
-                  className={cn(
-                    "p-2.5 rounded-full transition-all",
-                    isMuted
-                      ? "bg-black/5 dark:bg-white/10 text-red-500 dark:text-red-400 hover:bg-black/10 dark:hover:bg-white/20"
-                      : "bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-muted-foreground hover:text-foreground"
-                  )}
-                  title={isMuted ? "Unmute AI voice" : "Mute AI voice"}
-                >
-                  {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </button>
-
-                {/* Mally settings */}
+{/* Mally settings */}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -2394,28 +1738,6 @@ RULES:
               </motion.div>
             </div>
 
-            {/* Recording indicator */}
-            <AnimatePresence>
-              {isRecording && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4"
-                >
-                  <div className="flex items-center gap-2 px-4 py-2 bg-red-500/90 text-white rounded-full shadow-lg">
-                    <div className="flex space-x-1">
-                      <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
-                      <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                      <div className="w-1 h-5 bg-white rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                      <div className="w-1 h-4 bg-white rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                      <div className="w-1 h-3 bg-white rounded-full animate-pulse" />
-                    </div>
-                    <span className="text-sm font-medium">Listening...</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

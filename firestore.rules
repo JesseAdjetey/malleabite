@@ -63,9 +63,9 @@ service cloud.firestore {
 
     // Users collection - keyed by User ID
     match /users/{userId} {
-      // Own profile: full read. Others: allow list queries for invite email lookup.
-      allow get: if isOwner(userId);
-      allow list: if isAuthenticated();
+      // Own profile: full read. Others: allow get only for invite email lookup (not list-all).
+      allow get: if isAuthenticated(); // any authed user can fetch a specific user doc (for invite lookup)
+      allow list: if isOwner(userId);  // only own user can run collection-level queries
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) 
         && request.resource.data.keys().hasAll(['userId', 'email', 'createdAt']);
@@ -519,7 +519,9 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(['userId'])
+        && request.resource.data.userId is string; // must target a real user field (Cloud Functions write on behalf)
       allow update: if isAuthenticated()
         && resource.data.userId == request.auth.uid;
       allow delete: if isAuthenticated()
@@ -564,7 +566,11 @@ service cloud.firestore {
         resource.data.recipientEmail == request.auth.token.email ||
         resource.data.recipientUserId == request.auth.uid
       );
-      allow list: if isAuthenticated();
+      allow list: if isAuthenticated() && (
+        request.auth.uid == resource.data.senderId ||
+        request.auth.token.email == resource.data.recipientEmail ||
+        request.auth.uid == resource.data.recipientUserId
+      );
       allow create: if isAuthenticated()
         && request.resource.data.senderId == request.auth.uid;
       allow update: if isAuthenticated() && (

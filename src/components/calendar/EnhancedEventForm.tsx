@@ -122,7 +122,10 @@ const TimeCombobox: React.FC<TimeComboboxProps> = ({ value, onChange, placeholde
   // Keep input in sync with external value changes (e.g. all-day toggle)
   useEffect(() => { setInputVal(value); }, [value]);
 
-  const filtered = inputVal
+  // Only filter while the user is typing an incomplete value; if it's already
+  // a valid time show the full list (scrolled to current) so ±15 min neighbours are visible.
+  const isCompleteTime = TIME_OPTIONS.includes(inputVal);
+  const filtered = (inputVal && !isCompleteTime)
     ? TIME_OPTIONS.filter(t => t.startsWith(inputVal) || t.replace(':', '').startsWith(inputVal.replace(':', '')))
     : TIME_OPTIONS;
 

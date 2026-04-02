@@ -214,10 +214,18 @@ const WeekView = () => {
 
     try {
       if (scope === 'single') {
-        // Move only this occurrence - create new event and add exception to parent
-        await addEvent(newEvent);
-        if (parentId && originalDate && addRecurrenceException) {
-          await addRecurrenceException(parentId, originalDate);
+        if (parentId?.startsWith('synced_')) {
+          // Synced Google event: update the original occurrence directly via the bridge
+          const originalEvent = events.find(e => e.id === parentId);
+          if (originalEvent) {
+            await updateEvent({ ...originalEvent, startsAt: newEvent.startsAt, endsAt: newEvent.endsAt, date: newEvent.date });
+          }
+        } else {
+          // Move only this occurrence - create new event and add exception to parent
+          await addEvent(newEvent);
+          if (parentId && originalDate && addRecurrenceException) {
+            await addRecurrenceException(parentId, originalDate);
+          }
         }
         toast.success("This occurrence has been moved");
       } else if (scope === 'all') {
@@ -588,8 +596,9 @@ const WeekView = () => {
       const isRecurringInstance = data.isRecurring || data.recurrenceParentId || (data.id && data.id.includes('_'));
 
       if (isRecurringInstance) {
-        const parentId = data.recurrenceParentId || (data.id.includes('_') ? data.id.split('_')[0] : data.id);
-        const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
+        const isSyncedEvent = data.id?.startsWith('synced_');
+        const parentId = data.recurrenceParentId || (isSyncedEvent ? data.id : (data.id.includes('_') ? data.id.split('_')[0] : data.id));
+        const originalDate = (!isSyncedEvent && data.id.includes('_')) ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
         const newEvent: CalendarEventType = {
           id: nanoid(),
           title: data.title,

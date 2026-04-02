@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSidebarPages, useSharedPageModules } from '@/hooks/use-sidebar-pages';
 import { ModuleType } from '@/lib/store';
@@ -31,38 +31,78 @@ const SideBar = () => {
   const [pageShareSheetOpen, setPageShareSheetOpen] = useState(false);
   const [slideDir, setSlideDir] = useState<1 | -1>(1);
 
+  // Swipe gesture state
+  const pointerDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const dirLockRef = useRef<'h' | 'v' | null>(null);
+
   const isSharedPage = !!activePage?.sharedFromPageId;
-  // Structural lock: all shared pages (viewer + editor) can't rename/delete/reorder modules
   const isStructureReadOnly = isSharedPage;
-  // Content lock: only viewers can't edit module content (todos etc.)
   const isContentReadOnly = activePage?.sharedRole === 'viewer';
 
-  // For shared pages: listen to owner's page modules in real-time
   const { modules: sharedModules } = useSharedPageModules(activePage?.sharedFromPageId);
-
-  // Modules to render — owner's live data for shared pages, own data otherwise
   const modulesToRender = isSharedPage ? sharedModules : (activePage?.modules ?? []);
 
-  // Find current page index for navigation
   const currentPageIndex = pages.findIndex(p => p.id === activePageId);
 
-  const handlePrevPage = () => {
+  const handlePrevPage = useCallback(() => {
     if (currentPageIndex > 0) {
       setSlideDir(-1);
       setActivePageId(pages[currentPageIndex - 1].id);
+      sounds.play('pageSwitch');
     }
-  };
+  }, [currentPageIndex, pages, setActivePageId]);
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     if (currentPageIndex < pages.length - 1) {
       setSlideDir(1);
       setActivePageId(pages[currentPageIndex + 1].id);
+      sounds.play('pageSwitch');
     }
-  };
+  }, [currentPageIndex, pages, setActivePageId]);
+
+  // ── Swipe gesture ─────────────────────────────────────────────────────────
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, [role="button"], [contenteditable="true"], [data-no-swipe]')) return;
+    pointerDownRef.current = true;
+    startXRef.current = e.clientX;
+    startYRef.current = e.clientY;
+    dirLockRef.current = null;
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownRef.current || dirLockRef.current === 'v') return;
+    const dx = e.clientX - startXRef.current;
+    const dy = e.clientY - startYRef.current;
+    if (!dirLockRef.current && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+      dirLockRef.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    }
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    if (!pointerDownRef.current) return;
+    pointerDownRef.current = false;
+
+    if (dirLockRef.current !== 'h') return;
+
+    const dx = e.clientX - startXRef.current;
+    const containerWidth = sidebarContentRef.current?.offsetWidth ?? 350;
+    const threshold = containerWidth * 0.25;
+
+    if (dx > threshold) {
+      handlePrevPage();
+    } else if (dx < -threshold) {
+      handleNextPage();
+    }
+  }, [handlePrevPage, handleNextPage]);
+
+  // ── Module / page handlers ────────────────────────────────────────────────
 
   const handleAddModule = (moduleType: ModuleType) => {
     if (!activePageId) return;
-
     let defaultTitle = '';
     switch (moduleType) {
       case 'todo': defaultTitle = 'To-Do List'; break;
@@ -71,8 +111,7 @@ const SideBar = () => {
       case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
       case 'invites': defaultTitle = 'Event Invites'; break;
     }
-
-    sounds.play("moduleAdd");
+    sounds.play('moduleAdd');
     addModule(activePageId, { type: moduleType, title: defaultTitle });
   };
 
@@ -97,8 +136,7 @@ const SideBar = () => {
   };
 
   const handleCreateNewPage = async () => {
-    const title = 'New Page';
-    const result = await createPage(title);
+    const result = await createPage('New Page');
     if (result.success && result.pageId) {
       setSlideDir(1);
       setActivePageId(result.pageId);
@@ -140,10 +178,14 @@ const SideBar = () => {
         sharedOwnerName={activePage?.sharedOwnerName}
       />
 
-      {/* Page modules with responsive grid */}
+      {/* Page modules */}
       <div
         ref={sidebarContentRef}
         className="flex-1 overflow-hidden relative"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => { pointerDownRef.current = false; }}
       >
         <AnimatePresence mode="popLayout" custom={slideDir} initial={false}>
           <motion.div
@@ -160,10 +202,7 @@ const SideBar = () => {
             transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
             className="absolute inset-0 overflow-y-auto p-4 pt-0"
           >
-            {/* Hide module selector for shared pages — owner controls page structure */}
             {!isSharedPage && <ModuleSelector onSelect={handleAddModule} />}
-
-            {/* Module container */}
             <ModuleGrid
               modules={modulesToRender}
               onRemoveModule={handleRemoveModule}
@@ -187,12 +226,16 @@ const SideBar = () => {
           {pages.map((page, index) => (
             <button
               key={page.id}
-              onClick={() => { sounds.play("pageSwitch"); setSlideDir(index > currentPageIndex ? 1 : -1); setActivePageId(page.id); }}
+              onClick={() => {
+                sounds.play('pageSwitch');
+                setSlideDir(index > currentPageIndex ? 1 : -1);
+                setActivePageId(page.id);
+              }}
               className={cn(
-                "w-2.5 h-2.5 rounded-full transition-all duration-300",
+                'w-2.5 h-2.5 rounded-full transition-all duration-300',
                 index === currentPageIndex
-                  ? "bg-purple-600 w-4 shadow-lg shadow-purple-500/50"
-                  : "bg-gray-400 dark:bg-gray-600 hover:bg-gray-500"
+                  ? 'bg-purple-600 w-4 shadow-lg shadow-purple-500/50'
+                  : 'bg-gray-400 dark:bg-gray-600 hover:bg-gray-500'
               )}
               title={page.title}
             />

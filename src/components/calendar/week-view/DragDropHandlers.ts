@@ -115,8 +115,9 @@ export const handleDrop = (
     
     // Handle recurring event instances - trigger the popup
     if (isRecurringInstance && onRecurringEventDrop) {
-      const parentId = data.recurrenceParentId || (data.id.includes('_') ? data.id.split('_')[0] : data.id);
-      const originalDate = data.id.includes('_') ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
+      const isSyncedEvent = data.id?.startsWith('synced_');
+      const parentId = data.recurrenceParentId || (isSyncedEvent ? data.id : (data.id.includes('_') ? data.id.split('_')[0] : data.id));
+      const originalDate = (!isSyncedEvent && data.id.includes('_')) ? data.id.split('_')[1] : dayjs(data.startsAt).format('YYYY-MM-DD');
       
       // Create the new event that would be created if user confirms
       const newEvent: CalendarEventType = {

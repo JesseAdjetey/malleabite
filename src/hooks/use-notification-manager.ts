@@ -6,17 +6,6 @@ import { toast } from 'sonner';
 import { Timestamp } from 'firebase/firestore';
 import { isNative } from '@/lib/platform';
 import { syncAllNotifications, createNotificationChannels } from '@/lib/native-notification-scheduler';
-import { mallyTTS } from '@/lib/ai/tts-service';
-
-// Speak a notification aloud using Mally's voice (respects user mute preference)
-function speakNotification(text: string) {
-    const muted = localStorage.getItem('mally-voice-muted') === 'true';
-    if (muted) return;
-    // Small delay so the notification sound plays first, then Mally speaks
-    setTimeout(() => {
-        mallyTTS.speak({ text }).catch(() => mallyTTS.speakFallback(text));
-    }, 800);
-}
 
 export const REMINDER_SOUNDS = [
     { id: 'default', name: 'Default', url: '/sounds/default-notification.mp3' },
@@ -102,19 +91,14 @@ export function useNotificationManager() {
             const receivedPromise = LocalNotifications.addListener(
                 'localNotificationReceived',
                 (notification) => {
-                    // Notification received while app is in foreground — play sound + voice + toast
+                    // Notification received while app is in foreground — play sound + toast
                     const extra = notification.extra;
                     playSound(extra?.soundId || 'default');
-                    // Mally announces the notification
-                    const voiceText = extra?.type === 'alarm'
-                        ? `Alarm: ${notification.title?.replace('⏰ ', '') || 'Time\'s up'}`
-                        : `Reminder: ${notification.title?.replace('🔔 ', '') || notification.body || 'You have a reminder'}`;
-                    speakNotification(voiceText);
                     toast.message(notification.title || 'Notification', {
                         description: notification.body,
                         duration: Infinity,
-                        action: { label: 'Dismiss', onClick: () => { stopSound(); mallyTTS.stop(); } },
-                        onDismiss: () => { stopSound(); mallyTTS.stop(); },
+                        action: { label: 'Dismiss', onClick: () => { stopSound(); } },
+                        onDismiss: () => { stopSound(); },
                     });
                 }
             );
@@ -124,7 +108,6 @@ export function useNotificationManager() {
                 (action) => {
                     // User tapped the notification
                     stopSound();
-                    mallyTTS.stop();
 
                     // If it's a Mally Action notification, dispatch an event so
                     // AppRoutes can pick it up and show the ActionRunnerModal
@@ -188,10 +171,10 @@ export function useNotificationManager() {
             duration: Infinity,
             action: {
                 label: 'Turn Off',
-                onClick: () => { stopSound(); mallyTTS.stop(); },
+                onClick: () => { stopSound(); },
             },
-            onDismiss: () => { stopSound(); mallyTTS.stop(); },
-            onAutoClose: () => { stopSound(); mallyTTS.stop(); },
+            onDismiss: () => { stopSound(); },
+            onAutoClose: () => { stopSound(); },
         });
     }, [playSound, stopSound]);
 

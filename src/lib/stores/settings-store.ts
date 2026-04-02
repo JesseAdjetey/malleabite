@@ -59,24 +59,6 @@ export const DEFAULT_RESCHEDULING_PREFS: ReschedulingPreferences = {
   autoSearchDays: 7,
 };
 
-export interface MallyVoiceOption {
-  id: string;       // VAPI built-in voiceId
-  label: string;
-  gender: 'female' | 'male';
-  accent?: string;
-}
-
-export const MALLY_VOICE_OPTIONS: MallyVoiceOption[] = [
-  { id: 'Lily',     label: 'Lily',     gender: 'female' },
-  { id: 'Savannah', label: 'Savannah', gender: 'female' },
-  { id: 'Hana',     label: 'Hana',     gender: 'female' },
-  { id: 'Neha',     label: 'Neha',     gender: 'female' },
-  { id: 'Elliot',   label: 'Elliot',   gender: 'male' },
-  { id: 'Rohan',    label: 'Rohan',    gender: 'male' },
-  { id: 'Spencer',  label: 'Spencer',  gender: 'male' },
-  { id: 'Cole',     label: 'Cole',     gender: 'male' },
-];
-
 interface SettingsState {
   backgroundColor: string;
   setBackgroundColor: (color: string) => void;
@@ -86,9 +68,6 @@ interface SettingsState {
   /** Default todo list ID for AI-created todos (persists user preference) */
   defaultTodoListId: string | null;
   setDefaultTodoListId: (id: string | null) => void;
-  /** Deepgram Aura TTS voice model for Mally voice sessions */
-  mallyVoice: string;
-  setMallyVoice: (voice: string) => void;
   /**
    * Which calendar IDs the AI (Mally) is allowed to read events from.
    * null = all calendars (default).
@@ -116,8 +95,6 @@ export const useSettingsStore = create<SettingsState>()(
       setAiAutoExecute: (value) => set({ aiAutoExecute: value }),
       defaultTodoListId: null,
       setDefaultTodoListId: (id) => set({ defaultTodoListId: id }),
-      mallyVoice: 'Lily',
-      setMallyVoice: (voice) => set({ mallyVoice: voice }),
       aiEnabledCalendarIds: null,
       setAiEnabledCalendarIds: (ids) => set({ aiEnabledCalendarIds: ids }),
       mallyAutoMode: false,

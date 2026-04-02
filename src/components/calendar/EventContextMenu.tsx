@@ -74,7 +74,7 @@ const EventContextMenu: React.FC<EventContextMenuProps> = ({
         {onReschedule && (
           <>
             <ContextMenuItem
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer opacity-40 pointer-events-none"
               onClick={onReschedule}
             >
               {hasConflict ? (

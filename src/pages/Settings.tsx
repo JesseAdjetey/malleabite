@@ -199,11 +199,11 @@ const Settings = () => {
               className="opacity-40 pointer-events-none select-none"
             />
             <GroupedListItem
-              icon={<CalendarClock className="h-4 w-4 text-rose-500" />}
-              iconBg="bg-rose-500/15"
+              icon={<CalendarClock className="h-4 w-4 text-rose-500/40" />}
+              iconBg="bg-rose-500/8"
               label="Scheduling"
-              sublabel="Conflicts, buffers & auto-reschedule"
-              onClick={() => goTo('scheduling')}
+              sublabel="Coming soon"
+              className="opacity-40 pointer-events-none select-none"
             />
           </GroupedList>
 

@@ -22,9 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from '@/lib/utils';
 import { Switch } from "@/components/ui/switch";
 
-import { useConflictDetection } from '@/hooks/use-conflict-detection';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
-import ConflictWarning from './ConflictWarning';
 import { CategorySuggestions } from '@/components/categorization/CategorySuggestions';
 import { EventClassifier, getCategoryColor } from '@/lib/algorithms/event-classifier';
 import { useCalendarGroups } from '@/hooks/use-calendar-groups';
@@ -254,40 +252,15 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
 
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
-  const { events } = useCalendarEvents();
+  useCalendarEvents();
   const { calendars: connectedCalendars } = useCalendarGroups();
   const eventClassifier = React.useMemo(() => new EventClassifier(), []);
 
   // Use either the event or initialEvent prop, whichever is provided
   const eventData = event || initialEvent;
 
-  // Create a preview event for conflict detection
-  const previewEvent: CalendarEventType | undefined = React.useMemo(() => {
-    if (!selectedDate || !startTime || !endTime) return undefined;
 
-    const formattedDate = format(selectedDate, 'yyyy-MM-dd');
-    const [startHour, startMinute] = startTime.split(':').map(Number);
-    const [endHour, endMinute] = endTime.split(':').map(Number);
 
-    const startsAtDate = new Date(selectedDate);
-    startsAtDate.setHours(startHour, startMinute, 0);
-
-    const endsAtDate = new Date(selectedDate);
-    endsAtDate.setHours(endHour, endMinute, 0);
-
-    return {
-      id: eventData?.id || 'preview-event',
-      title: title || 'New Event',
-      description: description,
-      date: formattedDate,
-      startsAt: startsAtDate.toISOString(),
-      endsAt: endsAtDate.toISOString(),
-      color: selectedColor,
-    };
-  }, [selectedDate, startTime, endTime, title, description, selectedColor, eventData]);
-
-  // Detect conflicts with the preview event
-  const conflictDetection = useConflictDetection(events, previewEvent);
 
 
   useEffect(() => {
@@ -768,7 +741,7 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
         </div>
 
         {/* Mally Actions */}
-        <div className="rounded-md border mb-4">
+        <div className="rounded-md border mb-4 opacity-40 pointer-events-none select-none">
           <button
             type="button"
             className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
@@ -792,16 +765,6 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
           )}
         </div>
 
-        {/* Conflict Warning - Show if there are any conflicts */}
-        {conflictDetection.hasConflicts && previewEvent && (
-          <div className="mb-4">
-            <ConflictWarning
-              conflicts={conflictDetection.conflicts}
-              events={events}
-              variant="inline"
-            />
-          </div>
-        )}
 
 
         <div className="flex justify-end pt-4 border-t border-border">

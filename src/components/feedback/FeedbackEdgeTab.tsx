@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -18,6 +18,12 @@ const PHRASES = [
   "what's missing?",
 ];
 
+const PANEL_HEIGHT = 260;
+const TAB_HEIGHT = 34;
+const TAB_WIDTH = 200;
+const PANEL_WIDTH = 580;
+const INITIAL_X = 320;
+
 export function FeedbackEdgeTab() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
@@ -28,43 +34,119 @@ export function FeedbackEdgeTab() {
   const [isTyping, setIsTyping] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const typewriterRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Typewriter effect — pauses when sheet is open
+  // Panel animation: containerY = -PANEL_HEIGHT (closed) → 0 (open)
+  // The container is fixed at top:0, so when y = -PANEL_HEIGHT only the tab peeks out
+  const containerY = useMotionValue(-PANEL_HEIGHT);
+  const tabX = useMotionValue(INITIAL_X);
+
+  const backdropOpacity = useTransform(containerY, [-PANEL_HEIGHT, -PANEL_HEIGHT * 0.2, 0], [0, 0, 0.45]);
+
+  const springOpen = () => {
+    animate(containerY, 0, { type: 'spring', stiffness: 260, damping: 28 });
+    setOpen(true);
+  };
+
+  const springClose = () => {
+    animate(containerY, -PANEL_HEIGHT, { type: 'spring', stiffness: 300, damping: 32 });
+    setOpen(false);
+    setSubmitted(false);
+  };
+
+  // Manual drag state (avoids conflicting with Framer's drag system)
+  const drag = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    startTabX: number;
+    startContainerY: number;
+    mode: 'x' | 'y' | null;
+    moved: boolean;
+  }>({ active: false, startX: 0, startY: 0, startTabX: INITIAL_X, startContainerY: -PANEL_HEIGHT, mode: null, moved: false });
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startTabX: tabX.get(),
+      startContainerY: containerY.get(),
+      mode: null,
+      moved: false,
+    };
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current.active) return;
+    const dx = e.clientX - drag.current.startX;
+    const dy = e.clientY - drag.current.startY;
+
+    if (drag.current.mode === null) {
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        drag.current.moved = true;
+        drag.current.mode = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      }
+      return;
+    }
+
+    if (drag.current.mode === 'x') {
+      const newX = Math.max(0, Math.min(window.innerWidth - PANEL_WIDTH, drag.current.startTabX + dx));
+      tabX.set(newX);
+    } else if (drag.current.mode === 'y') {
+      const newY = Math.max(-PANEL_HEIGHT, Math.min(0, drag.current.startContainerY + dy));
+      containerY.set(newY);
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current.active) return;
+    drag.current.active = false;
+    const dy = e.clientY - drag.current.startY;
+    const { mode, moved } = drag.current;
+
+    if (!moved) {
+      // Pure click
+      open ? springClose() : springOpen();
+      return;
+    }
+
+    if (mode === 'y') {
+      const currentY = containerY.get();
+      if (!open) {
+        (currentY > -PANEL_HEIGHT * 0.55 || dy > 60) ? springOpen() : springClose();
+      } else {
+        (currentY < -PANEL_HEIGHT * 0.45 || dy < -60) ? springClose() : springOpen();
+      }
+    }
+  };
+
+  // Typewriter — pauses when open
   useEffect(() => {
     if (open) return;
-
     const phrase = PHRASES[phraseIndex];
-
     if (isTyping) {
       if (displayText.length < phrase.length) {
-        timeoutRef.current = setTimeout(() => {
-          setDisplayText(phrase.slice(0, displayText.length + 1));
-        }, 75);
+        typewriterRef.current = setTimeout(() => setDisplayText(phrase.slice(0, displayText.length + 1)), 75);
       } else {
-        timeoutRef.current = setTimeout(() => setIsTyping(false), 2800);
+        typewriterRef.current = setTimeout(() => setIsTyping(false), 2800);
       }
     } else {
       if (displayText.length > 0) {
-        timeoutRef.current = setTimeout(() => {
-          setDisplayText(displayText.slice(0, -1));
-        }, 35);
+        typewriterRef.current = setTimeout(() => setDisplayText(displayText.slice(0, -1)), 35);
       } else {
-        setPhraseIndex((prev) => (prev + 1) % PHRASES.length);
+        setPhraseIndex(prev => (prev + 1) % PHRASES.length);
         setIsTyping(true);
       }
     }
-
-    return () => clearTimeout(timeoutRef.current);
+    return () => clearTimeout(typewriterRef.current);
   }, [displayText, isTyping, phraseIndex, open]);
 
   const handleSubmit = async () => {
     if (!message.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const writeTimeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 8000)
-      );
       await Promise.race([
         addDoc(collection(db, 'feedback'), {
           message: message.trim(),
@@ -73,7 +155,7 @@ export function FeedbackEdgeTab() {
           createdAt: serverTimestamp(),
           page: window.location.pathname,
         }),
-        writeTimeout,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
       ]);
       setSubmitted(true);
       setMessage('');
@@ -87,92 +169,84 @@ export function FeedbackEdgeTab() {
     }
   };
 
-  const handleOpen = () => {
-    setOpen(true);
-    setSubmitted(false);
-  };
-
   return (
     <>
-      {/* Bottom-left pill */}
-      <button
-        onClick={handleOpen}
-        aria-label="Open feedback"
-        className="fixed top-2 left-80 z-40 hidden lg:flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
+      {/* Blurred backdrop — fades in as panel opens */}
+      <motion.div
+        className="fixed inset-0 backdrop-blur-sm"
         style={{
-          background: 'hsl(var(--muted))',
-          borderRadius: '999px',
-          border: '1px solid hsl(var(--border))',
-          boxShadow: '0 2px 10px hsl(var(--foreground) / 0.06)',
-          transition: 'box-shadow 0.2s ease, background 0.2s ease, transform 0.15s ease',
+          opacity: backdropOpacity,
+          background: 'hsl(var(--foreground) / 0.2)',
+          pointerEvents: open ? 'auto' : 'none',
+          zIndex: 39,
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 18px hsl(var(--foreground) / 0.12)';
-          (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 10px hsl(var(--foreground) / 0.06)';
-          (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
+        onClick={springClose}
+      />
+
+      {/* Container: panel (top) + tab ear (bottom-left) — desktop only */}
+      <motion.div
+        className="hidden lg:block"
+        style={{
+          position: 'fixed',
+          top: 0,
+          x: tabX,
+          y: containerY,
+          width: PANEL_WIDTH,
+          height: PANEL_HEIGHT + TAB_HEIGHT,
+          zIndex: 40,
         }}
       >
-        <span className="text-[10px] opacity-50" style={{ color: 'hsl(var(--muted-foreground))' }}>✦</span>
-        <span
-          className="text-[11px] font-mono"
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        {/* Panel body — full width, hidden above viewport when closed */}
+        <div
+          className="flex overflow-hidden"
           style={{
-            color: 'hsl(var(--muted-foreground))',
-            minWidth: '160px',
-            textAlign: 'left',
+            height: PANEL_HEIGHT,
+            background: 'hsl(var(--background))',
+            border: '1px solid hsl(var(--border))',
+            borderTop: 'none',
+            borderRadius: '0 0 16px 0',
+            boxShadow: '0 8px 32px hsl(var(--foreground) / 0.1)',
           }}
         >
-          {displayText || '\u00A0'}
-          <span
-            className="inline-block w-[1px] h-[10px] ml-[1px] align-middle animate-pulse"
-            style={{ background: 'hsl(var(--muted-foreground))', opacity: 0.6 }}
-          />
-        </span>
-      </button>
-
-      {/* Feedback Sheet */}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent
-          side="right"
-          className="w-[380px] sm:w-[420px] flex flex-col p-0 gap-0"
-          style={{ borderLeft: '1px solid hsl(var(--border))' }}
-        >
-          {/* Header */}
-          <div className="px-8 pt-10 pb-6 border-b border-border/50">
-            <p
-              className="text-2xl font-semibold tracking-tight"
-              style={{ fontFamily: 'inherit', letterSpacing: '-0.02em' }}
-            >
-              {submitted ? 'got it. 🫡' : 'vent to us.'}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {submitted
-                ? 'we actually read these, promise.'
-                : "what's frustrating you? what's missing? what broke?"}
+          {/* Left column — info */}
+          <div
+            className="flex flex-col justify-between p-7 flex-shrink-0"
+            style={{
+              width: 190,
+              borderRight: '1px solid hsl(var(--border) / 0.6)',
+            }}
+          >
+            <div>
+              <p
+                className="text-lg font-semibold leading-tight"
+                style={{ letterSpacing: '-0.02em', color: 'hsl(var(--foreground))' }}
+              >
+                {submitted ? 'got it. 🫡' : 'vent to us.'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                {submitted
+                  ? 'we actually read these, promise.'
+                  : "what's frustrating? what's missing? what broke?"}
+              </p>
+            </div>
+            <p className="text-[10px] text-muted-foreground/40 truncate">
+              {user ? user.email : 'anonymous'}
             </p>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 px-8 py-6 flex flex-col gap-4">
+          {/* Right column — input */}
+          <div className="flex-1 flex flex-col p-5 gap-3">
             {submitted ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
                 <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-xl"
-                  style={{ background: 'hsl(var(--primary) / 0.1)' }}
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-base"
+                  style={{ background: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))' }}
                 >
                   ✓
                 </div>
-                <p className="text-sm text-muted-foreground max-w-[220px]">
-                  your frustration has been noted. we'll do something about it.
-                </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 text-xs"
-                  onClick={() => setSubmitted(false)}
-                >
+                <p className="text-sm text-muted-foreground">your frustration has been noted.</p>
+                <Button variant="ghost" size="sm" className="text-xs mt-1" onClick={() => setSubmitted(false)}>
                   send another
                 </Button>
               </div>
@@ -180,45 +254,74 @@ export function FeedbackEdgeTab() {
               <>
                 <Textarea
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={e => setMessage(e.target.value)}
                   placeholder="type here, don't hold back..."
-                  className="flex-1 resize-none text-sm leading-relaxed min-h-[200px]"
+                  className="flex-1 resize-none text-sm leading-relaxed"
                   style={{
-                    background: 'hsl(var(--muted) / 0.4)',
+                    background: 'hsl(var(--muted) / 0.5)',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
-                    padding: '14px 16px',
+                    padding: '10px 14px',
                     fontFamily: 'inherit',
+                    minHeight: 0,
                   }}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSubmit();
-                  }}
+                  onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSubmit(); }}
                 />
-                <p className="text-xs text-muted-foreground/60 -mt-1">
-                  ⌘ + Enter to send
-                </p>
+                <div className="flex items-center justify-between flex-shrink-0">
+                  <span className="text-[10px] text-muted-foreground/40">⌘ + Enter to send</span>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={!message.trim() || submitting}
+                    size="sm"
+                    className="text-xs font-medium px-4 h-7"
+                  >
+                    {submitting ? 'sending...' : 'send it →'}
+                  </Button>
+                </div>
               </>
             )}
           </div>
+        </div>
 
-          {/* Footer */}
-          {!submitted && (
-            <div className="px-8 pb-8 pt-2 border-t border-border/50 flex items-center justify-between">
-              <p className="text-xs text-muted-foreground/50">
-                {user ? `as ${user.email}` : 'anonymous'}
-              </p>
-              <Button
-                onClick={handleSubmit}
-                disabled={!message.trim() || submitting}
-                size="sm"
-                className="text-sm font-medium px-5"
-              >
-                {submitting ? 'sending...' : 'send it →'}
-              </Button>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+        {/* Tab ear — narrow file-tab handle, absolute at bottom-left */}
+        <div
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          className="absolute flex items-center gap-2 px-3 select-none"
+          style={{
+            bottom: 0,
+            left: 0,
+            width: TAB_WIDTH,
+            height: TAB_HEIGHT,
+            background: 'hsl(var(--muted))',
+            borderLeft: '1px solid hsl(var(--border))',
+            borderRight: '1px solid hsl(var(--border))',
+            borderBottom: '1px solid hsl(var(--border))',
+            borderRadius: '0 0 10px 10px',
+            boxShadow: '0 4px 14px hsl(var(--foreground) / 0.07)',
+            cursor: 'grab',
+            touchAction: 'none',
+          }}
+        >
+          <span className="text-[10px] opacity-40 flex-shrink-0" style={{ color: 'hsl(var(--muted-foreground))' }}>
+            {open ? '↑' : '✦'}
+          </span>
+          <span
+            className="text-[11px] font-mono flex-1 truncate"
+            style={{ color: 'hsl(var(--muted-foreground))' }}
+          >
+            {open ? 'drag up to close' : (displayText || '\u00A0')}
+            {!open && (
+              <span
+                className="inline-block w-[1px] h-[10px] ml-[0.5px] align-middle animate-pulse"
+                style={{ background: 'hsl(var(--muted-foreground))', opacity: 0.55 }}
+              />
+            )}
+          </span>
+        </div>
+        </div>{/* end relative inner wrapper */}
+      </motion.div>
     </>
   );
 }

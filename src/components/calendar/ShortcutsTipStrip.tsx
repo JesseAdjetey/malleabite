@@ -8,9 +8,11 @@ const TIPS = [
   { keys: 'M / W / D', label: 'Switch calendar view' },
   { keys: 'J / K', label: 'Navigate forward / back' },
   { keys: 'B', label: 'Toggle bulk select mode' },
+  { keys: 'S', label: 'Open settings' },
+  { keys: 'R', label: 'Refresh' },
   { keys: 'Shift+click', label: 'Start bulk selection' },
   { keys: 'Alt+drag', label: 'Duplicate an event' },
-  { keys: '?', label: 'See all keyboard shortcuts' },
+  { keys: '/', label: 'See all keyboard shortcuts' },
 ];
 
 const INTERVAL = 8000;

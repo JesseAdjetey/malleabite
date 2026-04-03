@@ -489,7 +489,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         const guidedFlow = detectGuidedFlow(aiResponse);
         const displayText = extractCleanText(aiResponse, !!sections, !!guidedFlow);
 
-        if (allActions.length > 0 && !aiAutoExecute && !mallyAutoMode) {
+        if (allActions.length > 0 && (!aiAutoExecute || !mallyAutoMode)) {
           // ── Confirmation mode ──────────────────────────────────────────
           const pendingActions: PendingAction[] = allActions.map((action) => ({
             id: crypto.randomUUID(),
@@ -601,7 +601,6 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
           maybeSpotlightAfterAction(allActions);
         }
 
-        speak(aiResponse);
         updateQuickActionsFromContext(aiResponse, (allActions[0] as { type: string; data: any }) || null);
       };
 

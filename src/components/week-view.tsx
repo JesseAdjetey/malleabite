@@ -303,10 +303,63 @@ const WeekView = () => {
         if (isBulkMode) disableBulkMode();
         else enableBulkMode();
       }
+      if (e.key === 'Escape' && isBulkMode) {
+        disableBulkMode();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isBulkMode, enableBulkMode, disableBulkMode]);
+
+  // ── Rubber-band / lasso selection (Shift + drag on empty calendar space) ──
+  const [lassoBox, setLassoBox] = useState<{
+    startX: number; startY: number; currX: number; currY: number;
+  } | null>(null);
+  const lassoBoxRef = useRef(lassoBox);
+  lassoBoxRef.current = lassoBox;
+
+  const handleGridMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!e.shiftKey) return;
+    if ((e.target as HTMLElement).closest('[data-event-id]')) return;
+    e.preventDefault();
+    setLassoBox({ startX: e.clientX, startY: e.clientY, currX: e.clientX, currY: e.clientY });
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!lassoBoxRef.current) return;
+      setLassoBox(prev => prev ? { ...prev, currX: e.clientX, currY: e.clientY } : null);
+    };
+    const onUp = () => {
+      const box = lassoBoxRef.current;
+      if (!box) return;
+      const left = Math.min(box.startX, box.currX);
+      const right = Math.max(box.startX, box.currX);
+      const top = Math.min(box.startY, box.currY);
+      const bottom = Math.max(box.startY, box.currY);
+      if (right - left > 5 || bottom - top > 5) {
+        const toSelect: string[] = [];
+        document.querySelectorAll('[data-event-id]').forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.left < right && r.right > left && r.top < bottom && r.bottom > top) {
+            const id = el.getAttribute('data-event-id');
+            if (id) toSelect.push(id);
+          }
+        });
+        if (toSelect.length > 0) {
+          enableBulkMode();
+          toSelect.forEach(id => toggleSelection(id));
+        }
+      }
+      setLassoBox(null);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [enableBulkMode, toggleSelection]);
 
   // Get week days for the current view — full week for event expansion, ranged for display
   const weekDays = getWeekDays(userSelectedDate);
@@ -533,7 +586,10 @@ const WeekView = () => {
         }
 
         Promise.all(updatePromises)
-          .then(() => toast.success(`Moved ${updatePromises.length} event${updatePromises.length !== 1 ? 's' : ''}`))
+          .then(() => {
+            deselectAll();
+            toast.success(`Moved ${updatePromises.length} event${updatePromises.length !== 1 ? 's' : ''}`);
+          })
           .catch(err => {
             console.error('Bulk move error:', err);
             toast.error('Some events could not be moved');
@@ -827,7 +883,11 @@ const WeekView = () => {
             </AnimatePresence>
           </div>
 
-          <div className="px-4 py-2" style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}>
+          <div
+            className={cn("px-4 py-2", lassoBox && "select-none")}
+            style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}
+            onMouseDown={handleGridMouseDown}
+          >
             <TimeColumn />
             {visibleWeekDays.map(({ currentDate }, index) => {
               const dayEvents = timedEventsByDay.get(currentDate.format("YYYY-MM-DD")) || [];
@@ -861,6 +921,20 @@ const WeekView = () => {
         </ScrollArea>
       </div>
       <AddEventButton />
+
+      {/* Lasso selection box */}
+      {lassoBox && (() => {
+        const left = Math.min(lassoBox.startX, lassoBox.currX);
+        const top = Math.min(lassoBox.startY, lassoBox.currY);
+        const width = Math.abs(lassoBox.currX - lassoBox.startX);
+        const height = Math.abs(lassoBox.currY - lassoBox.startY);
+        return (
+          <div
+            className="fixed pointer-events-none z-[9999] rounded border border-primary bg-primary/10"
+            style={{ left, top, width, height }}
+          />
+        );
+      })()}
 
       {isBulkMode && selectedCount > 0 && (
         <BulkActionToolbar

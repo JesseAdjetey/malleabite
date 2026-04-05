@@ -115,7 +115,21 @@ function detectContextualQuestion(text: string): SuggestionChip[] {
 
   if (!hasQuestion) return [];
 
-  // Find the sentence(s) containing the question
+  // ── Priority 1: Numbered list of options (canonical AI format) ──
+  // e.g. "1. Keep it at 12–1pm\n2. Move to 2–3pm\n3. Remove it"
+  const numberedOptions = text.match(/(?:^|\n)\s*\d+[.)]\s+(.+)/gm);
+  if (numberedOptions && numberedOptions.length >= 2) {
+    const numberedChips: SuggestionChip[] = [];
+    for (let i = 0; i < Math.min(numberedOptions.length, 4); i++) {
+      const option = numberedOptions[i].replace(/^\s*\d+[.)]\s+/, '').trim();
+      if (option.length > 2 && option.length < 80) {
+        numberedChips.push({ id: `ctx-num-${i}`, label: option, prompt: option });
+      }
+    }
+    if (numberedChips.length >= 2) return numberedChips;
+  }
+
+  // Find the sentence(s) containing the question (needed for patterns below)
   const sentences = text.split(/[.!]\s+/);
   const questionSentences = sentences.filter(s => s.includes('?'));
   if (questionSentences.length === 0) return [];
@@ -123,53 +137,40 @@ function detectContextualQuestion(text: string): SuggestionChip[] {
   const questionBlock = questionSentences.join(' ').toLowerCase();
   const chips: SuggestionChip[] = [];
 
-  // ── Pattern: "X, or Y?" / "X or Y?" ──
-  // e.g. "Would you like to create a new to-do list for it, or for future tasks?"
-  // e.g. "Should I add it to your calendar, or just keep it as a todo?"
+  // ── Priority 2: "X, or Y?" / "X or Y?" ──
+  const questionPrefixes = /^(would you like to |do you want to |do you want me to |should i |shall i |want me to |which (of these )?would you like to |which (option )?do you (prefer|choose) |what would you like (me to |to )?)/i;
+  // Remove trailing purpose/reason clauses that aren't part of the option label
+  const stripTrailingClauses = (s: string) => s
+    .replace(/\s+(to make|so that|in order to|to keep|to help|to ensure).+$/i, '')
+    .replace(/\s+(for (your|the) .+)$/i, (m) => m.length > 20 ? '' : m)
+    .trim();
+
   const orSplit = questionBlock.split(/,?\s+or\s+/);
   if (orSplit.length >= 2) {
-    // Extract the tail options
+    const extractedOptions: string[] = [];
     for (let i = 0; i < orSplit.length; i++) {
       let option = orSplit[i]
-        .replace(/^(would you like to |do you want to |do you want me to |should i |shall i |want me to )/i, '')
+        .replace(questionPrefixes, '')
         .replace(/\?+$/, '')
         .trim();
-      // For the first segment, grab only the actionable part after the last comma
       if (i === 0) {
         const parts = option.split(/,\s*/);
         option = parts[parts.length - 1].trim();
-        // Also strip leading connectors from the extracted portion
-        option = option.replace(/^(would you like to |do you want to |do you want me to |should i |shall i |want me to )/i, '').trim();
+        option = option.replace(questionPrefixes, '').trim();
       }
-      if (option.length > 2 && option.length < 80) {
-        const label = option.charAt(0).toUpperCase() + option.slice(1);
-        chips.push({
-          id: `ctx-${i}`,
-          label,
-          prompt: label,
-        });
+      option = stripTrailingClauses(option);
+      if (option.length > 2 && option.length < 50) {
+        extractedOptions.push(option.charAt(0).toUpperCase() + option.slice(1));
       }
+    }
+    if (extractedOptions.length >= 2) {
+      extractedOptions.slice(0, 4).forEach((label, i) => {
+        chips.push({ id: `ctx-${i}`, label, prompt: label });
+      });
     }
   }
 
-  // ── Pattern: Numbered list of options ──
-  // e.g. "1. Create a new list\n2. Add to existing list"
-  const numberedOptions = text.match(/(?:^|\n)\s*\d+[.)]\s+(.+)/gm);
-  if (numberedOptions && numberedOptions.length >= 2 && chips.length === 0) {
-    for (let i = 0; i < Math.min(numberedOptions.length, 4); i++) {
-      const option = numberedOptions[i].replace(/^\s*\d+[.)]\s+/, '').trim();
-      if (option.length > 2 && option.length < 80) {
-        chips.push({
-          id: `ctx-num-${i}`,
-          label: option,
-          prompt: option,
-        });
-      }
-    }
-  }
-
-  // ── Pattern: Yes/No question ──
-  // e.g. "Would you like me to create it?" / "Should I go ahead?"
+  // ── Priority 3: Yes/No question ──
   if (chips.length === 0 && (
     questionBlock.includes('would you like') ||
     questionBlock.includes('do you want') ||

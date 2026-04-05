@@ -66,7 +66,8 @@ const formatEventsForAI = (events: any[]): string => {
   return events.map(e => {
     const start = e.start_date?.toDate?.() || e.startsAt?.toDate?.() || (e.startsAt ? new Date(e.startsAt) : null);
     const end = e.end_date?.toDate?.() || e.endsAt?.toDate?.() || (e.endsAt ? new Date(e.endsAt) : null);
-    return `- [ID: ${e.id || 'unknown'}] "${e.title}": ${start?.toLocaleString() || 'Unknown'} - ${end?.toLocaleTimeString() || 'Unknown'}`;
+    const calPart = e.calendarId ? ` [cal:${e.calendarId}]` : '';
+    return `- [ID: ${e.id || 'unknown'}] "${e.title}": ${start?.toLocaleString() || 'Unknown'} - ${end?.toLocaleTimeString() || 'Unknown'}${calPart}`;
   }).join('\n');
 };
 
@@ -410,27 +411,99 @@ export const processAIRequest = onRequest(
       let eisenhowerContext = 'No priority items.';
       let alarmsContext = 'No alarms set.';
 
-      // Fetch events (optionally filtered by AI-enabled calendars)
+      // Extract AI-enabled calendar filter (used for both events fetch and calendars context)
+      const aiEnabledCalendarIds: string[] | null = (clientContext as any)?.aiEnabledCalendarIds ?? null;
+
+      // ── Build events context ──────────────────────────────────────────────
+      // Two sources must be merged:
+      //  1. Malleabite events  → client sends these in clientContext.events
+      //  2. Synced Google/external events → stored in users/{uid}/syncedEvents
+      //     (separate subcollection, NOT in calendar_events, NOT in client events array)
+
+      const clientEvents: any[] = (clientContext as any)?.events || [];
+
+      // Fetch synced external calendar events (Google Calendar, etc.)
+      // Use a simple unordered fetch to avoid composite index requirement; filter by date in JS.
+      let syncedExternalEvents: any[] = [];
       try {
-        const aiEnabledCalendarIds: string[] | null = (clientContext as any)?.aiEnabledCalendarIds ?? null;
-        let eventsQuery: any = db.collection('calendar_events').where('userId', '==', userId);
+        const syncedSnapshot = await db.collection(`users/${userId}/syncedEvents`)
+          .limit(300)
+          .get();
+        const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const windowEnd = new Date(Date.now() + 8 * 7 * 24 * 60 * 60 * 1000).toISOString();
+        syncedSnapshot.forEach((doc: any) => {
+          const d = doc.data();
+          if (!d || d.status === 'cancelled') return;
+          const startTime: string = d.startTime || '';
+          if (startTime && (startTime < windowStart || startTime > windowEnd)) return;
+          // Use 'synced_' prefix to match the frontend Zustand store ID format
+          syncedExternalEvents.push({
+            id: `synced_${doc.id}`,
+            title: d.title || d.summary || 'Untitled',
+            startsAt: startTime,
+            endsAt: d.endTime,
+            calendarId: d.calendarId,
+            source: 'google',
+            isAllDay: d.isAllDay,
+          });
+        });
+        console.log(`[AI] Fetched ${syncedExternalEvents.length} synced external events`);
+      } catch (syncError) {
+        console.warn('Could not fetch synced events:', syncError);
+      }
 
-        // If the user has restricted which calendars Mally can see, apply the filter.
-        // Firestore 'in' queries support up to 30 values.
-        if (aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0) {
-          const ids = aiEnabledCalendarIds.slice(0, 30);
-          eventsQuery = eventsQuery.where('calendarId', 'in', ids);
+      // Merge both sources — client events take priority; deduplicate by ID
+      // (client already includes synced events with synced_ prefix, Firestore adds the same)
+      const seenIds = new Set<string>(clientEvents.map((e: any) => e.id));
+      const uniqueSyncedEvents = syncedExternalEvents.filter((e: any) => !seenIds.has(e.id));
+      const allEvents = [...clientEvents, ...uniqueSyncedEvents];
+      console.log(`[AI] Event sources: ${clientEvents.length} client events + ${uniqueSyncedEvents.length} new synced events = ${allEvents.length} total`);
+
+      const buildEventsContext = (rawEvents: any[]): string => {
+        // Synced external events (source: 'google') use a different calendarId system than
+        // Malleabite's aiEnabledCalendarIds — they're already filtered by which Google Calendars
+        // are connected, so they bypass the AI calendar filter and always pass through.
+        const calFiltered = aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0
+          ? rawEvents.filter(e => e.source === 'google' || !e.calendarId || aiEnabledCalendarIds.includes(e.calendarId))
+          : rawEvents;
+
+        const nowMs = Date.now();
+        const eightWeeksMs = 56 * 24 * 60 * 60 * 1000;
+        const sevenDaysMs  =  7 * 24 * 60 * 60 * 1000;
+
+        const dated = calFiltered.map(e => {
+          // Handles Firestore Timestamps, ISO strings, and legacy field names
+          const startDate = e.startsAt?.toDate?.() || e.start_date?.toDate?.()
+                          || (e.startsAt ? new Date(e.startsAt) : null);
+          return { ...e, _startMs: startDate?.getTime() ?? 0 };
+        });
+
+        const upcoming = dated
+          .filter(e => e._startMs === 0 || (e._startMs >= nowMs - sevenDaysMs && e._startMs <= nowMs + eightWeeksMs))
+          .sort((a, b) => a._startMs - b._startMs);
+
+        const toFormat = upcoming.length > 0 ? upcoming : dated.sort((a, b) => b._startMs - a._startMs).slice(0, 50);
+        return toFormat.length > 0 ? formatEventsForAI(toFormat) : 'No upcoming events scheduled.';
+      };
+
+      if (allEvents.length > 0) {
+        eventsContext = buildEventsContext(allEvents);
+      } else {
+        // Last-resort fallback: query calendar_events directly
+        try {
+          const eventsSnapshot = await db.collection('calendar_events')
+            .where('userId', '==', userId)
+            .limit(150)
+            .get();
+
+          const allFetchedEvents: any[] = [];
+          eventsSnapshot.forEach((doc: any) => allFetchedEvents.push({ id: doc.id, ...doc.data() }));
+          if (allFetchedEvents.length > 0) {
+            eventsContext = buildEventsContext(allFetchedEvents);
+          }
+        } catch (dbError) {
+          console.warn('Could not fetch events from Firestore:', dbError);
         }
-
-        const eventsSnapshot = await eventsQuery.limit(20).get();
-
-        const events: any[] = [];
-        eventsSnapshot.forEach((doc: any) => events.push({ id: doc.id, ...doc.data() }));
-        if (events.length > 0) {
-          eventsContext = formatEventsForAI(events);
-        }
-      } catch (dbError) {
-        console.warn('Could not fetch events:', dbError);
       }
 
       // Fetch todos
@@ -488,7 +561,11 @@ export const processAIRequest = onRequest(
       }
 
       // Build available calendars context for multi-account support
-      const availableCalendars = (clientContext as any)?.availableCalendars || [];
+      // Only show AI-enabled calendars so the AI reads/writes only to allowed calendars
+      const allAvailableCalendars = (clientContext as any)?.availableCalendars || [];
+      const availableCalendars = aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0
+        ? allAvailableCalendars.filter((c: any) => aiEnabledCalendarIds.includes(c.id))
+        : allAvailableCalendars;
       const calendarsContext = availableCalendars.length > 0
         ? availableCalendars.map((c: any) => `- "${c.name}" (ID: ${c.id})${c.isDefault ? ' [Default]' : ''}${c.isGoogle ? ' [Google Calendar]' : ''}`).join('\n')
         : '- "My Calendar" (ID: default) [Default]';
@@ -732,11 +809,15 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
    - NEVER ask "what time?" if you can figure it out from context. Just pick a good time and explain why.
    - When planning multi-event schedules, generate ALL events in one response.
    - Use memory: if user prefers mornings for deep work, schedule deep work in morning.
+   - WEEK PLANNING: When asked to plan the whole week, look at events across ALL days in CALENDAR. Use the Current Time to determine which days are upcoming. Create ALL events for the week in a single actions array — do NOT ask for confirmation per event.
+   - MULTI-CALENDAR: Events in CALENDAR show [cal:ID] indicating which calendar they're on. Use this to understand each calendar's purpose (Work, Personal, etc.) and schedule new events on the right one.
 
-3. CONFLICT AWARENESS (CRITICAL):
-   - Scan CALENDAR before creating/moving any event.
-   - If a slot is busy: (a) tell user which event is there, (b) suggest next free slot, (c) offer to move the existing event.
-   - Never silently double-book.
+3. CONFLICT AWARENESS (MANDATORY — DO THIS EVERY TIME):
+   - ALWAYS scan the CALENDAR section before creating or moving any event, even if the user gave you a specific time.
+   - When planning or scheduling, START your response by stating how many events you can see (e.g. "I can see 5 events on your calendar this week"). This confirms to the user you have real data.
+   - If the CALENDAR section shows "0 events loaded" or "No upcoming events" — say "I don't see any events on your calendar for that time" (not "you're free" — be honest about the data).
+   - If the slot IS occupied: name the conflicting event, offer alternatives, do NOT create the event until resolved.
+   - Never silently double-book. Never assume a slot is free without checking.
 
 4. RECURRING EVENTS — DIFFERENT DAYS/TIMES:
    - Different times → SEPARATE recurring events per day.
@@ -779,8 +860,7 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
     - Example: create_calendar_template with events: [{ title: "Math", dayOfWeek: 1, startTime: "09:00", endTime: "10:00" }, ...]
     - dayOfWeek MUST be a number: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
     - ALWAYS set groupName from CALENDAR_GROUPS to assign the template to a group.
-    - After creating a template, ASK the user if they want to apply it now. Do NOT auto-apply.
-    - Applying a template (apply_calendar_template) creates recurring weekly events starting from the current week.
+    - Templates are saved weekly patterns for reference — do NOT apply them unless the user explicitly asks.
     - Check CALENDAR_TEMPLATES in context so you know what templates already exist.
     - To ADD a new event to an existing template use add_template_event.
     - To EDIT/CHANGE a specific event inside a template (time, title, day, color) use update_template_event with templateName and the eventTitle of the event.
@@ -826,7 +906,7 @@ When the user asks for advice ("How's my week looking?", "Am I being productive?
   EXISTING DATA
 ═══════════════════════════════════════════════════
 
-CALENDAR:
+CALENDAR (${eventsContext === 'No upcoming events scheduled.' ? '0 events' : `${eventsContext.split('\n').filter((l: string) => l.trim().startsWith('-')).length} events`} loaded from client):
 ${eventsContext}
 
 TODOS:
@@ -890,7 +970,7 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
   RULES
 ═══════════════════════════════════════════════════
 
-- CONFLICTS: Scan first. If taken, say so and offer alternative. Never double-book.
+- CONFLICTS: ALWAYS check CALENDAR before scheduling. Name any conflict found. Never double-book silently.
 - RECURRENCE SAME TIME: single event, byDay array.
 - RECURRENCE DIFFERENT TIMES: separate events, one day each.
 - MULTI-EVENT PLANNING: Produce ALL events in one actions array.
@@ -899,6 +979,13 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
 - @MENTIONS: When the user's message starts with [Referenced: ...], they used the @ mention picker to target specific entities. Use the entityId from @MENTION_REFERENCES to fill moduleId, eventId, listId, or other ID fields in your actions. This is the user's EXPLICIT target — always honor it.
 - FORMAT: Return ONLY a raw JSON object (no markdown, no code blocks, no preamble).
 - CRITICAL: Your response must be PARSABLE JSON. Start with '{' and end with '}'.
+- MULTI-CALENDAR: The CALENDARS section shows ONLY the calendars the user has enabled for Mally. Each event in CALENDAR shows its [cal:ID]. When creating events, use the most appropriate calendar from CALENDARS. When the user asks about their schedule, look across ALL events in CALENDAR (they may span multiple calendars).
+- WEEK PLANNING: When the user asks to plan their week or multiple days, create ALL events in a single actions array. Look at the full CALENDAR context to understand free slots across all days.
+- PRESENTING CHOICES — MANDATORY FORMAT: Whenever you ask the user to pick between options, you MUST use a numbered list. Each option must be a short, self-contained action phrase (3–6 words):
+  1. Keep it at 12–1pm
+  2. Move to 2–3pm
+  3. Remove it entirely
+  NEVER write choices inside a sentence like "would you like X or Y?". Numbered lists render as tappable buttons in the app UI — sentence-embedded options do not.
 
 ═══════════════════════════════════════════════════
   JSON RESPONSE STRUCTURE
@@ -956,8 +1043,6 @@ ${mentionRefsContext ? `\n@MENTION_REFERENCES (User explicitly referenced these 
     { "type": "update_template_event", "data": { "templateName": "...", "eventTitle": "existing event title to find", "title": "new title (optional)", "dayOfWeek": 0, "startTime": "HH:mm", "endTime": "HH:mm", "color": "#hex" } },
     // Remove an event from a template by title:
     { "type": "remove_template_event", "data": { "templateName": "...", "eventTitle": "..." } },
-    // Apply a template — creates recurring weekly events on the calendar:
-    { "type": "apply_calendar_template", "data": { "templateName": "...", "groupName": "optional override" } },
     // Update template metadata:
     { "type": "update_calendar_template", "data": { "templateName": "...", "name": "new name", "groupName": "new group", "isActive": true } },
     // Delete a template:

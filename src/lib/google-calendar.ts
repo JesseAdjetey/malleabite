@@ -795,7 +795,8 @@ export async function deleteGoogleCalendarEvent(
     }
   );
 
-  if (!response.ok && response.status !== 404) {
+  // 404 = already deleted; 410 = Gone (already purged by Google) — both are fine
+  if (!response.ok && response.status !== 404 && response.status !== 410) {
     throw new Error('Failed to delete event from Google Calendar');
   }
 }

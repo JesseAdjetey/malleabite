@@ -38,6 +38,8 @@ import dayjs from 'dayjs';
 import { TranslationProvider } from '@/i18n/TranslationProvider';
 import '@/styles/ai-animations.css';
 import { sounds } from '@/lib/sounds';
+import { PostHogProvider } from 'posthog-js/react';
+import { posthog } from '@/lib/posthog';
 
 // Lazy load pages for better performance
 const Calendar = lazy(() => import('@/pages/Calendar'));
@@ -75,6 +77,11 @@ const AppRoutes = () => {
   const { isBulkMode, enableBulkMode, disableBulkMode } = useBulkSelectionStore();
   const { selectedEvent, isEventSummaryOpen, closeEventSummary } = useEventStore();
   const { removeEvent } = useEventCRUD();
+
+  // Track pageviews on route change
+  useEffect(() => {
+    posthog.capture('$pageview')
+  }, [location.pathname])
 
   // Global notification manager for alarms and reminders
   // Must be inside AuthProvider to access useAuth
@@ -366,19 +373,21 @@ function App() {
   }, [resolvedTheme]);
 
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <TranslationProvider>
-          <ToastProvider>
-            <Router>
-              <EventDataProvider>
-                <AppRoutes />
-              </EventDataProvider>
-            </Router>
-          </ToastProvider>
-        </TranslationProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <PostHogProvider client={posthog}>
+      <ErrorBoundary>
+        <AuthProvider>
+          <TranslationProvider>
+            <ToastProvider>
+              <Router>
+                <EventDataProvider>
+                  <AppRoutes />
+                </EventDataProvider>
+              </Router>
+            </ToastProvider>
+          </TranslationProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </PostHogProvider>
   );
 }
 

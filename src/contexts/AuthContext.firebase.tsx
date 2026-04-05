@@ -12,6 +12,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { errorHandler, ErrorSeverity } from '@/lib/error-handler';
 import { logger } from '@/lib/logger';
+import { posthog } from '@/lib/posthog';
 
 interface AuthContextType {
   user: User | null;
@@ -53,10 +54,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
 
       if (firebaseUser) {
+        // Identify user in PostHog
+        posthog.identify(firebaseUser.uid, {
+          email: firebaseUser.email ?? undefined,
+          name: firebaseUser.displayName ?? undefined,
+        });
         // Start inactivity timer when user signs in
         resetInactivityTimer();
         ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, resetInactivityTimer, { passive: true }));
       } else {
+        // Reset PostHog on sign out
+        posthog.reset();
         // Clear timer on sign out
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, resetInactivityTimer));

@@ -11,6 +11,9 @@ import { useEventStore } from '@/lib/store';
 import { CalendarEventType } from '@/lib/stores/types';
 import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext.unified';
+import { db } from '@/integrations/firebase/config';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 /**
  * Returns wrapped versions of addEvent / updateEvent / removeEvent that
@@ -19,6 +22,7 @@ import { toast } from 'sonner';
 export function useEventCRUD() {
   const { addEvent, updateEvent, removeEvent, deleteEvent, ...rest } = useCalendarEvents() as any;
   const bridge = useGoogleSyncBridgeContext();
+  const { user } = useAuth();
 
   // The actual delete function may be named differently between implementations
   const doDelete = deleteEvent || removeEvent;
@@ -120,6 +124,29 @@ export function useEventCRUD() {
           toast.warning('Event removed locally but could not be removed from Google Calendar.');
         }
         useEventStore.getState().deleteEvent(id);
+        // Delete the syncedEvents Firestore doc so it doesn't reappear on refresh.
+        // Synced events: doc ID = id without 'synced_' prefix (format: {calendarId}_{googleEventId})
+        // Local events pushed to Google: doc ID = {calendarId}_{googleEventId} (not the local id)
+        if (user?.uid) {
+          let syncedDocId: string | null = null;
+          if (id.startsWith('synced_')) {
+            syncedDocId = id.replace(/^synced_/, '');
+          } else if (eventObj.calendarId && eventObj.googleEventId) {
+            syncedDocId = `${eventObj.calendarId}_${eventObj.googleEventId}`;
+          }
+          if (syncedDocId) {
+            deleteDoc(doc(db, `users/${user.uid}/syncedEvents`, syncedDocId)).catch((err) => {
+              logger.error('useEventCRUD', 'Failed to delete syncedEvents doc', { error: err });
+            });
+          }
+          // For locally-created events (in calendar_events), also delete that doc
+          // so it doesn't reappear on page refresh.
+          if (!id.startsWith('synced_')) {
+            deleteDoc(doc(db, 'calendar_events', id)).catch((err) => {
+              logger.error('useEventCRUD', 'Failed to delete calendar_events doc', { error: err });
+            });
+          }
+        }
         return { success: true };
       }
 
@@ -138,7 +165,7 @@ export function useEventCRUD() {
 
       return doDelete(id);
     },
-    [doDelete, bridge]
+    [doDelete, bridge, user]
   );
 
   return {

@@ -2,6 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
+import { posthog } from './posthog';
 
 // Define Stripe secret key
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
@@ -51,7 +52,10 @@ export const stripeWebhook = onRequest(
       switch (event.type) {
         case 'customer.subscription.created':
         case 'customer.subscription.updated':
-          await handleSubscriptionUpdate(event.data.object as Stripe.Subscription);
+          await handleSubscriptionUpdate(
+            event.data.object as Stripe.Subscription,
+            event.type === 'customer.subscription.created' ? 'subscription_created' : 'subscription_updated'
+          );
           break;
 
         case 'customer.subscription.deleted':
@@ -73,6 +77,7 @@ export const stripeWebhook = onRequest(
       response.json({ received: true });
     } catch (error: any) {
       console.error('Error processing webhook:', error);
+      posthog.captureException(error, undefined, { function: 'stripeWebhook', event_type: event.type });
       response.status(500).send(`Webhook handler error: ${error.message}`);
     }
   }
@@ -81,15 +86,15 @@ export const stripeWebhook = onRequest(
 /**
  * Handle subscription creation or update
  */
-async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
+async function handleSubscriptionUpdate(subscription: Stripe.Subscription, eventName: 'subscription_created' | 'subscription_updated') {
   const customerId = subscription.customer as string;
   const subscriptionId = subscription.id;
   const priceId = subscription.items.data[0]?.price.id;
   const status = subscription.status;
-  
+
   // Get user ID from customer metadata
   const userId = subscription.metadata.userId;
-  
+
   if (!userId) {
     console.error('No userId in subscription metadata');
     return;
@@ -97,7 +102,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 
   // Map Stripe price ID to plan ID
   const planId = getPlanIdFromPriceId(priceId);
-  
+
   if (!planId) {
     console.error(`Unknown price ID: ${priceId}`);
     return;
@@ -132,6 +137,19 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     .collection('subscriptions')
     .doc(userId)
     .set(subscriptionData, { merge: true });
+
+  posthog.capture({
+    distinctId: userId,
+    event: eventName,
+    properties: {
+      plan_id: planId,
+      status,
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscriptionId,
+      stripe_price_id: priceId,
+      cancel_at_period_end: (subscription as any).cancel_at_period_end,
+    },
+  });
 
   console.log(`Updated subscription for user ${userId} to plan ${planId}`);
 }
@@ -168,6 +186,16 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       { merge: true }
     );
 
+  posthog.capture({
+    distinctId: userId,
+    event: 'subscription_cancelled',
+    properties: {
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: subscription.customer as string,
+      previous_plan_id: getPlanIdFromPriceId(subscription.items.data[0]?.price.id),
+    },
+  });
+
   console.log(`Downgraded user ${userId} to free plan`);
 }
 
@@ -180,7 +208,18 @@ async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   
   // Log successful payment
   console.log(`Payment succeeded for customer ${customerId}, subscription ${subscriptionId}`);
-  
+
+  posthog.capture({
+    distinctId: customerId,
+    event: 'payment_succeeded',
+    properties: {
+      stripe_customer_id: customerId,
+      stripe_subscription_id: subscriptionId,
+      amount_paid: invoice.amount_paid,
+      currency: invoice.currency,
+    },
+  });
+
   // Could send email confirmation here
 }
 
@@ -203,12 +242,24 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
   if (!userSnapshot.empty) {
     const doc = userSnapshot.docs[0];
+    const docUserId = doc.data()?.userId;
     await doc.ref.update({
       status: 'past_due',
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    posthog.capture({
+      distinctId: docUserId ?? customerId,
+      event: 'payment_failed',
+      properties: {
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscriptionId,
+        amount_due: invoice.amount_due,
+        currency: invoice.currency,
+      },
+    });
   }
-  
+
   // Could send payment failed notification email here
 }
 
@@ -305,9 +356,19 @@ export const createCheckoutSession = onRequest(
         },
       });
 
+      posthog.capture({
+        distinctId: userId,
+        event: 'checkout_session_created',
+        properties: {
+          stripe_price_id: priceId,
+          stripe_session_id: session.id,
+        },
+      });
+
       response.json({ sessionId: session.id, url: session.url });
     } catch (error: any) {
       console.error('Error creating checkout session:', error);
+      posthog.captureException(error, request.body?.userId, { function: 'createCheckoutSession' });
       response.status(500).json({ error: error.message });
     }
   }
@@ -362,9 +423,18 @@ export const createPortalSession = onRequest(
         return_url: returnUrl,
       });
 
+      posthog.capture({
+        distinctId: userId,
+        event: 'billing_portal_accessed',
+        properties: {
+          stripe_customer_id: customerId,
+        },
+      });
+
       response.json({ url: session.url });
     } catch (error: any) {
       console.error('Error creating portal session:', error);
+      posthog.captureException(error, request.body?.userId, { function: 'createPortalSession' });
       response.status(500).json({ error: error.message });
     }
   }

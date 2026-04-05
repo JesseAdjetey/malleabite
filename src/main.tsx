@@ -5,6 +5,7 @@ import './i18n/config'; // Initialize i18next before app renders
 import "./index.css"
 import { registerServiceWorker, unregisterServiceWorker } from './lib/sw-registration';
 import { initSentry } from './lib/sentry';
+import { initPostHog } from './lib/posthog';
 import { isNative } from './lib/platform';
 
 // During local/dev debugging we do not want a stale PWA bundle masking UI changes.
@@ -59,6 +60,7 @@ try {
 
   // Initialize Sentry after React is ready
   initSentry();
+  initPostHog();
 
   createRoot(rootElement).render(
     <React.StrictMode>

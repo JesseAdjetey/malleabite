@@ -46,6 +46,9 @@ import { useAuth } from "@/contexts/AuthContext.unified";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
 import * as calendarService from "@/lib/services/calendarService";
 import { CalendarTemplate, CalendarTemplateEvent } from "@/types/calendar";
+import { useEventStore } from "@/lib/store";
+import { db } from "@/integrations/firebase/config";
+import { doc, deleteDoc } from "firebase/firestore";
 
 export function useMallyActions() {
   // Calendar
@@ -443,7 +446,61 @@ export function useMallyActions() {
 
         case 'delete_event': {
           if (!data.eventId) { toast.error('No event ID provided'); return false; }
-          const result = await removeEvent(data.eventId);
+          // Look up event by exact ID, or with synced_ prefix (AI may send bare Firestore doc ID)
+          const allStoreEvents = useEventStore.getState().events;
+          const eventObj = allStoreEvents.find(e => e.id === data.eventId)
+            || allStoreEvents.find(e => e.id === `synced_${data.eventId}`);
+          const effectiveId = eventObj?.id ?? data.eventId;
+
+          // Google Calendar events: push delete via bridge + clean up local state
+          if (eventObj?.googleEventId && bridge) {
+            try {
+              await bridge.pushDeleteToGoogle(eventObj);
+            } catch (err) {
+              // 410 Gone = already deleted from Google — still clean up locally
+            }
+            useEventStore.getState().deleteEvent(effectiveId);
+            // Delete from syncedEvents Firestore.
+            // Synced events: doc ID = effectiveId without 'synced_' prefix ({calendarId}_{googleEventId})
+            // Local events pushed to Google: doc ID = {calendarId}_{googleEventId}
+            if (user?.uid) {
+              let syncedDocId: string | null = null;
+              if (effectiveId.startsWith('synced_')) {
+                syncedDocId = effectiveId.replace(/^synced_/, '');
+              } else if (eventObj.calendarId && eventObj.googleEventId) {
+                syncedDocId = `${eventObj.calendarId}_${eventObj.googleEventId}`;
+              }
+              if (syncedDocId) {
+                deleteDoc(doc(db, `users/${user.uid}/syncedEvents`, syncedDocId)).catch((err) => {
+                  console.error('[Mally] Failed to delete syncedEvents doc:', err);
+                });
+              }
+              // For locally-created events (in calendar_events), also delete that doc
+              // so it doesn't reappear on page refresh.
+              if (!effectiveId.startsWith('synced_')) {
+                deleteDoc(doc(db, 'calendar_events', effectiveId)).catch((err) => {
+                  console.error('[Mally] Failed to delete calendar_events doc:', err);
+                });
+              }
+            }
+            toast.success('Event deleted');
+            return true;
+          }
+          // Fallback: synced event not in store or missing googleEventId — clean up Firestore directly
+          if (user?.uid && (effectiveId.startsWith('synced_') || !effectiveId.match(/^[a-zA-Z0-9]{20}$/))) {
+            useEventStore.getState().deleteEvent(effectiveId);
+            const rawDocId = effectiveId.startsWith('synced_')
+              ? effectiveId.replace(/^synced_/, '')
+              : effectiveId;
+            try {
+              await deleteDoc(doc(db, `users/${user.uid}/syncedEvents`, rawDocId));
+              toast.success('Event deleted');
+              return true;
+            } catch (err) {
+              console.error('[Mally] Failed to delete stale syncedEvent:', err);
+            }
+          }
+          const result = await removeEvent(effectiveId);
           if (result?.success) { toast.success('Event deleted'); return true; }
           return false;
         }
@@ -2053,9 +2110,11 @@ export function useMallyActions() {
     currentTime: new Date().toISOString(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     defaultCalendarForNewEvents: { id: targetCal.id, name: targetCal.name },
-    availableCalendars: calendarAccounts.map(a => ({
-      id: a.id, name: a.name, isDefault: a.isDefault || false, isGoogle: a.isGoogle || false,
-    })),
+    availableCalendars: calendarAccounts
+      .filter(a => !aiEnabledCalendarIds || aiEnabledCalendarIds.includes(a.id))
+      .map(a => ({
+        id: a.id, name: a.name, isDefault: a.isDefault || false, isGoogle: a.isGoogle || false,
+      })),
     // Sidebar pages & modules (capped to avoid oversized payloads)
     sidebarPages: pages.slice(0, 10).map(p => ({
       id: p.id,
@@ -2074,7 +2133,12 @@ export function useMallyActions() {
     todoLists: lists.map(l => ({ id: l.id, name: (l as any).name, isActive: l.id === activeListId })),
     pomodoro: (() => { const p = getPomodoroInstance(); return { isActive: p.isActive, mode: p.timerMode, timeLeft: p.timeLeft }; })(),
     eisenhowerItems,
-    events: events.slice(0, 20),
+    // Send non-archived events; Google-sourced events bypass the calendarId filter
+    // since their calendarId system differs from aiEnabledCalendarIds
+    events: events
+      .filter(e => !(e as any).isArchived)
+      .filter(e => (e as any).source === 'google' || !aiEnabledCalendarIds || !(e as any).calendarId || aiEnabledCalendarIds.includes((e as any).calendarId))
+      .slice(0, 100),
     todos: todos.slice(0, 30),
     alarms: alarms.slice(0, 20).map(a => ({ id: a.id, title: a.title, time: (a as any).time })),
     // AI calendar filter: which calendars Mally reads events from (null = all)

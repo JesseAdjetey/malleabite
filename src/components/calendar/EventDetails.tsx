@@ -111,6 +111,23 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     if (!selectedEvent) return;
 
     try {
+      // Synced Google events (id starts with 'synced_') have no parent in the local store.
+      // Each instance is its own Firestore doc — handle them directly.
+      if (selectedEvent.id.startsWith('synced_')) {
+        await removeEvent(selectedEvent.id);
+        toast.success(
+          scope === 'single'
+            ? "This occurrence has been removed"
+            : scope === 'all'
+            ? "All occurrences deleted"
+            : "This and future occurrences deleted"
+        );
+        setShowRecurringDeleteDialog(false);
+        onClose();
+        return;
+      }
+
+      // Malleabite-native recurring events: split on '_' is safe (no 'synced_' prefix)
       const parentId = selectedEvent.recurrenceParentId ||
         (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
       const instanceDate = selectedEvent.id.includes('_')

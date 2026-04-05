@@ -54,10 +54,10 @@ const PomodoroModule: React.FC<PomodoroModuleProps> = ({
 
   // Calculate total time for current mode
   const totalTime = timerMode === 'focus' ? workDuration * 60 : breakTime * 60;
-  const progress = (timeLeft / totalTime) * 100;
+  const progress = totalTime > 0 ? (timeLeft / totalTime) * 100 : 100;
 
   // Target progress percentage
-  const targetProgress = Math.min((completedWorkDuration / focusTarget) * 100, 100);
+  const targetProgress = focusTarget > 0 ? Math.min((completedWorkDuration / focusTarget) * 100, 100) : 0;
 
   // Handle timer tick
   useEffect(() => {

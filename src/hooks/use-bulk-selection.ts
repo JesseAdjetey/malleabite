@@ -64,8 +64,17 @@ export function useBulkSelection() {
     const selectedEvents = getSelectedEvents();
     
     for (const event of selectedEvents) {
-      const isRecurring = event.isRecurring || event.recurrenceParentId || (event.id && event.id.includes('_'));
-      
+      // Synced Google events (id starts with 'synced_') have no parent in local store.
+      // The '_' in their ID is not a parent/instance separator — always delete directly.
+      if (event.id.startsWith('synced_')) {
+        await removeEvent(event.id);
+        continue;
+      }
+
+      // Only treat as recurring if the event actually is recurring (not just because of '_' in id)
+      const isRecurring = event.isRecurring || event.recurrenceParentId ||
+        (event.id && event.id.includes('_'));
+
       if (isRecurring && recurringScope) {
         // Handle recurring event based on scope
         const parentId = event.recurrenceParentId ||
@@ -73,7 +82,7 @@ export function useBulkSelection() {
         const instanceDate = event.id.includes('_')
           ? event.id.split('_')[1]
           : dayjs(event.startsAt).format('YYYY-MM-DD');
-          
+
         if (recurringScope === 'single') {
           // Delete only this occurrence
           if (addRecurrenceException && parentId) {

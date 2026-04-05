@@ -179,6 +179,7 @@ export function useCalendarEvents() {
       // Transform Firebase events to CalendarEventType
       const transformedEvents = firebaseEvents.map(transformFirebaseEvent);
       setEvents(transformedEvents);
+      useEventStore.getState().setEvents(transformedEvents);
 
     } catch (err: any) {
       logger.error('useCalendarEvents', 'Fetch events error', err);
@@ -333,11 +334,12 @@ export function useCalendarEvents() {
         docId: docRef.id
       });
 
-      // Replace optimistic event with real one (the listener will catch it, but we cleanup temp)
+      // Replace optimistic event with real one in the global store
       eventStore.deleteEvent(optimisticId);
-
-      // Refresh events to show the new one
-      await fetchEvents();
+      eventStore.addEvent({
+        ...optimisticEvent,
+        id: docRef.id,
+      });
 
       toast.success('Event created successfully!');
       return {

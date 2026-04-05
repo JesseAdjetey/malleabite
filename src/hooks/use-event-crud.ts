@@ -79,6 +79,14 @@ export function useEventCRUD() {
         }
         // Update Zustand store directly so the UI reflects the change immediately
         useEventStore.getState().updateEvent(event);
+        // For locally-created events in calendar_events (not synced from Google),
+        // also persist the change to Firestore so it survives page refresh.
+        // Synced events (id starts with 'synced_') live in syncedEvents and are read-only.
+        if (!event.id.startsWith('synced_')) {
+          updateEvent(event).catch((err) => {
+            logger.error('useEventCRUD', 'Failed to persist recurrence change to Firestore', { error: err });
+          });
+        }
         return { success: true };
       }
 

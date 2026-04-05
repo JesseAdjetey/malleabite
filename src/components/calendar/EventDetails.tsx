@@ -151,6 +151,12 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
         }
       } else if (scope === 'all') {
         await removeEvent(parentId);
+        // Also delete any exception events that reference this parent
+        // (created when user previously edited "this occurrence only")
+        const childExceptions = events.filter(e => e.recurrenceParentId === parentId);
+        for (const child of childExceptions) {
+          await removeEvent(child.id);
+        }
         toast.success("All occurrences deleted");
       } else if (scope === 'thisAndFuture') {
         // Truncate the series by setting endDate to the day before this occurrence

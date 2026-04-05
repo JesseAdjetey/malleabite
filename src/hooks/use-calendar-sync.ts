@@ -319,6 +319,14 @@ export function useCalendarSync(): UseCalendarSyncReturn {
       // Replace cached synced events for this calendar inside the current sync window.
       await calendarService.replaceSyncedEventsForCalendar(user.uid, calendar.id, events);
 
+      // Also clean up locally-created calendar_events whose googleEventId was
+      // deleted from Google Calendar — replaceSyncedEventsForCalendar only
+      // handles the syncedEvents collection.
+      if (calendar.source === 'google') {
+        const freshGoogleIds = new Set(events.map((e) => e.externalId).filter(Boolean) as string[]);
+        await calendarService.cleanupStaleLocalGoogleEvents(user.uid, calendar.id, freshGoogleIds);
+      }
+
       // Update last sync time on calendar
       await calendarService.updateConnectedCalendar(user.uid, calendar.id, {
         lastSyncAt: new Date().toISOString(),
@@ -353,7 +361,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
   const syncAllActive = useCallback(async (
     calendars: ConnectedCalendar[]
   ): Promise<void> => {
-    const activeCalendars = calendars.filter(c => c.isActive && c.syncEnabled);
+    const activeCalendars = calendars.filter(c => c.isActive && c.syncEnabled !== false);
     if (activeCalendars.length === 0) {
       toast.info('No active calendars to sync');
       return;

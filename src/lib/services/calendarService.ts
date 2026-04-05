@@ -723,6 +723,49 @@ export async function replaceSyncedEventsForCalendar(
 }
 
 /**
+ * Delete calendar_events docs for a connected calendar whose googleEventId
+ * is no longer present in the latest Google Calendar fetch.
+ * This handles locally-created events that were pushed to Google and then
+ * deleted directly in Google Calendar — without this, the Firestore doc
+ * persists and the event keeps reappearing on refresh.
+ */
+export async function cleanupStaleLocalGoogleEvents(
+  userId: string,
+  calendarId: string,
+  activeGoogleEventIds: Set<string>
+): Promise<void> {
+  try {
+    const eventsRef = collection(db, 'calendar_events');
+    const q = query(
+      eventsRef,
+      where('userId', '==', userId),
+      where('calendarId', '==', calendarId)
+    );
+    const snapshot = await getDocs(q);
+
+    const stale = snapshot.docs.filter((docSnap) => {
+      const data = docSnap.data();
+      return data.googleEventId && !activeGoogleEventIds.has(data.googleEventId);
+    });
+
+    if (stale.length === 0) return;
+
+    for (let i = 0; i < stale.length; i += 400) {
+      const batch = writeBatch(db);
+      for (const docSnap of stale.slice(i, i + 400)) {
+        batch.delete(docSnap.ref);
+      }
+      await batch.commit();
+    }
+
+    logger.info('CalendarService', `Cleaned up ${stale.length} stale local event(s) for calendar ${calendarId}`);
+  } catch (error) {
+    logger.error('CalendarService', 'Failed to clean up stale local Google events', { error, calendarId });
+    // Non-fatal — don't block the overall sync
+  }
+}
+
+/**
  * Get synced events for specific calendars within a date range.
  */
 export async function getSyncedEvents(

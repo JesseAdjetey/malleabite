@@ -116,7 +116,7 @@ export function useGoogleSyncBridge() {
   // loads the connected calendars (Firestore is async, so `calendars` starts empty
   // at mount — without this dep, the poll timer never starts).
   const hasGoogleCalendars = calendars.some(
-    (c) => c.source === 'google' && c.isActive && c.syncEnabled
+    (c) => c.source === 'google' && c.isActive && c.syncEnabled !== false
   );
 
   // ─── Reconnect ──────────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ export function useGoogleSyncBridge() {
     // (e.g. lastSyncAt timestamp updates).  The poll function reads the ref each tick.
     const getGoogleCalendars = () =>
       calendarsRef.current.filter(
-        (c) => c.source === 'google' && c.isActive && c.syncEnabled
+        (c) => c.source === 'google' && c.isActive && c.syncEnabled !== false
       );
 
     const googleCalendars = getGoogleCalendars();

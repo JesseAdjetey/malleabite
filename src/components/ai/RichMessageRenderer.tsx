@@ -116,8 +116,8 @@ export const RichMessageRenderer: React.FC<RichMessageRendererProps> = ({
         />
       )}
 
-      {/* Suggestion chips — only on the latest AI message */}
-      {isLastAiMessage && message.suggestions && message.suggestions.length > 0 && (
+      {/* Suggestion chips — only on the latest AI message, and only when no guided flow is present */}
+      {isLastAiMessage && !message.guidedFlow && message.suggestions && message.suggestions.length > 0 && (
         <SuggestionChips chips={message.suggestions} onSelect={onSuggestionSelect} />
       )}
     </>

@@ -41,7 +41,6 @@ const Mainview = () => {
   const [isCrossingBoundary, setIsCrossingBoundary] = useState(false);
   const crossingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [calendarFraction, setCalendarFraction] = useState(0.965);
 
   const MIN_WIDTH = 280;
 
@@ -230,10 +229,7 @@ const Mainview = () => {
                 </AnimatePresence>
               </div>
 
-              <MobileModuleSheet
-                calendarFraction={calendarFraction}
-                onCalendarFractionChange={setCalendarFraction}
-              />
+              <MobileModuleSheet />
             </div>
           ) : (
             /* ── Desktop: calendar fills remaining space ── */

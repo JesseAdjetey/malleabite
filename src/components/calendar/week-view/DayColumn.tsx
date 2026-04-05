@@ -181,7 +181,14 @@ const DayColumn: React.FC<DayColumnProps> = ({
               draggingBulkEventId &&
                 isSelected(event.id) &&
                 event.id !== draggingBulkEventId &&
-                "opacity-30"
+                "opacity-30",
+              // During a bulk drag, let drag events pass through OTHER selected events
+              // (not the one being dragged) so the underlying time-slot divs register
+              // as valid drop targets instead of being blocked by those event cards
+              draggingBulkEventId &&
+                isSelected(event.id) &&
+                event.id !== draggingBulkEventId &&
+                "pointer-events-none"
             )}
             style={{
               top: `${topPosition}px`,

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSidebarStore } from '@/lib/store';
 import ModuleRenderer from './ModuleRenderer';
 import { useSidebarLayout } from '@/hooks/use-sidebar-layout';
-import { ModuleInstance } from '@/lib/stores/types';
+import { ModuleInstance, SizeLevel } from '@/lib/stores/types';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,6 +29,7 @@ interface ModuleGridProps {
   onUpdateModuleTitle: (index: number, title: string) => void;
   onReorderModules: (fromIndex: number, toIndex: number) => void;
   onMoveModule: (index: number, targetPageId: string) => void;
+  onSetModuleSizeLevel?: (moduleIndex: number, level: SizeLevel) => void;
   moveTargets: ModuleMoveTarget[];
   pageIndex: number;
   isReadOnly?: boolean;
@@ -41,6 +42,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   onUpdateModuleTitle,
   onReorderModules,
   onMoveModule,
+  onSetModuleSizeLevel,
   moveTargets,
   pageIndex,
   isReadOnly = false,
@@ -166,6 +168,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   onRemove={() => onRemoveModule(index)}
                   onTitleChange={(title) => onUpdateModuleTitle(index, title)}
                   onToggleMinimize={() => handleToggleMinimize(index)}
+                  onSizeChange={onSetModuleSizeLevel ? (level) => onSetModuleSizeLevel(index, level) : undefined}
                   isDragging={draggedIndex === index}
                   moveTargets={moveTargets}
                   onMoveToPage={(pageId) => onMoveModule(index, pageId)}
@@ -187,7 +190,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   Rename
                 </ContextMenuItem>
                 <ContextMenuItem onSelect={() => handleToggleMinimize(index)}>
-                  {module.minimized ? 'Expand' : 'Minimize'}
+                  {(module.sizeLevel ?? (module.minimized ? 0 : 1)) === 0 ? 'Expand' : 'Collapse'}
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 {moveTargets.length > 0 && (

@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { ModuleInstance } from '@/lib/stores/types';
+import { ModuleInstance, SizeLevel } from '@/lib/stores/types';
 import TodoModuleEnhanced from '../modules/TodoModuleEnhanced';
-import InvitesModule from '../modules/InvitesModule';
 import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
@@ -20,6 +19,7 @@ interface ModuleRendererProps {
   onRemove: () => void;
   onTitleChange: (title: string) => void;
   onToggleMinimize: () => void;
+  onSizeChange?: (level: SizeLevel) => void;
   isDragging?: boolean;
   moveTargets?: MoveTarget[];
   onMoveToPage?: (pageId: string) => void;
@@ -35,6 +35,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   onRemove,
   onTitleChange,
   onToggleMinimize,
+  onSizeChange,
   isDragging = false,
   moveTargets = [],
   onMoveToPage,
@@ -47,21 +48,23 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     maxWidth: '360px',
   };
 
+  const effectiveSizeLevel = module.sizeLevel ?? (module.minimized ? 0 : 1);
+
   const moduleProps = {
     title: module.title,
     onRemove: isReadOnly ? undefined : onRemove,
     onTitleChange: isReadOnly ? undefined : onTitleChange,
     onMinimize: onToggleMinimize,
-    isMinimized: module.minimized,
+    isMinimized: effectiveSizeLevel === 0,
     isDragging,
     listId: module.listId,
     moveTargets: isReadOnly ? [] : moveTargets,
     onMoveToPage: isReadOnly ? undefined : onMoveToPage,
     onShare: isReadOnly ? undefined : onShare,
-    // isReadOnly on ModuleContainer controls the kebab menu visibility (structural)
-    // contentReadOnly is passed separately for module content editing
     isReadOnly,
     contentReadOnly,
+    sizeLevel: effectiveSizeLevel,
+    onSizeChange: isReadOnly ? undefined : onSizeChange,
   };
 
   const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;
@@ -88,19 +91,13 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     case 'reminders':
       return (
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
-          <RemindersModule {...moduleProps} instanceId={module.instanceId} />
+          <RemindersModule {...moduleProps} instanceId={module.instanceId} moduleId={module.id} />
         </div>
       );
     case 'eisenhower':
       return (
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <EisenhowerModule {...moduleProps} instanceId={module.instanceId} />
-        </div>
-      );
-    case 'invites':
-      return (
-        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
-          <InvitesModule {...moduleProps} />
         </div>
       );
     case 'booking':

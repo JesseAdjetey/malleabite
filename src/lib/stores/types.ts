@@ -1,5 +1,14 @@
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'invites' | 'booking';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'booking';
+
+/**
+ * Module size levels:
+ * 0 = collapsed (header bar only)
+ * 1 = normal (default, in grid)
+ * 2 = sidebar fill (covers entire sidebar panel)
+ * 3 = fullscreen (covers entire screen)
+ */
+export type SizeLevel = 0 | 1 | 2 | 3;
 
 // ─── Group Meet Types ──────────────────────────────────────────────────────────
 
@@ -43,7 +52,8 @@ export interface ModuleInstance {
   id: string; // Unique identifier for this module instance — stable across reorders
   type: ModuleType;
   title: string;
-  minimized?: boolean; // New property to track minimized state
+  minimized?: boolean; // Legacy collapse state — kept for backwards compat, derived from sizeLevel === 0
+  sizeLevel?: SizeLevel; // 0=collapsed, 1=normal(default), 2=sidebar-fill, 3=fullscreen
   pageId?: string; // Reference to which page this module belongs to
   listId?: string; // For todo modules - reference to the specific todo list
   instanceId?: string; // Unique ID for stateful modules (e.g. Pomodoro) to scope state per-instance

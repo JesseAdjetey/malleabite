@@ -13,6 +13,7 @@ import { calculateEventPositions, getEventStyle } from "@/lib/utils/event-overla
 import { useEventResize } from "@/hooks/use-event-resize";
 import { useConflictMap } from "@/hooks/use-conflict-detection";
 import { RescheduleOptionsSheet } from "@/components/calendar/RescheduleOptionsSheet";
+import { useReminderEventPickerStore } from "@/lib/stores/reminder-event-picker-store";
 
 interface DayColumnProps {
   currentDate: dayjs.Dayjs;
@@ -59,6 +60,8 @@ const DayColumn: React.FC<DayColumnProps> = ({
   const [dragOverHour, setDragOverHour] = useState<number | null>(null);
   // Track when context menu last closed to prevent spurious openEventSummary calls
   const ctxMenuClosedAtRef = useRef(0);
+
+  const { isPickingEvent, completePicking } = useReminderEventPickerStore();
 
   // Conflict detection
   const { conflicts, isEnabled: conflictEnabled } = useConflictMap(dayEvents);
@@ -199,6 +202,10 @@ const DayColumn: React.FC<DayColumnProps> = ({
             onClick={(e) => {
               e.stopPropagation();
               if (Date.now() - ctxMenuClosedAtRef.current < 300) return;
+              if (isPickingEvent) {
+                completePicking(event);
+                return;
+              }
               if (e.shiftKey && !isBulkMode) {
                 onShiftClickEvent?.(event.id);
                 return;

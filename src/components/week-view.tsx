@@ -35,6 +35,7 @@ import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { WeekAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 import { useWeekRangeStore } from "@/lib/stores/week-range-store";
+import { useReminderEventPickerStore } from "@/lib/stores/reminder-event-picker-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { logCalendarPerf } from "@/lib/perf/calendar-perf";
 import { motion, AnimatePresence } from "framer-motion";
@@ -43,6 +44,7 @@ import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 const WeekView = () => {
   const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
+  const { isPickingEvent, completePicking, cancelPicking } = useReminderEventPickerStore();
   const {
     openEventSummary,
     toggleEventLock,
@@ -817,6 +819,18 @@ const WeekView = () => {
 
   return (
     <>
+      {/* Reminder event-picker banner */}
+      {isPickingEvent && (
+        <div className="mx-2 mt-2 mb-1 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-amber-400/90 dark:bg-amber-500/80 text-amber-950 dark:text-amber-50 text-sm font-medium shadow-md z-50">
+          <span>Tap any event to link it to your reminder</span>
+          <button
+            onClick={cancelPicking}
+            className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100 whitespace-nowrap"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="glass mx-2 mt-2 mb-3 rounded-xl overflow-hidden border border-purple-200 dark:border-white/10 shadow-sm bg-gradient-to-r from-purple-50/80 to-purple-100/50 dark:from-secondary/50 dark:to-secondary/50">
         <WeekHeader userSelectedDate={userSelectedDate} />
       </div>
@@ -832,7 +846,7 @@ const WeekView = () => {
       <WeekAllDayRow
         weekDays={visibleWeekDays}
         allDayEvents={allDisplayAllDay}
-        onEventClick={openEventSummary}
+        onEventClick={(event) => isPickingEvent ? completePicking(event) : openEventSummary(event)}
         onAllDayCellClick={(day) => {
           setTodoData(null);
           const hour = day.hour(0);

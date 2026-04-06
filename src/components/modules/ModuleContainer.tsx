@@ -1,7 +1,7 @@
 
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, MoreVertical } from 'lucide-react';
+import { Check, Layers, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -24,6 +24,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SizeLevel } from '@/lib/stores/types';
+import ModuleSizePill from './ModuleSizePill';
 
 interface MoveTarget {
   id: string;
@@ -42,6 +44,8 @@ interface ModuleContainerProps {
   onMoveToPage?: (pageId: string) => void;
   onShare?: () => void;
   isReadOnly?: boolean;
+  sizeLevel?: SizeLevel;
+  onSizeChange?: (level: SizeLevel) => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -55,10 +59,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   onMoveToPage,
   onShare,
   isReadOnly = false,
+  sizeLevel,
+  onSizeChange,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isSizePillOpen, setIsSizePillOpen] = useState(false);
+  const moduleRef = useRef<HTMLDivElement>(null);
+
+  // Derive the effective size level (backwards compat with minimized flag)
+  const effectiveSizeLevel: SizeLevel = sizeLevel ?? (isMinimized ? 0 : 1);
+  const isCollapsed = effectiveSizeLevel === 0;
 
   const handleSaveTitle = () => {
     if (editTitle.trim() && onTitleChange) {
@@ -81,8 +93,21 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
     setIsEditing(true);
   };
 
+  const handleSizeChange = (level: SizeLevel) => {
+    setIsSizePillOpen(false);
+    if (onSizeChange) {
+      onSizeChange(level);
+    } else if (onMinimize && level === 0) {
+      // Fallback to legacy minimize
+      onMinimize();
+    }
+  };
+
   return (
-    <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all group/module">
+    <div
+      ref={moduleRef}
+      className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all group/module"
+    >
       <div className="module-header flex justify-between items-center mb-3">
         {isEditing ? (
           <div className="flex items-center gap-2 flex-1">
@@ -101,75 +126,109 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             </button>
           </div>
         ) : (
-          <h3
-            className="text-lg font-semibold text-primary flex-1 min-w-0 truncate cursor-pointer hover:opacity-70 transition-opacity"
-            onClick={onTitleChange ? startRename : undefined}
-            title={onTitleChange ? "Click to rename" : undefined}
-          >{title}</h3>
+          // Title area — only the text span is clickable for rename
+          <div className="flex-1 min-w-0 flex items-center">
+            <span
+              className="text-lg font-semibold text-primary truncate cursor-pointer hover:opacity-70 transition-opacity module-rename-trigger"
+              onClick={onTitleChange ? startRename : undefined}
+              title={onTitleChange ? 'Click to rename' : undefined}
+            >
+              {title}
+            </span>
+          </div>
         )}
 
         {!isEditing && !isReadOnly && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="opacity-0 group-hover/module:opacity-100 hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center flex-shrink-0 ml-1"
-                aria-label="Module options"
+          <div className="flex items-center gap-0.5 opacity-0 group-hover/module:opacity-100 transition-opacity">
+            {/* Size level button */}
+            {onSizeChange && (
+              <div
+                className="relative"
+                onMouseEnter={() => setIsSizePillOpen(true)}
+                onMouseLeave={() => setIsSizePillOpen(false)}
               >
-                <MoreVertical size={16} className="flex-shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {onTitleChange && (
-                <DropdownMenuItem onSelect={startRename}>
-                  Rename
-                </DropdownMenuItem>
-              )}
-              {onMinimize && (
-                <DropdownMenuItem onSelect={onMinimize}>
-                  {isMinimized ? 'Expand' : 'Minimize'}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              {moveTargets.length > 0 && onMoveToPage && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>Transfer to page</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent>
-                      {moveTargets.map((target) => (
-                        <DropdownMenuItem
-                          key={target.id}
-                          onSelect={() => onMoveToPage(target.id)}
-                        >
-                          {target.title}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
-              )}
-              {onShare && (
-                <DropdownMenuItem onSelect={onShare}>
-                  Share / Manage Access
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              {onRemove && (
-                <DropdownMenuItem
-                  onSelect={() => setShowDeleteDialog(true)}
-                  className="text-destructive focus:text-destructive"
+                <button
+                  className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center flex-shrink-0"
+                  aria-label="Resize module"
                 >
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Layers size={15} className="flex-shrink-0" />
+                </button>
+
+                <AnimatePresence>
+                  {isSizePillOpen && (
+                    <ModuleSizePill
+                      currentLevel={effectiveSizeLevel}
+                      onChangeLevel={handleSizeChange}
+                      moduleRef={moduleRef}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Kebab menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center flex-shrink-0"
+                  aria-label="Module options"
+                >
+                  <MoreVertical size={16} className="flex-shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {onTitleChange && (
+                  <DropdownMenuItem onSelect={startRename}>
+                    Rename
+                  </DropdownMenuItem>
+                )}
+                {(onSizeChange || onMinimize) && (
+                  <DropdownMenuItem onSelect={() => handleSizeChange(isCollapsed ? 1 : 0)}>
+                    {isCollapsed ? 'Expand' : 'Collapse'}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {moveTargets.length > 0 && onMoveToPage && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <span>Transfer to page</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent>
+                        {moveTargets.map((target) => (
+                          <DropdownMenuItem
+                            key={target.id}
+                            onSelect={() => onMoveToPage(target.id)}
+                          >
+                            {target.title}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                )}
+                {onShare && (
+                  <DropdownMenuItem onSelect={onShare}>
+                    Share / Manage Access
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                {onRemove && (
+                  <DropdownMenuItem
+                    onSelect={() => setShowDeleteDialog(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
       </div>
 
       <AnimatePresence initial={false}>
-        {!isMinimized && (
+        {!isCollapsed && (
           <motion.div
             className="module-content"
             initial={{ opacity: 0, height: 0 }}

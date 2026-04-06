@@ -339,6 +339,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     setIsMinimized(true);
   }, [location.pathname]);
 
+  // External trigger: open Mally with an optional pre-filled prompt
+  useEffect(() => {
+    const handleOpenMally = (e: CustomEvent<{ prompt?: string }>) => {
+      setIsMinimized(false);
+      setIsExpanded(true);
+      if (e.detail?.prompt) {
+        setInputText(e.detail.prompt);
+      }
+    };
+    window.addEventListener('open-mally-chat', handleOpenMally as EventListener);
+    return () => window.removeEventListener('open-mally-chat', handleOpenMally as EventListener);
+  }, []);
 
   // Handle image upload
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -27,9 +27,11 @@ import { generateRecurringInstances } from "@/lib/utils/recurring-events";
 import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useCalendarFilterStore } from "@/lib/stores/calendar-filter-store";
 import { logCalendarPerf } from "@/lib/perf/calendar-perf";
+import { useReminderEventPickerStore } from "@/lib/stores/reminder-event-picker-store";
 
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
+  const { isPickingEvent, completePicking, cancelPicking } = useReminderEventPickerStore();
   const { openEventSummary, isEventSummaryOpen, closeEventSummary, events } =
     useEventStore();
   const { updateEvent, addEvent } = useEventCRUD();
@@ -275,6 +277,16 @@ const MonthView = () => {
         </div>
       </div>
 
+      {/* Reminder event-picker banner */}
+      {isPickingEvent && (
+        <div className="mx-2 mb-2 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-amber-400/90 dark:bg-amber-500/80 text-amber-950 dark:text-amber-50 text-sm font-medium shadow-md">
+          <span>Tap any event to link it to your reminder</span>
+          <button onClick={cancelPicking} className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100 whitespace-nowrap">
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Bottom Container: Standalone Grid with rounded corners */}
       <section className={`grid grid-cols-7 ${isMobile ? 'grid-rows-6' : 'grid-rows-5'} lg:h-[calc(100vh-170px)] touch-pan-y mx-2 mb-2 rounded-2xl overflow-hidden`}>
         {twoDMonthArray.map((row, i) => (
@@ -285,7 +297,7 @@ const MonthView = () => {
                 day={day}
                 rowIndex={i}
                 events={day ? eventsByDay.get(day.format("YYYY-MM-DD")) || [] : []}
-                onEventClick={openEventSummary}
+                onEventClick={(event) => isPickingEvent ? completePicking(event) : openEventSummary(event)}
                 onDayClick={handleDayClick}
                 onEventDrop={handleEventDrop}
                 addEvent={addEvent}

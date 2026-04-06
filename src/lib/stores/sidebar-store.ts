@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import { ModuleInstance, ModuleType, SidebarPage, generateModuleId, ensureModuleId } from "./types";
+import { ModuleInstance, ModuleType, SidebarPage, SizeLevel, generateModuleId, ensureModuleId } from "./types";
 
 interface SidebarStoreType {
   pages: SidebarPage[];
@@ -14,6 +14,7 @@ interface SidebarStoreType {
   updateModuleTitle: (pageIndex: number, moduleIndex: number, title: string) => void;
   reorderModules: (pageIndex: number, fromIndex: number, toIndex: number) => void;
   toggleModuleMinimized: (pageIndex: number, moduleIndex: number) => void;
+  setModuleSizeLevel: (pageIndex: number, moduleIndex: number, level: SizeLevel) => void;
 }
 
 export const useSidebarStore = create<SidebarStoreType>()(
@@ -39,7 +40,7 @@ export const useSidebarStore = create<SidebarStoreType>()(
             modules: [
               { id: generateModuleId(), type: 'pomodoro', title: 'Pomodoro' },
               { id: generateModuleId(), type: 'alarms', title: 'Reminders' },
-              { id: generateModuleId(), type: 'invites', title: 'Event Invites' }
+              { id: generateModuleId(), type: 'booking', title: 'Booking' }
             ],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -74,7 +75,7 @@ export const useSidebarStore = create<SidebarStoreType>()(
                 case 'pomodoro': defaultTitle = 'Pomodoro'; break;
                 case 'alarms': defaultTitle = 'Reminders'; break;
                 case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
-                case 'invites': defaultTitle = 'Event Invites'; break;
+                case 'booking': defaultTitle = 'Booking'; break;
               }
               
               newPages[pageIndex] = {
@@ -168,10 +169,32 @@ export const useSidebarStore = create<SidebarStoreType>()(
             const newPages = [...state.pages];
             if (newPages[pageIndex] && newPages[pageIndex].modules[moduleIndex]) {
               const module = newPages[pageIndex].modules[moduleIndex];
+              const currentLevel = module.sizeLevel ?? (module.minimized ? 0 : 1);
+              const newLevel: SizeLevel = currentLevel === 0 ? 1 : 0;
               const updatedModules = [...newPages[pageIndex].modules];
               updatedModules[moduleIndex] = {
                 ...module,
-                minimized: !module.minimized
+                minimized: newLevel === 0,
+                sizeLevel: newLevel,
+              };
+              newPages[pageIndex] = {
+                ...newPages[pageIndex],
+                modules: updatedModules,
+                updatedAt: new Date().toISOString()
+              };
+            }
+            return { pages: newPages };
+          });
+        },
+        setModuleSizeLevel: (pageIndex, moduleIndex, level) => {
+          set(state => {
+            const newPages = [...state.pages];
+            if (newPages[pageIndex]?.modules[moduleIndex]) {
+              const updatedModules = [...newPages[pageIndex].modules];
+              updatedModules[moduleIndex] = {
+                ...updatedModules[moduleIndex],
+                sizeLevel: level,
+                minimized: level === 0,
               };
               newPages[pageIndex] = {
                 ...newPages[pageIndex],

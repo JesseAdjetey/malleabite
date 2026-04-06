@@ -10,7 +10,7 @@ import { useTodoCalendarIntegration } from '@/hooks/use-todo-calendar-integratio
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer, Zap, MousePointerClick } from "lucide-react";
+import { CalendarIcon, Clock, AlarmClock, Users, Palette, Sun, Repeat, Lock, Timer, Zap, MousePointerClick, Bell, ChevronDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -29,6 +29,8 @@ import { useCalendarGroups } from '@/hooks/use-calendar-groups';
 import { PERSONAL_CALENDAR_ID, useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { RecurrenceRuleEditor } from './RecurrenceRuleEditor';
 import { useTemplateModeStore } from '@/lib/stores/template-mode-store';
+import { useSidebarStore } from '@/lib/stores/sidebar-store';
+import { useReminderEventPickerStore } from '@/lib/stores/reminder-event-picker-store';
 
 
 interface EnhancedEventFormProps {
@@ -229,6 +231,36 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
   const [endTime, setEndTime] = useState('');
 
   const [isLocked, setIsLocked] = useState(false);
+
+  // Reminder module picker
+  const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
+  const { pages } = useSidebarStore();
+  const { setPendingEventForReminder } = useReminderEventPickerStore();
+
+  const reminderModules = pages.flatMap(p =>
+    p.modules.filter(m => m.type === 'reminders' || m.type === 'alarms').map(m => ({ ...m, pageName: p.title }))
+  );
+
+  const handleAddReminder = (targetModuleId?: string) => {
+    if (!title.trim()) {
+      toast.error('Please enter an event title first');
+      return;
+    }
+    const eventData_ = event || {
+      id: crypto.randomUUID(),
+      title: title.trim(),
+      description,
+      date: '',
+      startsAt: new Date().toISOString(),
+      endsAt: new Date(Date.now() + 3600000).toISOString(),
+      color: '',
+    };
+    setPendingEventForReminder({ event: eventData_ as any, targetModuleId });
+    setReminderPickerOpen(false);
+    // Close the event form so the reminder dialog can open
+    if (onClose) onClose();
+    else if (onCancel) onCancel();
+  };
   const [isTodo, setIsTodo] = useState(false);
   const [countdownEnabled, setCountdownEnabled] = useState(false);
   const [countdownReminderIntervalDays, setCountdownReminderIntervalDays] = useState(2);
@@ -770,7 +802,52 @@ const EnhancedEventForm: React.FC<EnhancedEventFormProps> = ({
 
 
 
-        <div className="flex justify-end pt-4 border-t border-border">
+        <div className="flex justify-between items-center pt-4 border-t border-border">
+          {/* Add Reminder button with module picker */}
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (reminderModules.length === 0) {
+                  toast.error('Add a Reminders module to your sidebar first');
+                  return;
+                }
+                if (reminderModules.length === 1) {
+                  handleAddReminder(reminderModules[0].id);
+                } else {
+                  setReminderPickerOpen(o => !o);
+                }
+              }}
+              className="flex items-center gap-1.5 transition-all hover:bg-secondary/80"
+            >
+              <Bell size={13} />
+              Add Reminder
+              {reminderModules.length > 1 && <ChevronDown size={12} />}
+            </Button>
+
+            {/* Module picker dropdown */}
+            {reminderPickerOpen && reminderModules.length > 1 && (
+              <div className="absolute bottom-full mb-1 left-0 z-50 bg-popover border border-border rounded-md shadow-lg overflow-hidden min-w-[180px]">
+                <div className="px-2 py-1.5 text-[10px] text-gray-400 uppercase tracking-wider font-semibold border-b border-border">
+                  Choose reminder list
+                </div>
+                {reminderModules.map(m => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleAddReminder(m.id)}
+                    className="w-full flex flex-col items-start px-3 py-2 text-sm hover:bg-accent transition-colors text-left"
+                  >
+                    <span className="font-medium">{m.title}</span>
+                    <span className="text-[11px] text-gray-400">{m.pageName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Button
             type="button"
             variant="outline"

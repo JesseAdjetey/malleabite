@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ModuleInstance, SizeLevel } from '@/lib/stores/types';
+import { ModuleSizeProvider } from '@/contexts/ModuleSizeContext';
 import TodoModuleEnhanced from '../modules/TodoModuleEnhanced';
 import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
@@ -43,13 +44,16 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   isReadOnly = false,
   contentReadOnly = false,
 }) => {
+  const effectiveSizeLevel: SizeLevel = module.sizeLevel ?? (module.minimized ? 0 : 1);
+
   const moduleStyle = {
     width: '100%',
-    maxWidth: '360px',
+    maxWidth: effectiveSizeLevel >= 2 ? '100%' : '360px',
+    height: effectiveSizeLevel >= 2 ? '100%' : undefined,
   };
 
-  const effectiveSizeLevel = module.sizeLevel ?? (module.minimized ? 0 : 1);
-
+  // sizeLevel + onSizeChange flow into ModuleContainer via context,
+  // so individual module component interfaces don't need changing.
   const moduleProps = {
     title: module.title,
     onRemove: isReadOnly ? undefined : onRemove,
@@ -63,45 +67,46 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     onShare: isReadOnly ? undefined : onShare,
     isReadOnly,
     contentReadOnly,
-    sizeLevel: effectiveSizeLevel,
-    onSizeChange: isReadOnly ? undefined : onSizeChange,
   };
 
-  const moduleClassName = `mb-4 gradient-border cursor-glow ${isDragging ? 'opacity-75' : ''}`;
+  const moduleClassName = effectiveSizeLevel >= 2
+    ? `h-full w-full${isDragging ? ' opacity-75' : ''}`
+    : `mb-4 gradient-border cursor-glow${isDragging ? ' opacity-75' : ''}`;
+
+  const wrap = (children: React.ReactNode) => (
+    <ModuleSizeProvider value={{ sizeLevel: effectiveSizeLevel, onSizeChange: isReadOnly ? undefined : onSizeChange }}>
+      {children}
+    </ModuleSizeProvider>
+  );
 
   switch (module.type) {
     case 'todo':
-      return (
-        <div
-          key={module.id}
-          data-module-id={module.id}
-          style={moduleStyle}
-          className={moduleClassName}
-        >
+      return wrap(
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <TodoModuleEnhanced {...moduleProps} moduleId={module.id} sharedFromInstanceId={module.sharedFromInstanceId} sharedRole={module.sharedRole} />
         </div>
       );
     case 'pomodoro':
-      return (
+      return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <PomodoroModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'alarms':
     case 'reminders':
-      return (
+      return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <RemindersModule {...moduleProps} instanceId={module.instanceId} moduleId={module.id} />
         </div>
       );
     case 'eisenhower':
-      return (
+      return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <EisenhowerModule {...moduleProps} instanceId={module.instanceId} />
         </div>
       );
     case 'booking':
-      return (
+      return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <BookingModule {...moduleProps} instanceId={module.instanceId} />
         </div>

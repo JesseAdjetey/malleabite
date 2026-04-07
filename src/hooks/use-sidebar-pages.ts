@@ -18,7 +18,7 @@ import {
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
-import { SidebarPage, ModuleInstance, ensureModuleId, generateModuleId } from '@/lib/stores/types';
+import { SidebarPage, ModuleInstance, SizeLevel, ensureModuleId, generateModuleId } from '@/lib/stores/types';
 import { useTodoLists } from './use-todo-lists';
 
 const sanitizeModuleForFirestore = (module: ModuleInstance): ModuleInstance => {
@@ -480,6 +480,38 @@ export function useSidebarPages() {
     }
   };
 
+  // Set a module's size level
+  const setModuleSizeLevel = async (pageId: string, moduleIndex: number, level: SizeLevel) => {
+    return updateModule(pageId, moduleIndex, { sizeLevel: level, minimized: level === 0 });
+  };
+
+  // Atomically set multiple module size levels in a single Firestore write (prevents race conditions)
+  const setModulesSizeLevels = async (pageId: string, updates: Array<{ index: number; level: SizeLevel }>) => {
+    if (!user?.uid) return { success: false };
+    try {
+      const page = pages.find(p => p.id === pageId);
+      if (!page) return { success: false };
+      const updatedModules = [...page.modules];
+      for (const { index, level } of updates) {
+        if (updatedModules[index]) {
+          updatedModules[index] = sanitizeModuleForFirestore({
+            ...updatedModules[index],
+            sizeLevel: level,
+            minimized: level === 0,
+          });
+        }
+      }
+      await updateDoc(doc(db, 'sidebar_pages', pageId), {
+        modules: updatedModules,
+        updatedAt: serverTimestamp(),
+      });
+      return { success: true };
+    } catch (err) {
+      console.error('Error setting module size levels:', err);
+      return { success: false };
+    }
+  };
+
   // Get active page
   const activePage = pages.find(p => p.id === activePageId);
 
@@ -581,6 +613,8 @@ export function useSidebarPages() {
     updateModule,
     reorderModules,
     toggleModuleMinimized,
+    setModuleSizeLevel,
+    setModulesSizeLevels,
     moveModule,
     // ID-based operations
     findModuleById,

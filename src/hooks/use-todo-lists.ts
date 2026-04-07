@@ -38,6 +38,10 @@ export interface TodoItem {
   completedAt?: string;
   eventId?: string;
   isCalendarEvent?: boolean;
+  deadline?: string; // ISO date string (YYYY-MM-DD)
+  status?: 'todo' | 'in_progress' | 'done'; // Kanban column — overrides completed for column placement
+  description?: string; // Optional rich description / notes
+  pinned?: boolean; // Pinned items float to top of all views
 }
 
 const DEFAULT_COLORS = [
@@ -260,7 +264,11 @@ export function useTodoLists() {
   };
 
   // Add a todo to a specific list
-  const addTodo = async (text: string, listId?: string): Promise<{ success: boolean; todoId?: string }> => {
+  const addTodo = async (
+    text: string,
+    listId?: string,
+    options?: { deadline?: string; description?: string }
+  ): Promise<{ success: boolean; todoId?: string }> => {
     if (!user?.uid || !text.trim()) {
       return { success: false };
     }
@@ -272,13 +280,16 @@ export function useTodoLists() {
     }
 
     try {
-      const newTodo = {
+      const newTodo: any = {
         text: text.trim(),
         completed: false,
+        status: 'todo',
         listId: targetListId,
         userId: user.uid,
         createdAt: serverTimestamp()
       };
+      if (options?.deadline) newTodo.deadline = options.deadline;
+      if (options?.description) newTodo.description = options.description;
 
       const docRef = await addDoc(collection(db, 'todo_items'), newTodo);
       toast.success('Todo added');
@@ -286,6 +297,21 @@ export function useTodoLists() {
     } catch (err) {
       console.error('Error adding todo:', err);
       toast.error('Failed to add todo');
+      return { success: false };
+    }
+  };
+
+  // Update arbitrary fields on a todo item
+  const updateTodo = async (
+    todoId: string,
+    updates: Partial<Pick<TodoItem, 'text' | 'completed' | 'completedAt' | 'deadline' | 'status' | 'description' | 'pinned'>>
+  ): Promise<{ success: boolean }> => {
+    if (!user?.uid) return { success: false };
+    try {
+      await updateDoc(doc(db, 'todo_items', todoId), updates);
+      return { success: true };
+    } catch (err) {
+      console.error('Error updating todo:', err);
       return { success: false };
     }
   };
@@ -360,6 +386,7 @@ export function useTodoLists() {
     updateList,
     deleteList,
     addTodo,
+    updateTodo,
     toggleTodo,
     deleteTodo,
     moveTodo,
@@ -375,6 +402,19 @@ export async function directToggleTodo(todo: TodoItem): Promise<{ success: boole
       completed: !todo.completed,
       completedAt: !todo.completed ? now : null,
     });
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+// Standalone update — works regardless of who owns the item (for collaborative lists)
+export async function directUpdateTodo(
+  todoId: string,
+  updates: Partial<Pick<TodoItem, 'text' | 'completed' | 'completedAt' | 'deadline' | 'status' | 'description' | 'pinned'>>
+): Promise<{ success: boolean }> {
+  try {
+    await updateDoc(doc(db, 'todo_items', todoId), updates);
     return { success: true };
   } catch {
     return { success: false };

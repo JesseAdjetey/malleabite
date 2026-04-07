@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { sounds } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
@@ -8,14 +8,25 @@ import {
   Circle,
   CheckCircle,
   Loader2,
-  AlertCircle,
+  List,
+  LayoutGrid,
+  Clock,
+  Plus,
+  CalendarDays,
+  Star,
+  Pencil,
+  X,
   CheckCircle2,
   Trash2,
-  List,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEventStore } from "@/lib/store";
-import { useTodoLists, useSharedListTodos, directToggleTodo, directDeleteTodo } from "@/hooks/use-todo-lists";
+import {
+  useTodoLists,
+  useSharedListTodos,
+  directDeleteTodo,
+  directUpdateTodo,
+  TodoItem,
+} from "@/hooks/use-todo-lists";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { useModuleShare } from "@/hooks/use-module-sharing";
 import { useEisenhower } from "@/hooks/use-eisenhower";
@@ -23,7 +34,56 @@ import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integratio
 import { useMirrorSync } from "@/hooks/use-mirror-sync";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { CalendarEventType } from "@/lib/stores/types";
+import { useModuleSize } from "@/contexts/ModuleSizeContext";
 
+// ── Deadline helpers ──────────────────────────────────────────────────────────
+
+function formatDeadline(iso: string): { text: string; isOverdue: boolean; isSoon: boolean } {
+  const date = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = Math.floor((d.getTime() - today.getTime()) / 86_400_000);
+  if (diff < 0) return { text: "Overdue", isOverdue: true, isSoon: false };
+  if (diff === 0) return { text: "Today", isOverdue: false, isSoon: true };
+  if (diff === 1) return { text: "Tomorrow", isOverdue: false, isSoon: true };
+  if (diff < 7) return { text: `${diff}d`, isOverdue: false, isSoon: true };
+  return {
+    text: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    isOverdue: false,
+    isSoon: false,
+  };
+}
+
+function DeadlineBadge({ deadline }: { deadline: string }) {
+  const { text, isOverdue, isSoon } = formatDeadline(deadline);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0",
+        isOverdue
+          ? "bg-red-500/20 text-red-400"
+          : isSoon
+          ? "bg-amber-500/20 text-amber-400"
+          : "bg-muted text-muted-foreground"
+      )}
+    >
+      <Clock size={9} />
+      {text}
+    </span>
+  );
+}
+
+// ── Kanban column helper ──────────────────────────────────────────────────────
+
+function kanbanColumn(item: TodoItem): "todo" | "done" {
+  if (item.completed || item.status === "done" || item.status === "in_progress") {
+    return item.completed || item.status === "done" ? "done" : "todo";
+  }
+  return "todo";
+}
+
+// ── Shared props ──────────────────────────────────────────────────────────────
 
 interface MoveTarget {
   id: string;
@@ -38,16 +98,305 @@ interface TodoModuleEnhancedProps {
   onMinimize?: () => void;
   isDragging?: boolean;
   listId?: string;
-  // Collaboration props
   moduleId?: string;
   sharedFromInstanceId?: string;
-  sharedRole?: 'viewer' | 'editor';
+  sharedRole?: "viewer" | "editor";
   moveTargets?: MoveTarget[];
   onMoveToPage?: (pageId: string) => void;
   onShare?: () => void;
   isReadOnly?: boolean;
   contentReadOnly?: boolean;
 }
+
+// ── TodoItem Row ──────────────────────────────────────────────────────────────
+
+interface TodoRowProps {
+  item: TodoItem;
+  isViewOnly: boolean;
+  isCollaborativeModule: boolean;
+  showDeadline?: boolean;
+  onToggle: (item: TodoItem) => void;
+  onDelete: (id: string) => void;
+  onFavorite?: (id: string) => void;
+  onUpdate?: (id: string, updates: { deadline?: string; description?: string }) => void;
+  highlightedItemId?: string | null;
+  highlightedItemType?: string | null;
+  spotlightRef?: (node: HTMLDivElement | null) => void;
+  onDragStart?: (e: React.DragEvent, item: TodoItem) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+}
+
+const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow({
+  item,
+  isViewOnly,
+  showDeadline = true,
+  onToggle,
+  onDelete,
+  onFavorite,
+  onUpdate,
+  highlightedItemId,
+  highlightedItemType,
+  spotlightRef,
+  onDragStart,
+  onDragEnd,
+}, forwardedRef) {
+  const isHighlighted = highlightedItemId === item.id && highlightedItemType === "todo";
+  const { sizeLevel } = useModuleSize();
+  const isExpanded = (sizeLevel ?? 1) >= 2;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDeadline, setEditDeadline] = useState(item.deadline || "");
+  const [editDescription, setEditDescription] = useState(item.description || "");
+
+  // Sync edit state when item updates externally
+  useEffect(() => {
+    if (!isEditing) {
+      setEditDeadline(item.deadline || "");
+      setEditDescription(item.description || "");
+    }
+  }, [item.deadline, item.description, isEditing]);
+
+  const saveEdits = () => {
+    setIsEditing(false);
+    if (onUpdate) {
+      onUpdate(item.id, {
+        deadline: editDeadline || undefined,
+        description: editDescription || undefined,
+      });
+    }
+  };
+
+  const isDone = item.completed || item.status === "done";
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -16, scale: 0.95, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
+      transition={{ type: "spring", damping: 25, stiffness: 320 }}
+      ref={(node) => {
+        if (isHighlighted && spotlightRef) spotlightRef(node);
+        if (forwardedRef) {
+          if (typeof forwardedRef === "function") forwardedRef(node);
+          else forwardedRef.current = node;
+        }
+      }}
+      data-todo-id={item.id}
+      className={cn(
+        "group mb-1.5 transition-colors",
+        isExpanded
+          ? "rounded-sm hover:bg-foreground/[0.04]"
+          : "bg-gray-100 dark:bg-white/5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10",
+        isHighlighted && "event-spotlight"
+      )}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? ((e: any) => onDragStart(e, item)) as any : undefined}
+      onDragEnd={onDragEnd ? ((e: any) => onDragEnd(e)) as any : undefined}
+    >
+      {/* Main row */}
+      <div className="flex items-center gap-2 p-2">
+        {/* Checkbox */}
+        <motion.div
+          className={cn("flex-shrink-0", !isViewOnly && "cursor-pointer")}
+          onClick={isViewOnly ? undefined : () => onToggle(item)}
+          whileTap={!isViewOnly ? { scale: 0.8 } : undefined}
+          transition={{ type: "spring", damping: 20, stiffness: 400 }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {isDone ? (
+              <motion.span key="checked" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={{ type: "spring", damping: 20, stiffness: 400 }}>
+                <CheckCircle size={18} className="text-primary" />
+              </motion.span>
+            ) : (
+              <motion.span key="unchecked" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={{ type: "spring", damping: 20, stiffness: 400 }}>
+                <Circle size={18} className={isViewOnly ? "text-primary/30" : "text-primary/60"} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        {/* Title + description */}
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className={cn("text-sm text-gray-800 dark:text-white", isDone && "line-through opacity-50")}>
+            {item.text}
+          </span>
+          {item.description && !isEditing && (
+            <span className="text-[11px] text-muted-foreground truncate leading-tight">{item.description}</span>
+          )}
+        </div>
+
+        {/* Deadline badge */}
+        {showDeadline && item.deadline && <DeadlineBadge deadline={item.deadline} />}
+        {item.isCalendarEvent && <Calendar size={14} className="text-primary/70 flex-shrink-0" />}
+
+        {/* Pinned star */}
+        {!isViewOnly && onFavorite && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onFavorite(item.id); }}
+            className={cn(
+              "flex-shrink-0 p-1 rounded transition-all",
+              item.pinned
+                ? "text-amber-400 opacity-100"
+                : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-amber-400"
+            )}
+            title={item.pinned ? "Unpin" : "Pin to top"}
+          >
+            <Star size={13} fill={item.pinned ? "currentColor" : "none"} />
+          </button>
+        )}
+
+        {/* Edit */}
+        {!isViewOnly && onUpdate && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setIsEditing(!isEditing); }}
+            className={cn(
+              "flex-shrink-0 p-1 rounded transition-all",
+              isEditing
+                ? "text-primary opacity-100"
+                : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+            )}
+            title="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+
+        {/* Delete */}
+        {!isViewOnly && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+            className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 hover:bg-red-500/20 rounded transition-all"
+          >
+            <Trash2 size={13} className="text-red-400" />
+          </button>
+        )}
+      </div>
+
+      {/* Inline edit panel */}
+      <AnimatePresence>
+        {isEditing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-2.5 flex flex-col gap-1.5 border-t border-border/30 pt-2">
+              <textarea
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Add notes or description..."
+                rows={2}
+                className="w-full text-xs bg-transparent resize-none text-muted-foreground placeholder:text-muted-foreground/40 outline-none leading-relaxed"
+              />
+              <div className="flex items-center gap-2">
+                <CalendarDays size={12} className="text-muted-foreground shrink-0" />
+                <input
+                  type="date"
+                  value={editDeadline}
+                  onChange={(e) => setEditDeadline(e.target.value)}
+                  className="text-xs bg-muted/60 rounded px-2 py-0.5 text-muted-foreground border-0 outline-none"
+                />
+                {editDeadline && (
+                  <button
+                    onClick={() => setEditDeadline("")}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    className="flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded hover:bg-primary/25 transition-colors"
+                  >
+                    <CheckCircle2 size={11} />
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+});
+
+// ── Add Form ──────────────────────────────────────────────────────────────────
+
+interface AddFormProps {
+  onAdd: (text: string, deadline?: string) => void;
+  showDeadline?: boolean;
+}
+
+const AddForm: React.FC<AddFormProps> = ({ onAdd, showDeadline = false }) => {
+  const [text, setText] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [showDate, setShowDate] = useState(false);
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAdd(text.trim(), deadline || undefined);
+    setText("");
+    setDeadline("");
+    setShowDate(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          className="glass-input w-full text-sm"
+          placeholder="Add a task..."
+        />
+        {showDeadline && (
+          <button
+            onClick={() => setShowDate(!showDate)}
+            className={cn("p-2 rounded-lg transition-colors flex-shrink-0", showDate ? "bg-primary/20 text-primary" : "hover:bg-accent text-muted-foreground")}
+            title="Set deadline"
+          >
+            <CalendarDays size={14} />
+          </button>
+        )}
+        <motion.button
+          onClick={submit}
+          whileTap={{ scale: 0.93 }}
+          className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm flex-shrink-0"
+        >
+          Add
+        </motion.button>
+      </div>
+      <AnimatePresence>
+        {showDate && (
+          <motion.input
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            type="date"
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            className="glass-input text-sm text-muted-foreground"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   title,
@@ -65,219 +414,170 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   onShare,
   contentReadOnly = false,
 }) => {
-  // Get real-time role + collaboration state.
-  // Invitee → check sharedFromInstanceId; Owner → check their own moduleId.
+  const { sizeLevel } = useModuleSize();
+
   const isSharedModule = !!sharedFromInstanceId;
   const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
-  // isViewOnly: module-level viewer OR page-level viewer (contentReadOnly)
-  const isViewOnly = contentReadOnly || (isSharedModule && liveRole === 'viewer');
-  // Use listId-based querying when the module is collaborative (invitee OR owner with collaborators)
+  const isViewOnly = contentReadOnly || (isSharedModule && liveRole === "viewer");
   const isCollaborativeModule = isSharedModule || isLiveShared;
-  const [newItem, setNewItem] = useState("");
-  const [submitStatus, setSubmitStatus] = useState<{
-    success?: boolean;
-    message?: string;
-  } | null>(null);
+
   const [isDragOver, setIsDragOver] = useState(false);
-  
-  const { addEvent, events } = useEventStore();
-  const {
-    getTodosForList,
-    lists,
-    loading,
-    error,
-    addTodo,
-    toggleTodo,
-    deleteTodo,
-    updateList,
-    moveTodo,
-  } = useTodoLists();
+  const [dragOverColumn, setDragOverColumn] = useState<"todo" | "done" | null>(null);
+  const [filter, setFilter] = useState<"active" | "done">("active");
+  const [kanbanMode, setKanbanMode] = useState(false);
+
+  const { getTodosForList, lists, loading, error, addTodo, updateTodo, deleteTodo, updateList, moveTodo } = useTodoLists();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
   const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { syncTodoCompletion } = useMirrorSync();
 
-  // Spotlight highlight
-  const highlightedItemId = useEventHighlightStore(s => s.highlightedItemId);
-  const highlightedItemType = useEventHighlightStore(s => s.highlightedItemType);
+  const highlightedItemId = useEventHighlightStore((s) => s.highlightedItemId);
+  const highlightedItemType = useEventHighlightStore((s) => s.highlightedItemType);
   const spotlightRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
-  
-  // For collaborative modules (invitee OR owner with collaborators): query by listId
-  // so all participants' todos are visible regardless of who created them.
-  const sharedTodos = useSharedListTodos(isCollaborativeModule ? moduleListId : undefined);
 
-  // Use module-specific list
-  const activeList = lists.find(l => l.id === moduleListId);
-  const activeTodos = isCollaborativeModule
+  const sharedTodos = useSharedListTodos(isCollaborativeModule ? moduleListId : undefined);
+  const activeList = lists.find((l) => l.id === moduleListId);
+  const rawTodos: TodoItem[] = isCollaborativeModule
     ? sharedTodos
-    : moduleListId ? getTodosForList(moduleListId) : [];
+    : moduleListId
+    ? getTodosForList(moduleListId)
+    : [];
+
+  // Pinned items always float to top
+  const allTodos = [...rawTodos].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return 0;
+  });
+
   const { user } = useAuth();
 
-  // Sync title changes to the todo list
   useEffect(() => {
     if (moduleListId && title && activeList && title !== activeList.name) {
       updateList(moduleListId, { name: title });
     }
   }, [title, moduleListId, activeList, updateList]);
 
-  useEffect(() => {
-    if (submitStatus) {
-      const timer = setTimeout(() => {
-        setSubmitStatus(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [submitStatus]);
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleAddItem = async () => {
-    if (newItem.trim() && moduleListId) {
-      sounds.play("lightClick");
-      setSubmitStatus(null);
-      const response = await addTodo(newItem.trim(), moduleListId);
-
-      if (response.success) {
-        setNewItem("");
-        setSubmitStatus({
-          success: true,
-          message: "Todo added!",
-        });
-      } else {
-        setSubmitStatus({
-          success: false,
-          message: "Failed to add todo",
-        });
-      }
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleAddItem();
-    }
-  };
-
-  const handleToggleWithSync = async (item: any) => {
+  const handleAdd = async (text: string, deadline?: string) => {
+    if (!moduleListId) return;
     sounds.play("lightClick");
-    // For collaborative modules use direct Firestore call (item may be owned by another user)
-    if (isCollaborativeModule) {
-      await directToggleTodo(item);
-    } else {
-      await toggleTodo(item.id);
-    }
-    await syncTodoCompletion(item.id, !item.completed);
+    await addTodo(text, moduleListId, { deadline });
   };
 
-  const handleDragStart = (e: React.DragEvent, item: any) => {
-    // Stop propagation to prevent the module container from being dragged
-    e.stopPropagation();
-    
-    const todoData = {
-      id: item.id,
-      text: item.text,
-      source: "todo-module",
-      completed: item.completed,
-      collectionName: "todo_items" as const,
-      listId: moduleListId,
+  const handleToggleWithSync = async (item: TodoItem) => {
+    sounds.play("lightClick");
+    const isDone = item.completed || item.status === "done";
+    // Note: never pass `completedAt: undefined` to Firestore — it throws an error and silently fails.
+    // Only include completedAt when marking as done.
+    const updates: { status: "todo" | "done"; completed: boolean; completedAt?: string } = {
+      status: isDone ? "todo" : "done",
+      completed: !isDone,
+      ...(!isDone && { completedAt: new Date().toISOString() }),
     };
-
-    e.dataTransfer.setData("application/json", JSON.stringify(todoData));
-    e.dataTransfer.effectAllowed = "move";
-
-    // Create a drag image of just the todo item
-    const dragElement = e.currentTarget as HTMLElement;
-    if (dragElement) {
-      dragElement.classList.add("opacity-50");
-      e.dataTransfer.setDragImage(dragElement, 10, 10);
+    if (isCollaborativeModule) {
+      await directUpdateTodo(item.id, updates);
+    } else {
+      await updateTodo(item.id, updates);
     }
+    await syncTodoCompletion(item.id, !isDone);
+
+    if (!isDone) {
+      toast("Marked as done", {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            const undo = { status: "todo" as const, completed: false };
+            if (isCollaborativeModule) await directUpdateTodo(item.id, undo);
+            else await updateTodo(item.id, undo);
+            await syncTodoCompletion(item.id, false);
+          },
+        },
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    if (isCollaborativeModule) directDeleteTodo(id);
+    else deleteTodo(id);
+  };
+
+  const handleUpdateStatus = async (id: string, status: "todo" | "in_progress" | "done") => {
+    const updates: { status: "todo" | "in_progress" | "done"; completed: boolean; completedAt?: string } = {
+      status,
+      completed: status === "done",
+      ...(status === "done" && { completedAt: new Date().toISOString() }),
+    };
+    if (isCollaborativeModule) await directUpdateTodo(id, updates);
+    else await updateTodo(id, updates);
+  };
+
+  const handleFavorite = async (id: string) => {
+    const item = rawTodos.find((t) => t.id === id);
+    if (!item) return;
+    const updates = { pinned: !item.pinned };
+    if (isCollaborativeModule) await directUpdateTodo(id, updates);
+    else await updateTodo(id, updates);
+  };
+
+  const handleUpdateItem = async (id: string, updates: { deadline?: string; description?: string }) => {
+    if (isCollaborativeModule) await directUpdateTodo(id, updates);
+    else await updateTodo(id, updates);
+  };
+
+  const handleDragStart = (e: React.DragEvent, item: TodoItem) => {
+    e.stopPropagation();
+    e.dataTransfer.setData("application/json", JSON.stringify({ id: item.id, text: item.text, source: "todo-module", completed: item.completed, collectionName: "todo_items", listId: moduleListId }));
+    e.dataTransfer.effectAllowed = "move";
+    (e.currentTarget as HTMLElement).classList.add("opacity-50");
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
-    if (e.currentTarget) {
-      e.currentTarget.classList.remove("opacity-50");
-    }
+    (e.currentTarget as HTMLElement).classList.remove("opacity-50");
+    setDragOverColumn(null);
   };
 
-  // Handle drops from Eisenhower Matrix and Calendar Events
+  const handleKanbanColumnDrop = async (e: React.DragEvent, targetCol: "todo" | "done") => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverColumn(null);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+      if (data.source === "todo-module" && data.listId === moduleListId) {
+        await handleUpdateStatus(data.id, targetCol === "done" ? "done" : "todo");
+      }
+    } catch {}
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-
     try {
-      const dataString = e.dataTransfer.getData("application/json");
-      if (!dataString) return;
-
-      const data = JSON.parse(dataString);
-      console.log("📥 Todo module received drop:", data);
-
-      // Handle todo items dragged from another todo list
+      const data = JSON.parse(e.dataTransfer.getData("application/json"));
       if (data.source === "todo-module" && moduleListId && data.listId !== moduleListId) {
         const result = await moveTodo(data.id, moduleListId);
-        if (!result?.success) {
-          toast.error("Failed to move todo");
-        }
+        if (!result?.success) toast.error("Failed to move todo");
         return;
       }
-
-      // Ignore drops of todo items onto the same list
       if (data.source === "todo-module") return;
-
-      // Handle drops from Eisenhower module
       if (data.source === "eisenhower" && moduleListId) {
-        // Add to todo list
         const response = await addTodo(data.text, moduleListId);
-        
-        if (response.success) {
-          // Remove from Eisenhower matrix
-          await removeEisenhowerItem(data.id);
-          toast.success(`Moved "${data.text}" to todo list`);
-        } else {
-          toast.error("Failed to add item to todo list");
-        }
+        if (response.success) { await removeEisenhowerItem(data.id); toast.success(`Moved "${data.text}" to todo list`); }
+        else toast.error("Failed to add item to todo list");
         return;
       }
-
-      // Handle calendar event drops (Option F)
-      if (data.source !== "todo-module" && data.id && data.title) {
-        const eventData: CalendarEventType = {
-          id: data.id,
-          title: data.title,
-          description: data.description || "",
-          startsAt: data.startsAt || new Date().toISOString(),
-          endsAt: data.endsAt || new Date().toISOString(),
-          isTodo: data.isTodo,
-          color: data.color,
-          calendarId: data.calendarId,
-        };
-
+      if (data.id && data.title) {
+        const eventData: CalendarEventType = { id: data.id, title: data.title, description: data.description || "", startsAt: data.startsAt || new Date().toISOString(), endsAt: data.endsAt || new Date().toISOString(), isTodo: data.isTodo, color: data.color, calendarId: data.calendarId };
         await handleCreateTodoFromEvent(eventData);
       }
-    } catch (error) {
-      console.error("Error handling drop in todo module:", error);
-      toast.error("Failed to process drop");
-    }
+    } catch { toast.error("Failed to process drop"); }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    
-    // Check if the drag data is from Eisenhower
-    const types = e.dataTransfer.types;
-    if (types.includes("application/json")) {
-      e.dataTransfer.dropEffect = "move";
-      setIsDragOver(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear if leaving the container entirely
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-      setIsDragOver(false);
-    }
-  };
+  // ── Container + row props ────────────────────────────────────────────────────
 
   const containerProps = {
     title,
@@ -290,189 +590,264 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     onShare,
   };
 
-  if (isMinimized) {
-    return (
-      <ModuleContainer {...containerProps}>
-        <div className="text-center text-sm text-muted-foreground py-2">
-          {loading ? "Loading..." : `${activeTodos.length} todo items`}
-        </div>
-      </ModuleContainer>
-    );
-  }
+  const rowProps = {
+    isViewOnly,
+    isCollaborativeModule,
+    onToggle: handleToggleWithSync,
+    onDelete: handleDelete,
+    onFavorite: isViewOnly ? undefined : handleFavorite,
+    onUpdate: isViewOnly ? undefined : handleUpdateItem,
+    highlightedItemId,
+    highlightedItemType,
+    spotlightRef,
+    onDragStart: handleDragStart,
+    onDragEnd: handleDragEnd,
+  };
+
+  // ── Loading / Auth guards ────────────────────────────────────────────────────
 
   if (!user) {
     return (
       <ModuleContainer {...containerProps}>
-        <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
-          Sign in to use todos
+        <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">Sign in to use todos</div>
+      </ModuleContainer>
+    );
+  }
+
+  // ── L1: Normal view ──────────────────────────────────────────────────────────
+
+  if (sizeLevel <= 1) {
+    return (
+      <ModuleContainer {...containerProps}>
+        {isSharedModule && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", isViewOnly ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary")}>
+              {isViewOnly ? "View only" : "Shared — Editor"}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn("transition-all duration-150 rounded-lg", isDragOver && !isViewOnly && "ring-2 ring-primary/50 bg-primary/10")}
+          onDrop={isViewOnly ? undefined : handleDrop}
+          onDragOver={isViewOnly ? undefined : (e) => { e.preventDefault(); if (e.dataTransfer.types.includes("application/json")) { e.dataTransfer.dropEffect = "move"; setIsDragOver(true); } }}
+          onDragLeave={(e) => { const t = e.relatedTarget as HTMLElement; if (!t || !e.currentTarget.contains(t)) setIsDragOver(false); }}
+        >
+          <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
+            {loading ? (
+              <div className="flex justify-center items-center p-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span className="ml-2 text-sm">Loading...</span></div>
+            ) : error ? (
+              <div className="text-center text-sm text-red-400 p-2">Error: {error}</div>
+            ) : allTodos.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground p-4"><List className="w-8 h-8 mx-auto mb-2 opacity-50" />No todos yet</div>
+            ) : (
+              <AnimatePresence mode="popLayout" initial={false}>
+                {allTodos.map((item) => (
+                  <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+          {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
         </div>
       </ModuleContainer>
     );
   }
 
+  // ── Shared computed values for L2 / L3 ──────────────────────────────────────
+
+  const activeTodoCount = allTodos.filter((t) => !t.completed && t.status !== "done").length;
+  const doneTodoCount = allTodos.filter((t) => t.completed || t.status === "done").length;
+
+  const filteredTodos = allTodos.filter((item) => {
+    if (filter === "active") return !item.completed && item.status !== "done";
+    if (filter === "done") return item.completed || item.status === "done";
+    return true;
+  });
+
+  // ── L2: Sidebar fill ─────────────────────────────────────────────────────────
+
+  if (sizeLevel === 2) {
+    return (
+      <ModuleContainer {...containerProps}>
+        <div className="flex flex-col gap-3 h-full overflow-hidden">
+          {/* Stats */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{activeTodoCount} active</span>
+            <span>·</span>
+            <span>{doneTodoCount} done</span>
+            {isSharedModule && (
+              <span className={cn("ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium", isViewOnly ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary")}>
+                {isViewOnly ? "View only" : "Shared"}
+              </span>
+            )}
+          </div>
+
+          {/* Filter tabs */}
+          <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5">
+            {(["active", "done"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn("flex-1 text-xs py-1 rounded-md transition-all capitalize font-medium", filter === f ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                {f === "active" ? `Active${activeTodoCount > 0 ? ` (${activeTodoCount})` : ""}` : `Done${doneTodoCount > 0 ? ` (${doneTodoCount})` : ""}`}
+              </button>
+            ))}
+          </div>
+
+          {/* List */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {loading ? (
+              <div className="flex justify-center items-center p-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+            ) : filteredTodos.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-8"><List className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                {filter === "done" ? "No completed tasks" : "All caught up!"}
+              </div>
+            ) : (
+              <AnimatePresence mode="popLayout" initial={false}>
+                {filteredTodos.map((item) => (
+                  <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                ))}
+              </AnimatePresence>
+            )}
+          </div>
+
+          {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
+        </div>
+      </ModuleContainer>
+    );
+  }
+
+  // ── L3: Fullscreen — Kanban + List toggle ────────────────────────────────────
+
+  const todoItems = allTodos.filter((i) => kanbanColumn(i) === "todo");
+  const doneItems = allTodos.filter((i) => kanbanColumn(i) === "done");
+
+  const kanbanColumns: Array<{
+    key: "todo" | "done";
+    label: string;
+    items: TodoItem[];
+    accent: string;
+    headerColor: string;
+  }> = [
+    { key: "todo", label: "Active", items: todoItems, accent: "border-blue-400/40", headerColor: "text-blue-400" },
+    { key: "done", label: "Done", items: doneItems, accent: "border-green-400/40", headerColor: "text-green-400" },
+  ];
+
   return (
     <ModuleContainer {...containerProps}>
-      {/* Shared module indicator */}
-      {isSharedModule && (
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className={cn(
-            "text-xs px-2 py-0.5 rounded-full font-medium",
-            isViewOnly
-              ? "bg-muted text-muted-foreground"
-              : "bg-primary/15 text-primary"
-          )}>
-            {isViewOnly ? 'View only' : 'Shared — Editor'}
-          </span>
-        </div>
-      )}
-
-      {/* Droppable area for Eisenhower items */}
-      <div
-        className={cn(
-          "transition-all duration-150 rounded-lg",
-          isDragOver && !isViewOnly && "ring-2 ring-primary/50 bg-primary/10"
-        )}
-        onDrop={isViewOnly ? undefined : handleDrop}
-        onDragOver={isViewOnly ? undefined : handleDragOver}
-        onDragLeave={isViewOnly ? undefined : handleDragLeave}
-      >
-        {/* Todo Items */}
-        <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
-        {loading ? (
-          <div className="flex justify-center items-center p-4">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="ml-2 text-sm">Loading...</span>
-          </div>
-        ) : error ? (
-          <div className="text-center text-sm text-red-400 p-2">
-            Error: {error}
-          </div>
-        ) : activeTodos.length === 0 ? (
-          <div className="text-center text-sm text-muted-foreground p-4">
-            <List className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            No todos in this list
-          </div>
-        ) : (
-          <AnimatePresence mode="popLayout" initial={false}>
-          {activeTodos.map((item) => (
-            <motion.div
-              key={item.id}
-              layout
-              initial={{ opacity: 0, y: -6, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -16, scale: 0.95, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } }}
-              transition={{ type: "spring", damping: 25, stiffness: 320 }}
-              ref={highlightedItemId === item.id && highlightedItemType === 'todo' ? spotlightRef : undefined}
-              data-todo-id={item.id}
-              className={cn(
-                "flex items-center gap-2 bg-gray-100 dark:bg-white/5 p-2 rounded-lg mb-2 group cursor-pointer hover:bg-gray-200 dark:hover:bg-white/10 transition-colors",
-                highlightedItemId === item.id && highlightedItemType === 'todo' && "event-spotlight"
-              )}
-              draggable={true}
-              onDragStart={(e) => handleDragStart(e, item)}
-              onDragEnd={handleDragEnd}
+      <div className="flex flex-col gap-3 h-full overflow-hidden">
+        {/* View toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+            <button
+              onClick={() => setKanbanMode(false)}
+              className={cn("flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all", !kanbanMode ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
-              <motion.div
-                className={cn("flex-shrink-0", !isViewOnly && "cursor-pointer")}
-                onClick={isViewOnly ? undefined : () => handleToggleWithSync(item)}
-                whileTap={!isViewOnly ? { scale: 0.8 } : undefined}
-                transition={{ type: "spring", damping: 20, stiffness: 400 }}
-              >
-                <AnimatePresence mode="wait" initial={false}>
-                  {item.completed ? (
-                    <motion.span
-                      key="checked"
-                      initial={{ scale: 0.6, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.6, opacity: 0 }}
-                      transition={{ type: "spring", damping: 20, stiffness: 400 }}
-                    >
-                      <CheckCircle size={18} className="text-primary" />
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="unchecked"
-                      initial={{ scale: 0.6, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.6, opacity: 0 }}
-                      transition={{ type: "spring", damping: 20, stiffness: 400 }}
-                    >
-                      <Circle size={18} className={isViewOnly ? "text-primary/30" : "text-primary/60"} />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-              <span
-                className={cn("text-sm flex-1 text-gray-800 dark:text-white", {
-                  "line-through opacity-50": item.completed,
-                })}
-              >
-                {item.text}
-              </span>
-              {item.isCalendarEvent && (
-                <Calendar size={14} className="text-primary/70 flex-shrink-0" />
-              )}
-              {!isViewOnly && (
-                <button
-                  onClick={() => isCollaborativeModule ? directDeleteTodo(item.id) : deleteTodo(item.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all"
-                >
-                  <Trash2 size={14} className="text-red-400" />
-                </button>
-              )}
-            </motion.div>
-          ))}
-          </AnimatePresence>
-        )}
-      </div>
-
-      {/* Status Message */}
-      <AnimatePresence>
-        {submitStatus && (
-          <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97, transition: { duration: 0.15 } }}
-            transition={{ type: "spring", damping: 25, stiffness: 320 }}
-            className={cn(
-              "text-xs p-2 mb-2 rounded-md flex items-center",
-              submitStatus.success
-                ? "bg-green-500/20 text-green-300"
-                : "bg-red-500/20 text-red-300"
-            )}
-          >
-            {submitStatus.success ? (
-              <CheckCircle2 size={14} className="mr-1" />
-            ) : (
-              <AlertCircle size={14} className="mr-1" />
-            )}
-            {submitStatus.message}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Add Todo Input — hidden for view-only shared modules */}
-      {!isViewOnly && (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="glass-input w-full text-sm"
-            placeholder="Add a task..."
-          />
-          <motion.button
-            onClick={handleAddItem}
-            whileTap={{ scale: 0.93 }}
-            transition={{ type: "spring", damping: 20, stiffness: 400 }}
-            className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm"
-          >
-            Add
-          </motion.button>
+              <List size={12} /> List
+            </button>
+            <button
+              onClick={() => setKanbanMode(true)}
+              className={cn("flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all", kanbanMode ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <LayoutGrid size={12} /> Kanban
+            </button>
+          </div>
+          <span className="text-xs text-muted-foreground">{allTodos.length} task{allTodos.length !== 1 ? "s" : ""}</span>
         </div>
-      )}
-      </div> {/* Close droppable area */}
+
+        <AnimatePresence mode="wait">
+          {kanbanMode ? (
+            // ── Kanban ──────────────────────────────────────────────────────
+            <motion.div
+              key="kanban"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.18 }}
+              className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden min-h-0 pb-1"
+            >
+              {kanbanColumns.map(({ key, label, items, accent, headerColor }) => (
+                <div
+                  key={key}
+                  className={cn(
+                    "flex flex-col flex-1 min-w-[200px] rounded-xl border transition-colors",
+                    accent,
+                    dragOverColumn === key ? "bg-primary/5 border-primary/40" : "bg-muted/30"
+                  )}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverColumn(key); }}
+                  onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverColumn(null); }}
+                  onDrop={(e) => handleKanbanColumnDrop(e, key)}
+                >
+                  {/* Column header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-inherit">
+                    <span className={cn("text-xs font-semibold uppercase tracking-wide", headerColor)}>{label}</span>
+                    <span className="text-xs text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">{items.length}</span>
+                  </div>
+                  {/* Column items */}
+                  <div className="flex-1 overflow-y-auto p-2">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      {items.map((item) => (
+                        <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                      ))}
+                    </AnimatePresence>
+                    {items.length === 0 && (
+                      <div className="text-center text-xs text-muted-foreground/50 py-6">
+                        {dragOverColumn === key ? "Drop here" : "Empty"}
+                      </div>
+                    )}
+                  </div>
+                  {/* Add form in To Do column only */}
+                  {!isViewOnly && key === "todo" && (
+                    <div className="p-2 border-t border-inherit">
+                      <AddForm onAdd={handleAdd} showDeadline />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </motion.div>
+          ) : (
+            // ── List ─────────────────────────────────────────────────────────
+            <motion.div
+              key="list"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              transition={{ duration: 0.18 }}
+              className="flex flex-col gap-3 flex-1 overflow-hidden min-h-0"
+            >
+              {/* Filter tabs */}
+              <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5">
+                {(["active", "done"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={cn("flex-1 text-xs py-1 rounded-md transition-all capitalize font-medium", filter === f ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    {f === "active" ? `Active${activeTodoCount > 0 ? ` (${activeTodoCount})` : ""}` : `Done${doneTodoCount > 0 ? ` (${doneTodoCount})` : ""}`}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {loading ? (
+                  <div className="flex justify-center items-center p-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
+                ) : filteredTodos.length === 0 ? (
+                  <div className="text-center text-sm text-muted-foreground py-10"><List className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    {filter === "done" ? "No completed tasks" : "All caught up!"}
+                  </div>
+                ) : (
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {filteredTodos.map((item) => (
+                      <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                    ))}
+                  </AnimatePresence>
+                )}
+              </div>
+              {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </ModuleContainer>
   );
 };

@@ -22,6 +22,8 @@ import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import dayjs from 'dayjs';
+import { useModuleSize } from '@/contexts/ModuleSizeContext';
+import { cn } from '@/lib/utils';
 
 interface BookingModuleProps {
   title?: string;
@@ -31,6 +33,11 @@ interface BookingModuleProps {
   isMinimized?: boolean;
   isDragging?: boolean;
   instanceId?: string;
+  moveTargets?: { id: string; title: string }[];
+  onMoveToPage?: (pageId: string) => void;
+  onShare?: () => void;
+  isReadOnly?: boolean;
+  contentReadOnly?: boolean;
 }
 
 // ─── Share Sheet ──────────────────────────────────────────────────────────────
@@ -495,8 +502,14 @@ const BookingModule: React.FC<BookingModuleProps> = ({
   isMinimized = false,
   isDragging = false,
   instanceId,
+  moveTargets,
+  onMoveToPage,
+  onShare: onShareModule,
+  isReadOnly,
+  contentReadOnly,
 }) => {
   const { user } = useAuth();
+  const { sizeLevel } = useModuleSize();
 
   const {
     bookingPages,
@@ -557,8 +570,12 @@ const BookingModule: React.FC<BookingModuleProps> = ({
       onMinimize={onMinimize}
       isMinimized={isMinimized}
       isDragging={isDragging}
+      moveTargets={moveTargets}
+      onMoveToPage={onMoveToPage}
+      onShare={onShareModule}
+      isReadOnly={isReadOnly}
     >
-      <div className="space-y-3 overflow-y-auto max-h-[420px] pr-0.5">
+      <div className={cn("space-y-3 overflow-y-auto pr-0.5", sizeLevel >= 2 ? "flex-1 min-h-0 h-full" : "max-h-[420px]")}>
         {loading ? (
           <div className="flex justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

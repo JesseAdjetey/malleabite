@@ -87,8 +87,8 @@ const ModuleExpandedOverlay: React.FC<ModuleExpandedOverlayProps> = ({
   return (
     <motion.div
       className={cn(
-        'flex flex-col bg-background overflow-hidden',
-        level === 2 ? 'absolute inset-0 z-20 rounded-none' : 'fixed inset-0 z-[100]',
+        'flex flex-col overflow-hidden relative',
+        level === 2 ? 'absolute inset-0 z-[80] rounded-none' : 'fixed inset-0 z-[100]',
       )}
       variants={overlayVariants}
       initial="initial"
@@ -96,67 +96,76 @@ const ModuleExpandedOverlay: React.FC<ModuleExpandedOverlayProps> = ({
       exit="exit"
       transition={{ type: 'spring', damping: 26, stiffness: 280 }}
     >
+      {/* ── Background layers (matches app GridBackground) ───── */}
+      <div className="absolute inset-0 dark:hidden bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]" />
+      <div className="absolute inset-0 dark:hidden bg-[radial-gradient(circle_800px_at_100%_200px,rgba(213,197,255,0.25),transparent)] opacity-60 pointer-events-none" />
+      <div
+        className="absolute inset-0 hidden dark:block"
+        style={{
+          backgroundColor: '#141420',
+          backgroundImage: `radial-gradient(circle at 25% 25%, #2a2a3a 0.5px, transparent 1px), radial-gradient(circle at 75% 75%, #1e1e2e 0.5px, transparent 1px)`,
+          backgroundSize: '10px 10px',
+        }}
+      />
+
       {/* ── Navigation strip ─────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/40 bg-background/95 backdrop-blur-sm shrink-0">
+      <div className="relative z-10 flex items-center gap-2 px-3 py-2.5 shrink-0">
         {/* Left: page navigation */}
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-0.5 min-w-0">
           <button
             onClick={() => canGoPrev && onChangePage(pages[currentPageIndex - 1].id)}
             disabled={!canGoPrev}
-            className="p-1 rounded-md hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-1 rounded-lg hover:bg-accent disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-muted-foreground"
           >
-            <ChevronLeft size={14} />
+            <ChevronLeft size={13} />
           </button>
-          <span className="text-xs font-medium text-muted-foreground truncate max-w-[72px]">
+          <span className="text-xs text-muted-foreground/70 truncate max-w-[72px] px-0.5">
             {pages[currentPageIndex]?.title ?? '—'}
           </span>
           <button
             onClick={() => canGoNext && onChangePage(pages[currentPageIndex + 1].id)}
             disabled={!canGoNext}
-            className="p-1 rounded-md hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="p-1 rounded-lg hover:bg-accent disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-muted-foreground"
           >
-            <ChevronRight size={14} />
+            <ChevronRight size={13} />
           </button>
         </div>
 
-        {/* Divider */}
-        <div className="w-px h-4 bg-border/60 shrink-0" />
-
-        {/* Center: module icons */}
-        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar">
+        {/* Center: module tabs */}
+        <div className="flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto no-scrollbar">
           {allModulesOnPage.map((m) => (
             <button
               key={m.id}
               onClick={() => onSwitchModule(m.id)}
               title={m.title}
               className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all shrink-0',
+                'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all shrink-0',
                 m.id === expandedModule.id
-                  ? 'bg-purple-500/20 text-purple-400 ring-1 ring-purple-400/40'
-                  : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                  ? 'bg-primary/10 text-primary font-medium'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
               )}
             >
               {MODULE_ICON[m.type]}
-              <span className="hidden sm:inline max-w-[60px] truncate">{m.title}</span>
+              <span className="hidden sm:inline max-w-[72px] truncate">{m.title}</span>
             </button>
           ))}
         </div>
 
         {/* Right: size level picker + close */}
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Size level dots */}
+        <div className="flex items-center gap-0.5 shrink-0">
           {([0, 1, 2, 3] as SizeLevel[]).map((lvl) => (
             <button
               key={lvl}
               onClick={() => {
-                if (lvl <= 1) onClose(); // going to level 0 or 1 = close overlay
-                else onSizeChange(lvl);
+                if (lvl >= 2) onSizeChange(lvl);
+                else if (lvl === 1) onClose();
+                else onSizeChange(0);
               }}
               title={['Collapse', 'Normal', 'Sidebar', 'Fullscreen'][lvl]}
               className={cn(
-                'flex items-center justify-center w-6 h-6 rounded transition-all',
+                'flex items-center justify-center w-6 h-6 rounded-lg transition-all',
                 lvl === currentSizeLevel
-                  ? 'bg-purple-500/20 text-purple-400'
+                  ? 'bg-primary/10 text-primary'
                   : 'hover:bg-accent text-muted-foreground'
               )}
             >
@@ -164,11 +173,9 @@ const ModuleExpandedOverlay: React.FC<ModuleExpandedOverlayProps> = ({
             </button>
           ))}
 
-          <div className="w-px h-4 bg-border/60 mx-1" />
-
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            className="ml-1 p-1.5 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Close"
           >
             <X size={14} />
@@ -177,7 +184,7 @@ const ModuleExpandedOverlay: React.FC<ModuleExpandedOverlayProps> = ({
       </div>
 
       {/* ── Module content ───────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative z-10 flex-1 overflow-y-auto min-h-0">
         {children}
       </div>
     </motion.div>

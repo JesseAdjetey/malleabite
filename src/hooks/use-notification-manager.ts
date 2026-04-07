@@ -16,7 +16,7 @@ export const REMINDER_SOUNDS = [
 
 export function useNotificationManager() {
     const { alarms, updateAlarm } = useAlarms();
-    const { reminders, toggleReminderActive } = useReminders();
+    const { reminders } = useReminders();
     const countdowns = useCountdownEvents();
     const triggeredAlarmsRef = useRef<Set<string>>(new Set(
         JSON.parse(sessionStorage.getItem('triggered-alarms') || '[]') as string[]
@@ -25,6 +25,7 @@ export function useNotificationManager() {
         JSON.parse(sessionStorage.getItem('triggered-reminders') || '[]') as string[]
     ));
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const showNotificationRef = useRef<((title: string, body: string, soundId?: string) => void) | null>(null);
 
     // Request notification permission on mount + create channels on Android
     useEffect(() => {
@@ -68,6 +69,26 @@ export function useNotificationManager() {
         audioRef.current = new Audio(sound.url);
         audioRef.current.loop = true; // Loop the sound
         audioRef.current.play().catch(err => console.error('Error playing sound:', err));
+    }, [stopSound]);
+
+    // Web: listen for messages from the service worker (e.g. "Turn Off" action clicked)
+    useEffect(() => {
+        if (isNative || !('serviceWorker' in navigator)) return;
+
+        const handleSWMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'stop-sound') {
+                stopSound();
+            } else if (event.data?.type === 'snooze-notification') {
+                stopSound();
+                const { title, body, delayMs } = event.data;
+                setTimeout(() => {
+                    showNotificationRef.current?.(title, body);
+                }, delayMs ?? 300000);
+            }
+        };
+
+        navigator.serviceWorker.addEventListener('message', handleSWMessage);
+        return () => navigator.serviceWorker.removeEventListener('message', handleSWMessage);
     }, [stopSound]);
 
     // Native: sync all alarms/reminders to OS-scheduled notifications on startup
@@ -132,8 +153,8 @@ export function useNotificationManager() {
     }, [playSound, stopSound]);
 
     const showNotification = useCallback((title: string, body: string, soundId?: string) => {
-        // Play sound
-        playSound(soundId);
+        // Play sound only if soundId is provided (undefined = silent reminder)
+        if (soundId) playSound(soundId);
 
         if (isNative) {
             // Use Capacitor LocalNotifications on native
@@ -149,20 +170,32 @@ export function useNotificationManager() {
                 });
             });
         } else if ('Notification' in window && Notification.permission === 'granted') {
-            // Show browser notification on web
-            const notification = new Notification(title, {
-                body,
-                icon: '/favicon.ico',
-                badge: '/favicon.ico',
-                requireInteraction: true,
-                tag: `alarm-${Date.now()}`
-            });
-
-            notification.onclick = () => {
-                window.focus();
-                notification.close();
-                stopSound();
-            };
+            // Use service worker notifications — supports "Turn Off" action button
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    const options: NotificationOptions = {
+                        body,
+                        icon: '/assets/logo.png',
+                        badge: '/assets/icons/icon-48.webp',
+                        requireInteraction: true,
+                        tag: `alarm-${Date.now()}`,
+                        data: { type: 'alarm' },
+                    };
+                    // `actions` is a valid browser API but not in TS lib typedefs
+                    (options as Record<string, unknown>).actions = [
+                        { action: 'snooze', title: '⏸ Snooze 5 min' },
+                        { action: 'dismiss', title: '✕ Turn Off' },
+                    ];
+                    registration.showNotification(title, options);
+                }).catch(() => {
+                    // SW not ready — fallback to basic Notification
+                    const n = new Notification(title, { body, icon: '/favicon.ico', requireInteraction: true });
+                    n.onclick = () => { window.focus(); n.close(); stopSound(); };
+                });
+            } else {
+                const n = new Notification(title, { body, icon: '/favicon.ico', requireInteraction: true });
+                n.onclick = () => { window.focus(); n.close(); stopSound(); };
+            }
         }
 
         // Also show toast notification as fallback (works everywhere)
@@ -177,6 +210,7 @@ export function useNotificationManager() {
             onAutoClose: () => { stopSound(); },
         });
     }, [playSound, stopSound]);
+    showNotificationRef.current = showNotification;
 
     const shouldTriggerAlarm = useCallback((alarm: Alarm, now: Date): boolean => {
         // console.log('[NotificationManager] Checking alarm:', {
@@ -258,9 +292,6 @@ export function useNotificationManager() {
             alarm.soundId
         );
 
-        // Mally voice announcement
-        speakNotification(`Alarm: ${alarm.title}`);
-
         // If it's a one-time alarm (no repeat days), disable it
         if (!alarm.repeatDays || alarm.repeatDays.length === 0) {
             updateAlarm(alarm.id, { enabled: false });
@@ -285,17 +316,11 @@ export function useNotificationManager() {
         showNotification(
             `🔔 ${reminder.title}`,
             reminder.description || 'Reminder',
-            reminder.soundId || 'default'
+            reminder.soundId // pass undefined as-is so silent reminders don't play sound
         );
 
-        // Mally voice announcement
-        const voiceText = reminder.description
-            ? `Reminder: ${reminder.title}. ${reminder.description}`
-            : `Reminder: ${reminder.title}`;
-        speakNotification(voiceText);
-
-        // Mark reminder as inactive after triggering
-        toggleReminderActive(reminder.id, false);
+        // Do NOT deactivate — keep reminder visible as "overdue" until user dismisses it.
+        // The triggeredRemindersRef prevents re-firing in the same session.
 
         // Clear from triggered set after 2 minutes
         setTimeout(() => {
@@ -304,7 +329,7 @@ export function useNotificationManager() {
                 sessionStorage.setItem('triggered-reminders', JSON.stringify([...triggeredRemindersRef.current]));
             }
         }, 120000);
-    }, [showNotification, toggleReminderActive]);
+    }, [showNotification]);
 
     // Check alarms and reminders every 30 seconds (web only — native uses OS-scheduled notifications)
     useEffect(() => {

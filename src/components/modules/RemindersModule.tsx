@@ -10,7 +10,7 @@ import { useAlarms, Alarm } from '@/hooks/use-alarms';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
-import { useCalendarEvents } from '@/hooks/use-calendar-events';
+import { useEventStore } from '@/lib/stores/event-store';
 import { useCalendarFilterStore, PERSONAL_CALENDAR_ID } from '@/lib/stores/calendar-filter-store';
 import { Input } from '@/components/ui/input';
 import { Form, FormField, FormItem, FormLabel, FormControl } from '@/components/ui/form';
@@ -22,6 +22,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useEventHighlightStore } from '@/lib/stores/event-highlight-store';
 import { useReminderEventPickerStore } from '@/lib/stores/reminder-event-picker-store';
 import { cn } from '@/lib/utils';
+import { useModuleSize } from '@/contexts/ModuleSizeContext';
 
 const resolveDate = (date: any): Date => {
   if (date?.toDate && typeof date.toDate === 'function') return date.toDate();
@@ -46,6 +47,11 @@ interface RemindersModuleProps {
   isDragging?: boolean;
   instanceId?: string;
   moduleId?: string; // stable module.id from sidebar-store (for event-form → reminder linking)
+  moveTargets?: { id: string; title: string }[];
+  onMoveToPage?: (pageId: string) => void;
+  onShare?: () => void;
+  isReadOnly?: boolean;
+  contentReadOnly?: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -107,7 +113,7 @@ interface EventPickerProps {
 }
 
 const EventPicker: React.FC<EventPickerProps> = ({ value, onChange, activeCalendarIds }) => {
-  const { events } = useCalendarEvents();
+  const { events } = useEventStore();
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -227,8 +233,10 @@ const Chip: React.FC<{ active: boolean; onClick: () => void; children: React.Rea
 
 const RemindersModule: React.FC<RemindersModuleProps> = ({
   title = "Reminders", onRemove, onTitleChange, onMinimize,
-  isMinimized = false, isDragging = false, instanceId, moduleId
+  isMinimized = false, isDragging = false, instanceId, moduleId,
+  moveTargets, onMoveToPage, onShare, isReadOnly, contentReadOnly,
 }) => {
+  const { sizeLevel, onSizeChange } = useModuleSize();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
@@ -266,11 +274,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     reminders, loading, addReminder, updateReminder, deleteReminder, completeReminder, getSounds,
   } = useReminders(instanceId);
   const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms(instanceId);
-  const { events } = useCalendarEvents();
+  const { events } = useEventStore();
   const { accounts } = useCalendarFilterStore();
 
   const {
     isPickingEvent, pickedEvent, pendingFormData, startPicking, clearPickedEvent,
+    initiatorInstanceId,
     pendingEventForReminder, setPendingEventForReminder,
   } = useReminderEventPickerStore();
 
@@ -283,6 +292,8 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   // ── Open when calendar-browse returns a picked event ──────────────────────
   useEffect(() => {
     if (!pickedEvent || isPickingEvent) return;
+    // Only react if this instance initiated the picking
+    if (initiatorInstanceId && initiatorInstanceId !== instanceId) return;
     setIsEditing(false);
     setSelectedReminder(null);
     setWhenMode('event');
@@ -301,7 +312,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     clearPickedEvent();
     skipDialogResetRef.current = true;
     setIsDialogOpen(true);
-  }, [pickedEvent, isPickingEvent]);
+  }, [pickedEvent, isPickingEvent, initiatorInstanceId, instanceId]);
 
   // ── Open when triggered from the event form ───────────────────────────────
   useEffect(() => {
@@ -343,7 +354,28 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     return { overdue, today, tomorrow, upcoming };
   }, [activeReminders, now]);
 
-  const linkedEvent = useMemo(() => linkedEventId ? events.find(e => e.id === linkedEventId) || null : null, [events, linkedEventId]);
+  const linkedEvent = useMemo(() => {
+    if (!linkedEventId) return null;
+    // Exact match (normal events)
+    const exact = events.find(e => e.id === linkedEventId);
+    if (exact) return exact;
+    // Recurring instance ID: "baseId_YYYY-MM-DD" — look up base event and reconstruct instance
+    const lastUnderscore = linkedEventId.lastIndexOf('_');
+    if (lastUnderscore === -1) return null;
+    const baseId = linkedEventId.substring(0, lastUnderscore);
+    const datePart = linkedEventId.substring(lastUnderscore + 1);
+    const base = events.find(e => e.id === baseId);
+    if (!base) return null;
+    const baseStart = dayjs(base.startsAt);
+    const duration = dayjs(base.endsAt).diff(baseStart, 'minute');
+    const instanceStart = dayjs(datePart).hour(baseStart.hour()).minute(baseStart.minute()).second(0);
+    return {
+      ...base,
+      id: linkedEventId,
+      startsAt: instanceStart.toISOString(),
+      endsAt: instanceStart.add(duration, 'minute').toISOString(),
+    };
+  }, [events, linkedEventId]);
 
   const computedEventTime = useMemo(() => {
     if (!linkedEvent) return null;
@@ -507,10 +539,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
       soundEnabled,
       whenMode: 'event',
     };
-    startPicking(snapshot as any);
+    startPicking(snapshot as any, instanceId);
     setIsDialogOpen(false);
+    // If fullscreen, drop to sidebar so the calendar is visible
+    if (sizeLevel === 3 && onSizeChange) onSizeChange(2);
     toast('Tap any event in the calendar to link it', { duration: 4000 });
-  }, [form, soundEnabled, startPicking]);
+  }, [form, soundEnabled, startPicking, instanceId, sizeLevel, onSizeChange]);
 
   const hasItems = activeReminders.length > 0 || alarms.length > 0;
 
@@ -523,9 +557,16 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     const isDeleting = deletingId === item.id;
     return (
       <div key={`reminder-${item.id}`} ref={isHighlighted ? spotlightRef : undefined} data-reminder-id={item.id}
-        className={cn("group flex items-start gap-2 px-2 py-1.5 rounded-lg transition-colors",
-          isOverdue ? "bg-red-50 dark:bg-red-950/30" : "hover:bg-gray-100/60 dark:hover:bg-white/5",
-          isHighlighted && "event-spotlight")}>
+        className={cn(
+          "group flex items-start gap-2 px-2 py-1.5 transition-colors",
+          sizeLevel < 2 ? "rounded-lg" : "rounded-sm",
+          isOverdue
+            ? "bg-red-50 dark:bg-red-950/30"
+            : sizeLevel >= 2
+              ? "hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]"
+              : "hover:bg-gray-100/60 dark:hover:bg-white/5",
+          isHighlighted && "event-spotlight"
+        )}>
         <button onClick={() => completeReminder(item.id)}
           className={cn("mt-0.5 flex-shrink-0 w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center",
             isOverdue ? "border-red-400 hover:bg-red-400" : "border-gray-300 dark:border-gray-600 hover:border-primary hover:bg-primary/10")}
@@ -575,9 +616,14 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     const isDeleting = deletingId === `alarm-${item.id}`;
     return (
       <div key={`alarm-${item.id}`} ref={isHighlighted ? spotlightRef : undefined} data-alarm-id={item.id}
-        className={cn("group flex items-start gap-2 px-2 py-1.5 rounded-lg transition-colors",
-          item.enabled ? "hover:bg-blue-50/60 dark:hover:bg-blue-900/20" : "opacity-50 hover:bg-gray-100/60 dark:hover:bg-white/5",
-          isHighlighted && "event-spotlight")}>
+        className={cn(
+          "group flex items-start gap-2 px-2 py-1.5 transition-colors",
+          sizeLevel < 2 ? "rounded-lg" : "rounded-sm",
+          item.enabled
+            ? sizeLevel >= 2 ? "hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]" : "hover:bg-blue-50/60 dark:hover:bg-blue-900/20"
+            : sizeLevel >= 2 ? "opacity-50 hover:bg-foreground/[0.04]" : "opacity-50 hover:bg-gray-100/60 dark:hover:bg-white/5",
+          isHighlighted && "event-spotlight"
+        )}>
         <AlarmClock size={14} className={cn("mt-0.5 flex-shrink-0", item.enabled ? "text-blue-500 dark:text-blue-400" : "text-gray-400")} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-1">
@@ -879,8 +925,9 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
 
   return (
     <ModuleContainer title={title} onRemove={onRemove} onTitleChange={onTitleChange}
-      onMinimize={onMinimize} isMinimized={isMinimized} isDragging={isDragging}>
-      <div className="space-y-2">
+      onMinimize={onMinimize} isMinimized={isMinimized} isDragging={isDragging}
+      moveTargets={moveTargets} onMoveToPage={onMoveToPage} onShare={onShare} isReadOnly={isReadOnly}>
+      <div className={cn("space-y-2", sizeLevel >= 2 && "flex flex-col h-full min-h-0")}>
         <div className="flex items-center gap-1.5">
           <input value={quickTitle} onChange={e => setQuickTitle(e.target.value)} onKeyDown={handleQuickAdd}
             placeholder="Add reminder… (press Enter)"
@@ -909,7 +956,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
           </button>
         </div>
 
-        <div className="max-h-64 overflow-y-auto space-y-3 pr-0.5">
+        <div className={cn("overflow-y-auto space-y-3 pr-0.5", sizeLevel >= 2 ? "flex-1 min-h-0" : "max-h-64")}>
           {(loading || alarmsLoading) ? (
             <div className="text-center py-4 text-sm opacity-50">Loading…</div>
           ) : !hasItems ? (

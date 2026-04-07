@@ -22,7 +22,8 @@ interface ReminderEventPickerStore {
   isPickingEvent: boolean;
   pendingFormData: ReminderFormSnapshot | null;
   pickedEvent: CalendarEventType | null;
-  startPicking: (formData: ReminderFormSnapshot) => void;
+  initiatorInstanceId: string | null;
+  startPicking: (formData: ReminderFormSnapshot, instanceId?: string) => void;
   completePicking: (event: CalendarEventType) => void;
   cancelPicking: () => void;
   clearPickedEvent: () => void;
@@ -36,12 +37,13 @@ export const useReminderEventPickerStore = create<ReminderEventPickerStore>((set
   isPickingEvent: false,
   pendingFormData: null,
   pickedEvent: null,
+  initiatorInstanceId: null,
   pendingEventForReminder: null,
 
-  startPicking: (formData) => set({ isPickingEvent: true, pendingFormData: formData, pickedEvent: null }),
+  startPicking: (formData, instanceId) => set({ isPickingEvent: true, pendingFormData: formData, pickedEvent: null, initiatorInstanceId: instanceId ?? null }),
   completePicking: (event) => set({ isPickingEvent: false, pickedEvent: event }),
-  cancelPicking: () => set({ isPickingEvent: false, pendingFormData: null, pickedEvent: null }),
-  clearPickedEvent: () => set({ pickedEvent: null, pendingFormData: null }),
+  cancelPicking: () => set({ isPickingEvent: false, pendingFormData: null, pickedEvent: null, initiatorInstanceId: null }),
+  clearPickedEvent: () => set({ pickedEvent: null, pendingFormData: null, initiatorInstanceId: null }),
 
   setPendingEventForReminder: (data) => set({ pendingEventForReminder: data }),
 }));

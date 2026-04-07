@@ -1,5 +1,5 @@
 
-import React, { ReactNode, useRef, useState } from 'react';
+import React, { ReactNode, useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Layers, MoreVertical } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 import { SizeLevel } from '@/lib/stores/types';
+import { useModuleSize } from '@/contexts/ModuleSizeContext';
 import ModuleSizePill from './ModuleSizePill';
 
 interface MoveTarget {
@@ -67,9 +69,12 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isSizePillOpen, setIsSizePillOpen] = useState(false);
   const moduleRef = useRef<HTMLDivElement>(null);
+  const sizeButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Derive the effective size level (backwards compat with minimized flag)
-  const effectiveSizeLevel: SizeLevel = sizeLevel ?? (isMinimized ? 0 : 1);
+  // Context provides sizeLevel + onSizeChange; props override context if explicitly passed
+  const ctx = useModuleSize();
+  const effectiveSizeLevel: SizeLevel = sizeLevel ?? ctx.sizeLevel ?? (isMinimized ? 0 : 1);
+  const effectiveOnSizeChange = onSizeChange ?? ctx.onSizeChange;
   const isCollapsed = effectiveSizeLevel === 0;
 
   const handleSaveTitle = () => {
@@ -95,18 +100,51 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
 
   const handleSizeChange = (level: SizeLevel) => {
     setIsSizePillOpen(false);
-    if (onSizeChange) {
-      onSizeChange(level);
+    if (effectiveOnSizeChange) {
+      effectiveOnSizeChange(level);
     } else if (onMinimize && level === 0) {
-      // Fallback to legacy minimize
       onMinimize();
     }
+  };
+
+  // Close pill on outside click
+  useEffect(() => {
+    if (!isSizePillOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (sizeButtonRef.current && sizeButtonRef.current.contains(e.target as Node)) return;
+      setIsSizePillOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isSizePillOpen]);
+
+  // Close pill if we enter expanded mode externally (e.g. nav strip buttons)
+  useEffect(() => {
+    if (effectiveSizeLevel >= 2) setIsSizePillOpen(false);
+  }, [effectiveSizeLevel]);
+
+  // Single click: toggle pill open/close
+  const handleSizeButtonClick = () => {
+    setIsSizePillOpen((prev) => !prev);
+  };
+
+  // Double click: cycle through levels 0→1→2→3→0
+  const handleSizeButtonDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsSizePillOpen(false);
+    const nextLevel = ((effectiveSizeLevel + 1) % 4) as SizeLevel;
+    handleSizeChange(nextLevel);
   };
 
   return (
     <div
       ref={moduleRef}
-      className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none transition-all group/module"
+      className={cn(
+        "transition-all group/module",
+        effectiveSizeLevel < 2
+          ? "bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none"
+          : "flex flex-col h-full"
+      )}
     >
       <div className="module-header flex justify-between items-center mb-3">
         {isEditing ? (
@@ -139,15 +177,14 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
         )}
 
         {!isEditing && !isReadOnly && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover/module:opacity-100 transition-opacity">
-            {/* Size level button */}
-            {onSizeChange && (
-              <div
-                className="relative"
-                onMouseEnter={() => setIsSizePillOpen(true)}
-                onMouseLeave={() => setIsSizePillOpen(false)}
-              >
+          <div className="flex items-center gap-0.5 opacity-0 [transition-delay:200ms] group-hover/module:opacity-100 group-hover/module:[transition-delay:0ms] transition-opacity duration-150">
+            {/* Size level button — hidden in expanded mode (nav strip handles it) */}
+            {effectiveOnSizeChange && effectiveSizeLevel < 2 && (
+              <div>
                 <button
+                  ref={sizeButtonRef}
+                  onClick={handleSizeButtonClick}
+                  onDoubleClick={handleSizeButtonDoubleClick}
                   className="hover:bg-accent active:scale-95 p-1.5 rounded-lg transition-all text-gray-700 dark:text-gray-300 flex items-center justify-center flex-shrink-0"
                   aria-label="Resize module"
                 >
@@ -159,7 +196,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                     <ModuleSizePill
                       currentLevel={effectiveSizeLevel}
                       onChangeLevel={handleSizeChange}
-                      moduleRef={moduleRef}
+                      buttonRef={sizeButtonRef}
                     />
                   )}
                 </AnimatePresence>
@@ -182,7 +219,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                     Rename
                   </DropdownMenuItem>
                 )}
-                {(onSizeChange || onMinimize) && (
+                {(effectiveOnSizeChange || onMinimize) && (
                   <DropdownMenuItem onSelect={() => handleSizeChange(isCollapsed ? 1 : 0)}>
                     {isCollapsed ? 'Expand' : 'Collapse'}
                   </DropdownMenuItem>
@@ -230,9 +267,12 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
       <AnimatePresence initial={false}>
         {!isCollapsed && (
           <motion.div
-            className="module-content"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            className={cn(
+              "module-content",
+              effectiveSizeLevel >= 2 && "flex-1 flex flex-col min-h-0"
+            )}
+            initial={{ opacity: 0, height: effectiveSizeLevel >= 2 ? undefined : 0 }}
+            animate={{ opacity: 1, height: effectiveSizeLevel >= 2 ? undefined : 'auto' }}
             exit={{ opacity: 0, height: 0, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
             transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
           >

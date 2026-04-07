@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SizeLevel } from '@/lib/stores/types';
@@ -7,7 +7,7 @@ import { useSidebarBounds } from '@/contexts/SidebarBoundsContext';
 interface ModuleSizePillProps {
   currentLevel: SizeLevel;
   onChangeLevel: (level: SizeLevel) => void;
-  moduleRef: React.RefObject<HTMLDivElement | null>;
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 const LEVEL_LABELS: Record<SizeLevel, string> = {
@@ -17,85 +17,79 @@ const LEVEL_LABELS: Record<SizeLevel, string> = {
   3: 'Fullscreen',
 };
 
-// Visual indicator shape for each level in the pill
 const LevelIcon: React.FC<{ level: SizeLevel; isActive: boolean; isHovered: boolean }> = ({
   level,
   isActive,
   isHovered,
 }) => {
-  const base = 'rounded-sm transition-all duration-150';
-  const activeColor = 'bg-purple-500';
-  const inactiveColor = 'bg-white/30';
-  const hoveredColor = 'bg-purple-400';
-
-  const color = isActive ? activeColor : isHovered ? hoveredColor : inactiveColor;
+  const color = isActive
+    ? 'bg-purple-500'
+    : isHovered
+    ? 'bg-purple-400'
+    : 'bg-white/30';
 
   switch (level) {
     case 0:
-      // Tiny dash = collapsed
-      return <div className={`w-3.5 h-0.5 ${base} ${color}`} />;
+      return <div className={`w-3.5 h-0.5 rounded-sm transition-all duration-150 ${color}`} />;
     case 1:
-      // Small square = normal
-      return <div className={`w-3 h-3 ${base} ${color}`} />;
+      return <div className={`w-3 h-3 rounded-sm transition-all duration-150 ${color}`} />;
     case 2:
-      // Taller rectangle = sidebar fill
-      return <div className={`w-3.5 h-4 ${base} ${color}`} />;
+      return <div className={`w-3.5 h-4 rounded-sm transition-all duration-150 ${color}`} />;
     case 3:
-      // Large square = fullscreen
-      return <div className={`w-4 h-4 ${base} ${color} ring-1 ring-white/20`} />;
+      return (
+        <div className={`w-4 h-4 rounded-sm transition-all duration-150 ${color} ring-1 ring-white/20`} />
+      );
   }
 };
 
 const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
   currentLevel,
   onChangeLevel,
-  moduleRef,
+  buttonRef,
 }) => {
   const [hoveredLevel, setHoveredLevel] = useState<SizeLevel | null>(null);
+  // Lazy initializer — calculates position synchronously on first render (no null→value flash)
+  const [pillPos] = useState<{ x: number; y: number } | null>(() => {
+    const el = buttonRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top };
+  });
   const sidebarBounds = useSidebarBounds();
 
   const getGhostBounds = (level: SizeLevel) => {
-    if (level === 0 || level === 1) {
-      // No ghost for collapsed or normal — these are clear
-      return null;
-    }
-    if (level === 2) {
-      // Ghost = sidebar bounds
-      return sidebarBounds ?? null;
-    }
-    if (level === 3) {
-      // Ghost = full viewport
-      return {
-        top: 0,
-        left: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
-    }
-    return null;
+    if (level <= 1) return null;
+    if (level === 2) return sidebarBounds ?? null;
+    return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
   };
 
   const ghostBounds = hoveredLevel !== null ? getGhostBounds(hoveredLevel) : null;
-
   const levels: SizeLevel[] = [0, 1, 2, 3];
 
-  return (
+  if (!pillPos) return null;
+
+  return createPortal(
     <>
-      {/* The pill */}
+      {/* ── Pill ──────────────────────────────────────────── */}
       <motion.div
-        className="absolute bottom-full left-1/2 mb-2 z-50"
-        style={{ transform: 'translateX(-50%)' }}
-        initial={{ opacity: 0, y: 4, scale: 0.92 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 4, scale: 0.92 }}
-        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        className="fixed z-[9998] pointer-events-auto"
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          left: pillPos.x,
+          top: pillPos.y,
+          transform: 'translate(-50%, calc(-100% - 32px))',
+        }}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.08, ease: 'easeIn' } }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
       >
-        {/* Tooltip label */}
+        {/* Tooltip label above the pill */}
         <AnimatePresence>
           {hoveredLevel !== null && (
             <motion.div
               key={hoveredLevel}
-              className="absolute bottom-full left-1/2 mb-1 whitespace-nowrap text-[10px] text-white/80 bg-black/70 px-2 py-0.5 rounded-full pointer-events-none"
+              className="absolute bottom-full left-1/2 mb-1.5 whitespace-nowrap text-[10px] text-white/80 bg-black/80 px-2 py-0.5 rounded-full pointer-events-none"
               style={{ transform: 'translateX(-50%)' }}
               initial={{ opacity: 0, y: 2 }}
               animate={{ opacity: 1, y: 0 }}
@@ -108,7 +102,7 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
         </AnimatePresence>
 
         {/* Pill container */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-xl rounded-full border border-white/10 shadow-xl">
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-black/75 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl">
           {levels.map((level) => (
             <button
               key={level}
@@ -119,7 +113,7 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
                 onChangeLevel(level);
               }}
               className={`
-                relative flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150
+                flex items-center justify-center w-7 h-7 rounded-full transition-all duration-150
                 ${level === currentLevel
                   ? 'bg-purple-500/30 ring-1 ring-purple-400/60'
                   : 'hover:bg-white/10'
@@ -136,20 +130,21 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
           ))}
         </div>
 
-        {/* Small arrow pointing down to the button */}
-        <div className="flex justify-center">
-          <div className="w-2 h-1 bg-black/70 clip-arrow" style={{
-            clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-          }} />
+        {/* Arrow pointing down to the button */}
+        <div className="flex justify-center mt-0.5">
+          <div
+            className="w-2 h-1.5 bg-black/75"
+            style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }}
+          />
         </div>
       </motion.div>
 
-      {/* Ghost preview portal */}
-      {ghostBounds && createPortal(
-        <AnimatePresence>
+      {/* ── Ghost preview ─────────────────────────────────── */}
+      <AnimatePresence>
+        {ghostBounds && (
           <motion.div
             key={`ghost-${hoveredLevel}`}
-            className="fixed pointer-events-none z-[9999] rounded-2xl"
+            className="fixed pointer-events-none z-[9997] rounded-2xl"
             style={{
               top: ghostBounds.top,
               left: ghostBounds.left,
@@ -161,15 +156,13 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
           >
-            {/* Purple border glow */}
-            <div className="absolute inset-0 rounded-2xl border-2 border-purple-400/80 shadow-[0_0_20px_4px_rgba(168,85,247,0.25)]" />
-            {/* Subtle fill */}
-            <div className="absolute inset-0 rounded-2xl bg-purple-500/8" />
+            <div className="absolute inset-0 rounded-2xl border-2 border-purple-400/80 shadow-[0_0_24px_4px_rgba(168,85,247,0.2)]" />
+            <div className="absolute inset-0 rounded-2xl bg-purple-500/5" />
           </motion.div>
-        </AnimatePresence>,
-        document.body
-      )}
-    </>
+        )}
+      </AnimatePresence>
+    </>,
+    document.body
   );
 };
 

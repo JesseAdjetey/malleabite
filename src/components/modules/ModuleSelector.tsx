@@ -66,16 +66,12 @@ const ModuleSelector: React.FC<ModuleSelectorProps> = ({ onSelect }) => {
           Eisenhower Matrix
         </button>
         <button
-          disabled
-          className="bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/30 p-2 rounded-lg cursor-not-allowed opacity-50 transition-all"
+          onClick={() => handleSelect('booking')}
+          className="bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-white p-2 rounded-lg hover:bg-primary/20 transition-all"
         >
           Booking
         </button>
       </div>
-
-      <p className="mt-3 text-xs text-muted-foreground/60 text-center">
-        More modules coming soon — existing ones being upgraded.
-      </p>
     </div>
   );
 };

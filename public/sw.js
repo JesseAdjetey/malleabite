@@ -257,11 +257,35 @@ self.addEventListener('push', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked');
+  console.log('[SW] Notification clicked, action:', event.action);
   event.notification.close();
 
+  const notifData = event.notification.data || {};
+
+  // For alarm/reminder notifications: handle dismiss and snooze actions
+  if (notifData.type === 'alarm' || notifData.type === 'reminder') {
+    const action = event.action; // 'dismiss', 'snooze', or '' (body click)
+
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+        const message = action === 'snooze'
+          ? { type: 'snooze-notification', title: event.notification.title, body: event.notification.body, delayMs: 5 * 60 * 1000 }
+          : { type: 'stop-sound' };
+        clientList.forEach((client) => client.postMessage(message));
+
+        // Focus the window so user can see the app
+        for (const client of clientList) {
+          if ('focus' in client) return client.focus();
+        }
+        if (clients.openWindow) return clients.openWindow('/');
+      })
+    );
+    return;
+  }
+
+  // Default: open the URL from notification data
   event.waitUntil(
-    clients.openWindow(event.notification.data.url || '/')
+    clients.openWindow(notifData.url || '/')
   );
 });
 

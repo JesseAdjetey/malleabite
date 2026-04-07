@@ -5,4 +5,4 @@ export { useDateStore } from './stores/date-store';
 export { useSidebarStore } from './stores/sidebar-store';
 export { useEventStore } from './stores/event-store';
 export { useWeekRangeStore } from './stores/week-range-store';
-export type { ModuleType, ModuleInstance, SidebarPage, CalendarEventType } from './stores/types';
+export type { ModuleType, ModuleInstance, SidebarPage, CalendarEventType, SizeLevel } from './stores/types';

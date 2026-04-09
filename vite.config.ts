@@ -50,6 +50,8 @@ export default defineConfig(({ mode }) => {
     headers: {
       // Allow Google OAuth popup to communicate back to the opener
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      // Required for SharedArrayBuffer (used by Porcupine wake word WASM worker)
+      'Cross-Origin-Embedder-Policy': 'credentialless',
     },
   },
   plugins: [

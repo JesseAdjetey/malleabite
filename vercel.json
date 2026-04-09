@@ -16,6 +16,7 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "X-XSS-Protection", "value": "1; mode=block" },
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
         { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://kmp1.picovoice.net https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net wss://*.firebaseio.com https://api.deepgram.com wss://api.deepgram.com https://api.sendgrid.com https://hooks.slack.com https://ipapi.co https://us-central1-malleabite-97d35.cloudfunctions.net https://api.vapi.ai wss://api.vapi.ai https://*.daily.co wss://*.daily.co https://o77906.ingest.sentry.io; frame-src 'self' https://accounts.google.com https://malleabite-97d35.firebaseapp.com https://auth.malleabite.com https://js.stripe.com https://*.stripe.com https://m.stripe.network; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';" }
       ]
     }

@@ -35,6 +35,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
     removeModule,
     moveModule,
     updateModule,
+    updateModuleById,
     reorderModules,
     setModuleSizeLevel,
     setModulesSizeLevels,
@@ -350,13 +351,14 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                           <Minimize2 size={14} />
                         </button>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-4 pt-1">
+                      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-1">
                         <ModuleRenderer
                           module={mod}
                           index={realIdx}
                           moduleWidth={panelWidth}
                           onRemove={() => handleRemoveModule(realIdx)}
                           onTitleChange={(title) => handleUpdateModuleTitle(realIdx, title)}
+                          onUpdateModule={updateModuleById}
                           onToggleMinimize={() => {
                             if (setModuleSizeLevel && activePageId) {
                               setModuleSizeLevel(activePageId, realIdx, 1);
@@ -380,12 +382,13 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                 <>
                   <div className="w-px bg-border/40 flex-shrink-0 self-stretch my-6" />
                   <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                    <div className="flex-1 overflow-y-auto p-4">
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
                       {!isSharedPage && <ModuleSelector onSelect={handleAddModule} />}
                       <ModuleGrid
                         modules={normalModules}
                         onRemoveModule={handleRemoveModule}
                         onUpdateModuleTitle={handleUpdateModuleTitle}
+                        onUpdateModule={updateModuleById}
                         onReorderModules={handleReorderModules}
                         onMoveModule={handleMoveModule}
                         onSetModuleSizeLevel={isStructureReadOnly ? undefined : handleSetModuleSizeLevel}
@@ -415,7 +418,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                 exit="exit"
                 transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
                 className={cn(
-                  "absolute inset-0 overflow-y-auto p-4 pt-0",
+                  "absolute inset-0 overflow-y-auto overflow-x-hidden p-4 pt-0",
                   layoutMode === 'fullscreen' && "flex flex-col items-center"
                 )}
               >
@@ -426,6 +429,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                     modules={normalModules}
                     onRemoveModule={handleRemoveModule}
                     onUpdateModuleTitle={handleUpdateModuleTitle}
+                    onUpdateModule={updateModuleById}
                     onReorderModules={handleReorderModules}
                     onMoveModule={handleMoveModule}
                     onSetModuleSizeLevel={isStructureReadOnly ? undefined : handleSetModuleSizeLevel}
@@ -544,7 +548,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                     animate="center"
                     exit="exit"
                     transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                    className="absolute inset-0 overflow-y-auto p-4"
+                    className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4"
                   >
                     <ModuleRenderer
                       module={expandedModule}
@@ -552,6 +556,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                       moduleWidth={sidebarBounds?.width ?? 320}
                       onRemove={() => handleRemoveModule(expandedModuleOriginalIndex)}
                       onTitleChange={(title) => handleUpdateModuleTitle(expandedModuleOriginalIndex, title)}
+                      onUpdateModule={updateModuleById}
                       onToggleMinimize={() => handleCloseExpanded()}
                       onSizeChange={handleExpandedSizeChange}
                       isReadOnly={isStructureReadOnly}
@@ -616,6 +621,7 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                         moduleWidth={Math.min(window.innerWidth - 48, 1200)}
                         onRemove={() => handleRemoveModule(expandedModuleOriginalIndex)}
                         onTitleChange={(title) => handleUpdateModuleTitle(expandedModuleOriginalIndex, title)}
+                        onUpdateModule={updateModuleById}
                         onToggleMinimize={() => handleCloseExpanded()}
                         onSizeChange={handleExpandedSizeChange}
                         isReadOnly={isStructureReadOnly}

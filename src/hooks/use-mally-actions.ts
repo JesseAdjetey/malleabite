@@ -1820,9 +1820,17 @@ export function useMallyActions() {
             targetCount: data.targetCount || 1,
             durationMinutes: data.durationMinutes || data.duration || 60,
             color: data.color || '#8b5cf6',
+            icon: data.icon || '🎯',
             isActive: true,
-            preferredTimeStart: data.preferredTimeStart || data.preferredTimes,
-            preferredDays: data.preferredDays,
+            isPaused: false,
+            preferredTimeStart: data.preferredTimeStart || data.preferredTimes || '09:00',
+            preferredTimeEnd: data.preferredTimeEnd || '10:00',
+            preferredDays: data.preferredDays || [1, 2, 3, 4, 5],
+            autoSchedule: data.autoSchedule ?? false,
+            allowWeekends: data.allowWeekends ?? false,
+            allowMornings: data.allowMornings ?? true,
+            allowEvenings: data.allowEvenings ?? false,
+            bufferMinutes: data.bufferMinutes ?? 15,
           });
           if (goalResult?.success) { toast.success(`Goal "${data.title}" created`); return true; }
           return false;

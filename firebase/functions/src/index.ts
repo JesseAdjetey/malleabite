@@ -36,6 +36,17 @@ export {
 // Export booking confirmation handler
 export { onBookingCreated } from './booking-notifications';
 
+// Export Todoist OAuth + sync handlers
+export {
+  todoistGetAuthUrl,
+  todoistOAuthCallback,
+  todoistListProjects,
+  todoistSync,
+  todoistPushAction,
+  todoistDisconnect,
+  todoistGetStatus,
+} from './todoist-oauth';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

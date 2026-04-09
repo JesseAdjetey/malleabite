@@ -98,6 +98,11 @@ service cloud.firestore {
       match /calendarTemplates/{templateId} {
         allow read, write: if isOwner(userId);
       }
+
+      // Integrations (Todoist, etc.) — only the owning user can read/write
+      match /integrations/{integrationId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Calendar Events
@@ -232,8 +237,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['userId', 'title', 'icon', 'modules']);
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId
-        && isValidString('title', 1, 100)
-        && isNotRateLimited();
+        && isValidString('title', 1, 100);
     }
 
     // Invites

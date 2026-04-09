@@ -57,7 +57,7 @@ export default function Billing() {
       // Try Firebase Function first
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-malleabite-97d35.cloudfunctions.net'}/createCheckoutSession`,
+          `${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || `https://us-central1-${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35'}.cloudfunctions.net`}/createCheckoutSession`,
           {
             method: 'POST',
             headers: {
@@ -126,7 +126,7 @@ export default function Billing() {
     try {
       // Call Firebase Function to create portal session
       const response = await fetch(
-        `${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-malleabite-97d35.cloudfunctions.net'}/createPortalSession`,
+        `${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || `https://us-central1-${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35'}.cloudfunctions.net`}/createPortalSession`,
         {
           method: 'POST',
           headers: {

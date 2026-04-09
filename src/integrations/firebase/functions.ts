@@ -121,8 +121,8 @@ export class FirebaseFunctions {
 
       const token = await currentUser.getIdToken();
 
-      // Make direct HTTP call with Authorization header
-      const functionUrl = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processAIRequest';
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
+      const functionUrl = `https://us-central1-${projectId}.cloudfunctions.net/processAIRequest`;
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -304,7 +304,8 @@ export class FirebaseFunctions {
   static async *processSchedulingStreamEvents(
     data: SchedulingRequest,
   ): AsyncGenerator<{ type: string; text?: string; speechText?: string; actions?: any[]; intent?: string; actionRequired?: boolean; message?: string }> {
-    const STREAM_URL = 'https://us-central1-malleabite-97d35.cloudfunctions.net/processSchedulingStream';
+    const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
+    const STREAM_URL = `https://us-central1-${projectId}.cloudfunctions.net/processSchedulingStream`;
 
     const currentUser = auth.currentUser;
     if (!currentUser) throw new Error('Not authenticated');

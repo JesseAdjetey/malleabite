@@ -53,7 +53,7 @@ export interface SearchResult {
 // ─── Proxy helper ────────────────────────────────────────────────────────────
 
 const PROXY_URL =
-  'https://us-central1-malleabite-97d35.cloudfunctions.net/realtimeDataProxy';
+  `https://us-central1-${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35'}.cloudfunctions.net/realtimeDataProxy`;
 
 async function callProxy<T>(action: string, params: Record<string, any>): Promise<T | null> {
   try {

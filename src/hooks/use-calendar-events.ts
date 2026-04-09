@@ -232,6 +232,8 @@ export function useCalendarEvents() {
         .filter(event => !event.isArchived)
         .sort((a, b) => (a.startsAt || '').localeCompare(b.startsAt || ''));
       setEvents(eventsList);
+      // Keep global store (used by calendar views) in sync with Firestore
+      useEventStore.getState().setEvents(eventsList);
       setLoading(false);
       setError(null);
     }, (error) => {
@@ -435,9 +437,10 @@ export function useCalendarEvents() {
       // Now write to Firestore
       const docRef = await addDoc(collection(db, 'calendar_events'), newEvent);
 
-      // Update the optimistic event with the real ID (the listener will handle this,
-      // but we remove the temp one to prevent duplicates)
+      // Replace optimistic entry with the real Firestore ID in the global store
+      const realEvent: CalendarEventType = { ...optimisticEvent, id: docRef.id };
       useEventStore.getState().deleteEvent(optimisticId);
+      useEventStore.getState().addEvent(realEvent);
       setEvents(prev => prev.filter(e => e.id !== optimisticId));
 
       // Increment usage count after successful creation
@@ -553,6 +556,18 @@ export function useCalendarEvents() {
       };
 
       await updateDoc(doc(db, 'calendar_events', event.id), removeUndefinedDeep(updatedEvent));
+
+      // Sync to global store so calendar views update immediately
+      const updatedLocal: CalendarEventType = {
+        ...event,
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        date: dayjs(startsAt).format('YYYY-MM-DD'),
+        description: actualDescription,
+      };
+      useEventStore.getState().updateEvent(updatedLocal);
+      setEvents(prev => prev.map(e => e.id === event.id ? updatedLocal : e));
+
       toast.success('Event updated');
       return { success: true };
     } catch (error) {
@@ -570,6 +585,10 @@ export function useCalendarEvents() {
     }
 
     try {
+      // Optimistically remove from global store so calendar updates instantly
+      useEventStore.getState().deleteEvent(eventId);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+
       await deleteDoc(doc(db, 'calendar_events', eventId));
       toast.success('Event removed');
       return { success: true };

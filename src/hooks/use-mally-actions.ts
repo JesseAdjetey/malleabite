@@ -48,7 +48,6 @@ import { useAuth } from "@/contexts/AuthContext.unified";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
 import * as calendarService from "@/lib/services/calendarService";
 import { CalendarTemplate, CalendarTemplateEvent } from "@/types/calendar";
-import { useEventStore } from "@/lib/store";
 import { db } from "@/integrations/firebase/config";
 import { doc, deleteDoc } from "firebase/firestore";
 

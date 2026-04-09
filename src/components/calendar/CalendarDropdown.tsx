@@ -378,13 +378,48 @@ const CalendarDropdown: React.FC = () => {
   const sortedGroupIds = useMemo(() => sortedGroups.map(g => g.id), [sortedGroups]);
 
   const handleToggleGroup = useCallback(
-    (groupId: string, makeVisible: boolean) => {
+    async (groupId: string, makeVisible: boolean) => {
       const groupCalendars = getGroupCalendarsWithTemplates(groupId);
+
+      // Update all calendars in Zustand atomically before touching async paths.
       groupCalendars.forEach(cal => {
-        handleToggleCalendar(cal.id, makeVisible);
+        useCalendarFilterStore.getState().setCalendarVisible(cal.id, makeVisible);
       });
+
+      // Compute the new visibility list once (Zustand already reflects all changes above).
+      const storeState = useCalendarFilterStore.getState();
+      let currentVisible = storeState.getVisibleCalendarIds();
+      if (currentVisible.length === 0 && !makeVisible) {
+        // Hiding everything — seed from all accounts so the list is explicit.
+        currentVisible = [];
+      }
+
+      // Single atomic write to preferences (avoids concurrent debouncedSave races).
+      await setVisibleCalendars(currentVisible);
+
+      // Fire-and-forget Firestore isActive + sync per calendar.
+      for (const cal of groupCalendars) {
+        if (cal.id.startsWith(TEMPLATE_CALENDAR_PREFIX)) {
+          const templateId = cal.id.replace(TEMPLATE_CALENDAR_PREFIX, '');
+          if (user?.uid) {
+            import('@/lib/services/calendarService').then(svc =>
+              svc.updateCalendarTemplate(user.uid, templateId, { isActive: makeVisible })
+            ).catch(err => console.error('Failed to toggle template', err));
+          }
+          continue;
+        }
+        toggleCalendar(cal.id, makeVisible);
+        if (makeVisible) {
+          const connected = calendars.find(c => c.id === cal.id);
+          if (connected) {
+            syncCalendar(connected).catch(err =>
+              console.warn('Calendar auto-sync on group toggle failed:', connected.name, err)
+            );
+          }
+        }
+      }
     },
-    [getGroupCalendarsWithTemplates, handleToggleCalendar]
+    [getGroupCalendarsWithTemplates, setVisibleCalendars, toggleCalendar, syncCalendar, calendars, user?.uid]
   );
 
   // dnd-kit sensors (pointer with activation distance to avoid blocking clicks)

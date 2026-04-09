@@ -26,6 +26,8 @@ export interface TodoList {
   isDefault?: boolean;
   createdAt: string;
   updatedAt: string;
+  todoistProjectId?: string; // Linked Todoist project
+  lastTodoistSync?: string;  // ISO timestamp of last sync
 }
 
 export interface TodoItem {
@@ -42,6 +44,8 @@ export interface TodoItem {
   status?: 'todo' | 'in_progress' | 'done'; // Kanban column — overrides completed for column placement
   description?: string; // Optional rich description / notes
   pinned?: boolean; // Pinned items float to top of all views
+  todoistId?: string;        // Todoist task ID for synced items
+  todoistProjectId?: string; // Todoist project ID for synced items
 }
 
 const DEFAULT_COLORS = [
@@ -366,7 +370,13 @@ export function useTodoLists() {
 
   // Get todos for a specific list
   const getTodosForList = (listId: string) => {
-    return todos.filter(t => t.listId === listId);
+    const filtered = todos.filter(t => t.listId === listId);
+    // Temporary debug — remove after confirming Todoist sync works
+    const todoistItems = todos.filter(t => t.todoistId);
+    if (todoistItems.length > 0) {
+      console.log('[TodoList] Todoist items in state:', todoistItems.length, 'listIds:', [...new Set(todoistItems.map(t => t.listId))], 'module listId:', listId);
+    }
+    return filtered;
   };
 
   // Get active list's todos

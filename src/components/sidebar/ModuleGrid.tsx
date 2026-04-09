@@ -27,6 +27,7 @@ interface ModuleGridProps {
   modules: ModuleInstance[];
   onRemoveModule: (index: number) => void;
   onUpdateModuleTitle: (index: number, title: string) => void;
+  onUpdateModule?: (moduleId: string, updates: Partial<ModuleInstance>) => void;
   onReorderModules: (fromIndex: number, toIndex: number) => void;
   onMoveModule: (index: number, targetPageId: string) => void;
   onSetModuleSizeLevel?: (moduleIndex: number, level: SizeLevel) => void;
@@ -40,6 +41,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   modules,
   onRemoveModule,
   onUpdateModuleTitle,
+  onUpdateModule,
   onReorderModules,
   onMoveModule,
   onSetModuleSizeLevel,
@@ -167,6 +169,7 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   moduleWidth={MODULE_WIDTH}
                   onRemove={() => onRemoveModule(index)}
                   onTitleChange={(title) => onUpdateModuleTitle(index, title)}
+                  onUpdateModule={onUpdateModule}
                   onToggleMinimize={() => handleToggleMinimize(index)}
                   onSizeChange={onSetModuleSizeLevel ? (level) => onSetModuleSizeLevel(index, level) : undefined}
                   isDragging={draggedIndex === index}

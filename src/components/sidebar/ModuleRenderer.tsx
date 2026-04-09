@@ -19,6 +19,7 @@ interface ModuleRendererProps {
   moduleWidth: number;
   onRemove: () => void;
   onTitleChange: (title: string) => void;
+  onUpdateModule?: (moduleId: string, updates: Partial<ModuleInstance>) => void;
   onToggleMinimize: () => void;
   onSizeChange?: (level: SizeLevel) => void;
   isDragging?: boolean;
@@ -35,6 +36,7 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
   moduleWidth,
   onRemove,
   onTitleChange,
+  onUpdateModule,
   onToggleMinimize,
   onSizeChange,
   isDragging = false,
@@ -83,7 +85,19 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
     case 'todo':
       return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
-          <TodoModuleEnhanced {...moduleProps} moduleId={module.id} sharedFromInstanceId={module.sharedFromInstanceId} sharedRole={module.sharedRole} />
+          <TodoModuleEnhanced
+            {...moduleProps}
+            moduleId={module.id}
+            sharedFromInstanceId={module.sharedFromInstanceId}
+            sharedRole={module.sharedRole}
+            todoistProjectId={module.todoistProjectId}
+            onTodoistProjectChange={(projectId, projectName) => {
+              onUpdateModule?.(module.id, {
+                todoistProjectId: projectId ?? undefined,
+                ...(projectName ? { title: projectName } : {}),
+              });
+            }}
+          />
         </div>
       );
     case 'pomodoro':

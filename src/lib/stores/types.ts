@@ -62,6 +62,8 @@ export interface ModuleInstance {
   sharedListId?: string; // For shared todo modules - the owner's list ID
   sharedRole?: 'viewer' | 'editor'; // Role granted to current user on this shared module
   sharedOwnerName?: string; // Display name of the module owner (for UI)
+  // Todoist integration
+  todoistProjectId?: string; // If set, this Todo module is linked to a Todoist project
 }
 
 /** Generate a unique module ID */

@@ -1,7 +1,7 @@
 
 import React, { ReactNode, useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Layers, MoreVertical } from 'lucide-react';
+import { Check, Layers, MoreVertical, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -48,6 +48,11 @@ interface ModuleContainerProps {
   isReadOnly?: boolean;
   sizeLevel?: SizeLevel;
   onSizeChange?: (level: SizeLevel) => void;
+  // Todoist integration
+  onConnectTodoist?: () => void;
+  todoistLinked?: boolean;
+  todoistSyncing?: boolean;
+  onSyncTodoist?: () => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -63,6 +68,10 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   isReadOnly = false,
   sizeLevel,
   onSizeChange,
+  onConnectTodoist,
+  todoistLinked = false,
+  todoistSyncing = false,
+  onSyncTodoist,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
@@ -165,7 +174,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
           </div>
         ) : (
           // Title area — only the text span is clickable for rename
-          <div className="flex-1 min-w-0 flex items-center">
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
             <span
               className="text-lg font-semibold text-primary truncate cursor-pointer hover:opacity-70 transition-opacity module-rename-trigger"
               onClick={onTitleChange ? startRename : undefined}
@@ -173,6 +182,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
             >
               {title}
             </span>
+            {todoistLinked && (
+              <span
+                title={todoistSyncing ? 'Syncing with Todoist…' : 'Synced with Todoist'}
+                className="flex-shrink-0"
+              >
+                <Zap
+                  size={11}
+                  className={todoistSyncing ? 'animate-pulse' : ''}
+                  style={{ color: '#db4035' }}
+                />
+              </span>
+            )}
           </div>
         )}
 
@@ -248,6 +269,21 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                   <DropdownMenuItem onSelect={onShare}>
                     Share / Manage Access
                   </DropdownMenuItem>
+                )}
+                {onConnectTodoist && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={onConnectTodoist} className="gap-2">
+                      <Zap size={13} style={{ color: '#db4035' }} />
+                      {todoistLinked ? 'Todoist settings' : 'Connect Todoist'}
+                    </DropdownMenuItem>
+                    {todoistLinked && onSyncTodoist && (
+                      <DropdownMenuItem onSelect={onSyncTodoist} className="gap-2" disabled={todoistSyncing}>
+                        <Zap size={13} className="text-muted-foreground" />
+                        {todoistSyncing ? 'Syncing…' : 'Sync now'}
+                      </DropdownMenuItem>
+                    )}
+                  </>
                 )}
                 <DropdownMenuSeparator />
                 {onRemove && (

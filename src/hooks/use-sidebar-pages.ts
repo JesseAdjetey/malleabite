@@ -482,12 +482,34 @@ export function useSidebarPages() {
 
   // Set a module's size level
   const setModuleSizeLevel = async (pageId: string, moduleIndex: number, level: SizeLevel) => {
+    // Optimistic local update — UI responds immediately without waiting for Firestore snapshot
+    setPages(prev => prev.map(p => {
+      if (p.id !== pageId) return p;
+      const modules = [...p.modules];
+      if (modules[moduleIndex]) {
+        modules[moduleIndex] = { ...modules[moduleIndex], sizeLevel: level, minimized: level === 0 };
+      }
+      return { ...p, modules };
+    }));
     return updateModule(pageId, moduleIndex, { sizeLevel: level, minimized: level === 0 });
   };
 
   // Atomically set multiple module size levels in a single Firestore write (prevents race conditions)
   const setModulesSizeLevels = async (pageId: string, updates: Array<{ index: number; level: SizeLevel }>) => {
     if (!user?.uid) return { success: false };
+
+    // Optimistic local update — UI responds immediately without waiting for Firestore snapshot
+    setPages(prev => prev.map(p => {
+      if (p.id !== pageId) return p;
+      const modules = [...p.modules];
+      for (const { index, level } of updates) {
+        if (modules[index]) {
+          modules[index] = { ...modules[index], sizeLevel: level, minimized: level === 0 };
+        }
+      }
+      return { ...p, modules };
+    }));
+
     try {
       const page = pages.find(p => p.id === pageId);
       if (!page) return { success: false };
@@ -576,9 +598,9 @@ export function useSidebarPages() {
 
   /** Update a module by its unique ID */
   const updateModuleById = async (moduleId: string, updates: Partial<ModuleInstance>) => {
-    if (!user?.uid) return { success: false };
+    if (!user?.uid) { console.warn('[updateModuleById] no user'); return { success: false }; }
     const found = findModuleById(moduleId);
-    if (!found) return { success: false };
+    if (!found) { console.warn('[updateModuleById] module not found in pages:', moduleId, 'pages loaded:', pages.length); return { success: false }; }
     return updateModule(found.page.id, found.index, updates);
   };
 

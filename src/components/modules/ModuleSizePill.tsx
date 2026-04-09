@@ -42,6 +42,9 @@ const LevelIcon: React.FC<{ level: SizeLevel; isActive: boolean; isHovered: bool
   }
 };
 
+// Rough rendered height of pill + arrow + gap above button
+const PILL_TOTAL_HEIGHT = 60;
+
 const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
   currentLevel,
   onChangeLevel,
@@ -49,11 +52,14 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
 }) => {
   const [hoveredLevel, setHoveredLevel] = useState<SizeLevel | null>(null);
   // Lazy initializer — calculates position synchronously on first render (no null→value flash)
-  const [pillPos] = useState<{ x: number; y: number } | null>(() => {
+  const [pillPos] = useState<{ x: number; top: number } | null>(() => {
     const el = buttonRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2, y: rect.top };
+    // Clamp so the pill never goes above 8px from top of viewport
+    const idealTop = rect.top - PILL_TOTAL_HEIGHT;
+    const safeTop = Math.max(8, idealTop);
+    return { x: rect.left + rect.width / 2, top: safeTop };
   });
   const sidebarBounds = useSidebarBounds();
 
@@ -72,12 +78,12 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
     <>
       {/* ── Pill ──────────────────────────────────────────── */}
       <motion.div
-        className="fixed z-[9998] pointer-events-auto"
+        className="fixed z-[99999] pointer-events-auto"
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           left: pillPos.x,
-          top: pillPos.y,
-          transform: 'translate(-50%, calc(-100% - 32px))',
+          top: pillPos.top,
+          transform: 'translateX(-50%)',
         }}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}

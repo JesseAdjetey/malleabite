@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import MonthView from "@/components/month-view";
 import SideBar from "@/components/sidebar/sideBar";
 import { useViewStore } from "@/lib/store";
@@ -372,8 +373,8 @@ const Mainview = () => {
           </motion.div>
         )}
 
-        {/* ── Animated Resizer — fixed, moves smoothly between all 3 positions ── */}
-        {!isMobile && (
+        {/* ── Animated Resizer — portaled to body so parent transforms/overflow don't clip it ── */}
+        {!isMobile && createPortal(
           <motion.div
             className="fixed top-0 bottom-0 flex items-center justify-center w-6 cursor-ew-resize z-[60] group"
             style={{ left: 0 }}
@@ -405,7 +406,8 @@ const Mainview = () => {
             </AnimatePresence>
 
             <RippleBorder trigger={isCrossingBoundary} />
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
 
         {/* ── Main Content (calendar) — hidden when sidebar fullscreen ── */}

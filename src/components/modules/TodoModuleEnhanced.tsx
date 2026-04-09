@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { sounds } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
+import TodoistConnectSheet from "./todoist/TodoistConnectSheet";
+import { useTodoistIntegration } from "@/hooks/use-todoist-integration";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
@@ -106,6 +108,8 @@ interface TodoModuleEnhancedProps {
   onShare?: () => void;
   isReadOnly?: boolean;
   contentReadOnly?: boolean;
+  todoistProjectId?: string;
+  onTodoistProjectChange?: (projectId: string | null, projectName?: string) => void;
 }
 
 // ── TodoItem Row ──────────────────────────────────────────────────────────────
@@ -184,7 +188,7 @@ const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow(
       }}
       data-todo-id={item.id}
       className={cn(
-        "group mb-1.5 transition-colors",
+        "group mb-1.5 transition-colors overflow-hidden",
         isExpanded
           ? "rounded-sm hover:bg-foreground/[0.04]"
           : "bg-gray-100 dark:bg-white/5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10",
@@ -218,7 +222,7 @@ const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow(
 
         {/* Title + description */}
         <div className="flex flex-col min-w-0 flex-1">
-          <span className={cn("text-sm text-gray-800 dark:text-white", isDone && "line-through opacity-50")}>
+          <span className={cn("text-sm text-gray-800 dark:text-white break-words min-w-0", isDone && "line-through opacity-50")}>
             {item.text}
           </span>
           {item.description && !isEditing && (
@@ -413,8 +417,14 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   onMoveToPage,
   onShare,
   contentReadOnly = false,
+  todoistProjectId,
+  onTodoistProjectChange,
 }) => {
   const { sizeLevel } = useModuleSize();
+
+  // ── Todoist integration ──────────────────────────────────────────────────────
+  const [todoistSheetOpen, setTodoistSheetOpen] = useState(false);
+  const todoist = useTodoistIntegration(moduleListId, todoistProjectId);
 
   const isSharedModule = !!sharedFromInstanceId;
   const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
@@ -465,7 +475,17 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   const handleAdd = async (text: string, deadline?: string) => {
     if (!moduleListId) return;
     sounds.play("lightClick");
-    await addTodo(text, moduleListId, { deadline });
+    console.log('[TODOIST-PUSH] isLinked:', todoist.isLinked, '| connected:', todoist.status.connected, '| projectId:', todoistProjectId, '| listId:', moduleListId);
+    if (todoist.isLinked) {
+      const todoistId = await todoist.pushCreate({ text, deadline });
+      console.log('[TODOIST-PUSH] result:', todoistId);
+      if (!todoistId) {
+        toast.error("Couldn't reach Todoist — task saved locally");
+        await addTodo(text, moduleListId, { deadline });
+      }
+    } else {
+      await addTodo(text, moduleListId, { deadline });
+    }
   };
 
   const handleToggleWithSync = async (item: TodoItem) => {
@@ -484,6 +504,11 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       await updateTodo(item.id, updates);
     }
     await syncTodoCompletion(item.id, !isDone);
+    // Push to Todoist
+    if (todoist.isLinked && item.todoistId) {
+      if (isDone) await todoist.pushUncomplete(item.todoistId);
+      else await todoist.pushComplete(item.todoistId);
+    }
 
     if (!isDone) {
       toast("Marked as done", {
@@ -502,8 +527,13 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   };
 
   const handleDelete = (id: string) => {
+    const item = rawTodos.find((t) => t.id === id);
     if (isCollaborativeModule) directDeleteTodo(id);
     else deleteTodo(id);
+    // Push deletion to Todoist
+    if (todoist.isLinked && item?.todoistId) {
+      todoist.pushDelete(item.todoistId);
+    }
   };
 
   const handleUpdateStatus = async (id: string, status: "todo" | "in_progress" | "done") => {
@@ -527,6 +557,14 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   const handleUpdateItem = async (id: string, updates: { deadline?: string; description?: string }) => {
     if (isCollaborativeModule) await directUpdateTodo(id, updates);
     else await updateTodo(id, updates);
+    // Push update to Todoist
+    const item = rawTodos.find((t) => t.id === id);
+    if (todoist.isLinked && item?.todoistId) {
+      await todoist.pushUpdate(item.todoistId, {
+        deadline: updates.deadline ?? null,
+        description: updates.description,
+      });
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, item: TodoItem) => {
@@ -588,6 +626,11 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     moveTargets,
     onMoveToPage,
     onShare,
+    // Todoist
+    onConnectTodoist: isViewOnly ? undefined : () => setTodoistSheetOpen(true),
+    todoistLinked: todoist.isLinked,
+    todoistSyncing: todoist.isSyncing,
+    onSyncTodoist: todoist.isLinked ? () => todoist.sync() : undefined,
   };
 
   const rowProps = {
@@ -606,11 +649,37 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   // ── Loading / Auth guards ────────────────────────────────────────────────────
 
+  const todoistSheet = (
+    <TodoistConnectSheet
+      open={todoistSheetOpen}
+      onOpenChange={setTodoistSheetOpen}
+      linkedProjectId={todoistProjectId}
+      onProjectLinked={(projectId, projectName) => {
+        onTodoistProjectChange?.(projectId, projectName);
+        setTodoistSheetOpen(false);
+      }}
+      onProjectUnlinked={() => {
+        onTodoistProjectChange?.(null);
+      }}
+      status={todoist.status}
+      isSyncing={todoist.isSyncing}
+      projects={todoist.projects}
+      projectsLoading={todoist.projectsLoading}
+      connect={todoist.connect}
+      disconnect={todoist.disconnect}
+      loadProjects={todoist.loadProjects}
+      sync={todoist.sync}
+    />
+  );
+
   if (!user) {
     return (
-      <ModuleContainer {...containerProps}>
-        <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">Sign in to use todos</div>
-      </ModuleContainer>
+      <>
+        <ModuleContainer {...containerProps}>
+          <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">Sign in to use todos</div>
+        </ModuleContainer>
+        {todoistSheet}
+      </>
     );
   }
 
@@ -618,6 +687,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   if (sizeLevel <= 1) {
     return (
+      <>
       <ModuleContainer {...containerProps}>
         {isSharedModule && (
           <div className="flex items-center gap-1.5 mb-2">
@@ -650,6 +720,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
         </div>
       </ModuleContainer>
+      {todoistSheet}
+      </>
     );
   }
 
@@ -668,6 +740,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   if (sizeLevel === 2) {
     return (
+      <>
       <ModuleContainer {...containerProps}>
         <div className="flex flex-col gap-3 h-full overflow-hidden">
           {/* Stats */}
@@ -715,6 +788,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
         </div>
       </ModuleContainer>
+      {todoistSheet}
+      </>
     );
   }
 
@@ -735,6 +810,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   ];
 
   return (
+    <>
     <ModuleContainer {...containerProps}>
       <div className="flex flex-col gap-3 h-full overflow-hidden">
         {/* View toggle */}
@@ -849,6 +925,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         </AnimatePresence>
       </div>
     </ModuleContainer>
+    {todoistSheet}
+    </>
   );
 };
 

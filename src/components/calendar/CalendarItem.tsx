@@ -36,7 +36,7 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
     id: `calendar:${calendar.id}`,
     data: { type: 'calendar', calendar },
   });
-  const isVisible = useCalendarFilterStore((state) => state.isCalendarVisible(calendar.id));
+  const isVisible = useCalendarFilterStore((state) => !state.hiddenCalendarIds.has(calendar.id));
 
   const { reschedulingPrefs, setReschedulingPrefs } = useSettingsStore();
   const isConflictChecked =
@@ -87,7 +87,7 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
         onClick={() => onToggle(calendar.id, !isVisible)}
         className={cn(
           'rounded-[4px] border-2 flex items-center justify-center flex-shrink-0',
-          'transition-all duration-200',
+          'transition-colors duration-100',
           isVisible
             ? 'border-transparent'
             : 'border-muted-foreground/30 bg-transparent'

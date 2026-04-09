@@ -240,8 +240,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         onSaveEvent?.();
         break;
       case 'cancelEdit':
-      case 'deleteEvent':
-      case 'editEvent':
         // Handled at app level
         break;
     }

@@ -22,6 +22,8 @@ import {
   Code2,
   Cpu,
   Fingerprint,
+  Mic,
+  MicOff,
   AlertTriangle,
   CheckSquare,
   ExternalLink,
@@ -43,6 +45,7 @@ import { useThemeStore } from "@/lib/stores/theme-store";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
@@ -53,6 +56,8 @@ import { useEventStore } from "@/lib/store";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { useTemplateEventsLoader } from "@/hooks/use-template-events-loader";
+import { useMallyVoice } from "@/hooks/use-mally-voice";
+import { VoiceOverlay } from "./VoiceOverlay";
 import { RichMessageRenderer } from "./RichMessageRenderer";
 import { ActionProgress } from "./ActionProgress";
 import type { RichMessage, SuggestionChip, PendingAction, ActionCardData } from "./rich-message-types";
@@ -145,6 +150,19 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Global hotkey to toggle voice mode (Cmd/Ctrl + Shift + M)
+  useKeyboardShortcuts({
+    onAction: (action) => {
+      if (action === 'toggleVoice') {
+        if (voiceState === 'idle' || voiceState === 'error') {
+          startVoice();
+        } else {
+          stopVoice();
+        }
+      }
+    }
+  });
+
   // Refs that mirror state — used inside callbacks/timers to avoid stale closures
   const isLoadingRef = useRef(false);
   useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
@@ -228,6 +246,53 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const { suggestions: proactiveSuggestions, currentIndex: proactiveIndex, dismiss: dismissSuggestion, next: nextSuggestion } = useProactiveSuggestions({ events, todos, memory: userMemory });
   const activeSuggestion = proactiveSuggestions[proactiveIndex] ?? null;
 
+  // ── Voice (Vapi) ───────────────────────────────────────────────────
+  const getVoiceContext = useCallback(() => buildContext(), [buildContext]);
+  const {
+    voiceState,
+    startVoice,
+    stopVoice,
+    transcript: voiceTranscript,
+    assistantText: voiceAssistantText,
+    lastAction: voiceLastAction,
+    volume: voiceVolume,
+    isVoiceReady,
+  } = useMallyVoice({ onCommand: executeAction, getContext: getVoiceContext });
+
+  // Push voice transcripts into the chat
+  const lastVoiceTranscriptRef = useRef('');
+  useEffect(() => {
+    if (voiceTranscript && voiceTranscript !== lastVoiceTranscriptRef.current) {
+      lastVoiceTranscriptRef.current = voiceTranscript;
+      // Add as a user message in the chat
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `voice-user-${Date.now()}`,
+          sender: 'user',
+          text: `🎙 ${voiceTranscript}`,
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }, [voiceTranscript]);
+
+  const lastAssistantTextRef = useRef('');
+  useEffect(() => {
+    if (voiceAssistantText && voiceAssistantText !== lastAssistantTextRef.current) {
+      lastAssistantTextRef.current = voiceAssistantText;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `voice-ai-${Date.now()}`,
+          sender: 'ai',
+          text: voiceAssistantText,
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }, [voiceAssistantText]);
+
   // ── Pre-warm AI functions on login to eliminate cold-start latency ──
   useEffect(() => {
     if (!user?.uid) return;
@@ -237,8 +302,9 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
         const { auth: fbAuth } = await import('@/integrations/firebase/config');
         const token = await fbAuth.currentUser?.getIdToken(false);
         if (!token) return;
+        const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
         fetch(
-          'https://us-central1-malleabite-97d35.cloudfunctions.net/processSchedulingStream',
+          `https://us-central1-${projectId}.cloudfunctions.net/processSchedulingStream`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -1746,12 +1812,75 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                 >
                   <Send className="h-5 w-5" />
                 </motion.button>
+
+                {/* Voice (mic) button */}
+                {isVoiceReady && (
+                  <motion.button
+                    onClick={() => {
+                      if (voiceState === 'idle' || voiceState === 'error') {
+                        startVoice();
+                      } else {
+                        stopVoice();
+                      }
+                    }}
+                    whileTap={{ scale: 0.86 }}
+                    transition={{ type: 'spring', damping: 18, stiffness: 400 }}
+                    className={cn(
+                      "p-2.5 rounded-full transition-all relative overflow-hidden",
+                      voiceState === 'listening'
+                        ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                        : voiceState === 'speaking'
+                        ? "bg-purple-500 text-white shadow-lg shadow-purple-500/30"
+                        : voiceState === 'connecting'
+                        ? "bg-amber-500 text-white animate-pulse"
+                        : "bg-black/5 dark:bg-white/10 text-muted-foreground hover:bg-black/10 dark:hover:bg-white/20 hover:text-foreground"
+                    )}
+                    title={
+                      voiceState === 'idle' ? 'Talk to Mally'
+                      : voiceState === 'connecting' ? 'Connecting…'
+                      : voiceState === 'listening' ? 'Listening… (click to stop)'
+                      : voiceState === 'speaking' ? 'Mally is speaking… (click to stop)'
+                      : 'Voice error — click to retry'
+                    }
+                  >
+                    {voiceState !== 'idle' && voiceState !== 'error' ? (
+                      <MicOff className="h-5 w-5" />
+                    ) : (
+                      <Mic className="h-5 w-5" />
+                    )}
+                    {/* Pulsing ring when actively listening */}
+                    {voiceState === 'listening' && (
+                      <motion.span
+                        className="absolute inset-0 rounded-full border-2 border-red-300"
+                        animate={{ scale: [1, 1.3 + voiceVolume], opacity: [0.6, 0] }}
+                        transition={{ repeat: Infinity, duration: 0.8, ease: 'easeOut' }}
+                      />
+                    )}
+                    {voiceState === 'speaking' && (
+                      <motion.span
+                        className="absolute inset-0 rounded-full border-2 border-purple-300"
+                        animate={{ scale: [1, 1.25], opacity: [0.5, 0] }}
+                        transition={{ repeat: Infinity, duration: 1, ease: 'easeOut' }}
+                      />
+                    )}
+                  </motion.button>
+                )}
               </motion.div>
             </div>
 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Voice overlay — shown when a voice session is active */}
+      <VoiceOverlay
+        voiceState={voiceState}
+        transcript={voiceTranscript}
+        assistantText={voiceAssistantText}
+        lastAction={voiceLastAction}
+        volume={voiceVolume}
+        onStop={stopVoice}
+      />
     </>
   );
 };

@@ -15,7 +15,8 @@
       "Bash(git add src/integrations/firebase/firestore.ts src/hooks/use-calendar-events.firebase.ts src/contexts/EventDataProvider.tsx)",
       "Bash(git pull --rebase origin main)",
       "Bash(npx skills add remotion-dev/skills)",
-      "Bash(firebase deploy --only functions,firestore:rules)"
+      "Bash(firebase deploy --only functions,firestore:rules)",
+      "Bash(grep -n \"useTodoStore\\\\|useEventStore\\\\|global\\\\|getState\" src/hooks/use-todos*.ts)"
     ]
   }
 }

@@ -6,7 +6,7 @@ import { SlackNotifications } from '@/components/integrations/SlackNotifications
 import { WhatsAppLink } from '@/components/integrations/WhatsAppLink';
 import { ThemeSelector } from '@/components/theme/ThemeSelector';
 import { SchedulingSettings } from '@/components/settings/SchedulingSettings';
-import { LogOut, ChevronLeft, Crown, Plug2, Palette, Globe, Volume2, CalendarClock } from 'lucide-react';
+import { LogOut, ChevronLeft, Crown, Plug2, Palette, Globe, Volume2, CalendarClock, Mic, AudioLines } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext.unified';
@@ -43,7 +43,7 @@ const Settings = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('main');
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { aiAutoExecute, setAiAutoExecute } = useSettingsStore();
+  const { aiAutoExecute, setAiAutoExecute, wakeWordEnabled, setWakeWordEnabled, mallyVoiceId, setMallyVoiceId } = useSettingsStore();
   const [soundsEnabled, setSoundsEnabled] = useState(sounds.enabled);
   const handleToggleSounds = (val: boolean) => { sounds.setEnabled(val); setSoundsEnabled(val); };
   const { subscription } = useSubscription();
@@ -204,6 +204,40 @@ const Settings = () => {
               label="Scheduling"
               sublabel="Coming soon"
               className="opacity-40 pointer-events-none select-none"
+            />
+          </GroupedList>
+
+          {/* Mally AI */}
+          <GroupedListHeader>Mally AI</GroupedListHeader>
+          <GroupedList className="mb-2">
+            <GroupedListItem
+              icon={<AudioLines className="h-4 w-4 text-emerald-500" />}
+              iconBg="bg-emerald-500/15"
+              label="Assistant Voice"
+              sublabel="Choose Mally's voice"
+              showChevron={false}
+              rightElement={
+                <select 
+                  className="bg-transparent border-none text-right outline-none text-sm text-muted-foreground mr-1"
+                  value={['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(mallyVoiceId) ? mallyVoiceId : 'nova'}
+                  onChange={(e) => setMallyVoiceId(e.target.value)}
+                >
+                  <option value="nova">Nova (Conversational female)</option>
+                  <option value="echo">Echo (Calm male)</option>
+                  <option value="onyx">Onyx (Authoritative male)</option>
+                  <option value="shimmer">Shimmer (Energetic female)</option>
+                </select>
+              }
+            />
+            <GroupedListItem
+              icon={<Mic className="h-4 w-4 text-red-500" />}
+              iconBg="bg-red-500/15"
+              label='"Hey Mally" Wake Word'
+              sublabel={wakeWordEnabled ? 'Always listening for "Hey Mally"' : 'Tap mic to start voice'}
+              showChevron={false}
+              rightElement={
+                <Switch checked={wakeWordEnabled} onCheckedChange={setWakeWordEnabled} />
+              }
             />
           </GroupedList>
 

@@ -81,9 +81,15 @@ interface SettingsState {
    */
   mallyAutoMode: boolean;
   setMallyAutoMode: (value: boolean) => void;
+  /** When true, Picovoice listens for "Hey Mally" to auto-start voice sessions */
+  wakeWordEnabled: boolean;
+  setWakeWordEnabled: (value: boolean) => void;
   /** Conflict detection and rescheduling preferences */
   reschedulingPrefs: ReschedulingPreferences;
   setReschedulingPrefs: (prefs: Partial<ReschedulingPreferences>) => void;
+  /** Vapi Assistant Voice Configuration */
+  mallyVoiceId: string;
+  setMallyVoiceId: (id: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -99,9 +105,13 @@ export const useSettingsStore = create<SettingsState>()(
       setAiEnabledCalendarIds: (ids) => set({ aiEnabledCalendarIds: ids }),
       mallyAutoMode: false,
       setMallyAutoMode: (value) => set({ mallyAutoMode: value }),
+      wakeWordEnabled: false,
+      setWakeWordEnabled: (value) => set({ wakeWordEnabled: value }),
       reschedulingPrefs: DEFAULT_RESCHEDULING_PREFS,
       setReschedulingPrefs: (prefs) =>
         set((state) => ({ reschedulingPrefs: { ...state.reschedulingPrefs, ...prefs } })),
+      mallyVoiceId: 'sarah',
+      setMallyVoiceId: (id) => set({ mallyVoiceId: id }),
     }),
     {
       name: 'timegeist-settings',

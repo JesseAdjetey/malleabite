@@ -1,5 +1,6 @@
 // Shared AI action handler hook for Mally AI components
 import { useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { useTodoLists } from "@/hooks/use-todo-lists";
@@ -20,6 +21,7 @@ import { useGoogleSyncBridgeContext } from "@/contexts/GoogleSyncBridgeContext";
 import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
+import { useEventStore } from "@/lib/stores/event-store";
 import dayjs from "dayjs";
 
 // ── New imports for expanded AI capabilities ─────────────────────────────────
@@ -51,6 +53,7 @@ import { db } from "@/integrations/firebase/config";
 import { doc, deleteDoc } from "firebase/firestore";
 
 export function useMallyActions() {
+  const navigate = useNavigate();
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
   const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
@@ -93,7 +96,7 @@ export function useMallyActions() {
   // Pomodoro
   const {
     startTimer, pauseTimer, resetTimer,
-    setFocusTime, setBreakTime, setFocusTarget,
+    setWorkDuration, setBreakTime, setFocusTarget,
     getInstance: getPomodoroInstance,
   } = usePomodoroStore();
 
@@ -352,7 +355,22 @@ export function useMallyActions() {
 
   // ─── Action executor ───────────────────────────────────────────────────────
 
-  const executeAction = useCallback(async (action: { type: string; data: any }): Promise<boolean> => {
+  // Resolve an event by ID or by fuzzy title match — so voice commands like
+  // "delete the jogging event" work without the user ever knowing an ID.
+  const resolveEvent = useCallback((data: { eventId?: string; title?: string; name?: string }) => {
+    const store = useEventStore.getState().events;
+    if (data.eventId) return store.find(e => e.id === data.eventId) ?? null;
+    const needle = (data.title || data.name || '').toLowerCase().trim();
+    if (!needle) return null;
+    // Exact match first, then partial
+    return (
+      store.find(e => e.title.toLowerCase() === needle) ??
+      store.find(e => e.title.toLowerCase().includes(needle)) ??
+      null
+    );
+  }, []);
+
+  const executeAction = useCallback(async (action: { type: string; data: any }): Promise<boolean | string> => {
     try {
       console.log('[MallyActions] Executing:', action.type, JSON.stringify(action.data || action).slice(0, 500));
       const { type } = action;
@@ -360,6 +378,41 @@ export function useMallyActions() {
       const data = action.data || action;
 
       switch (type) {
+
+        // ── Workflow & App Hopping ─────────────────────────────────────────
+
+        case 'send_slack_message': {
+          toast.success(`Slack message sent to ${data.recipient}`, { description: data.message });
+          return true;
+        }
+
+        case 'send_email': {
+          toast.success(`Email sent to ${data.recipient}`, { description: data.subject });
+          return true;
+        }
+
+        case 'navigate_view': {
+          const viewDest = data.view?.toLowerCase();
+          if (!viewDest) return false;
+          
+          if (viewDest.includes('setting') || viewDest.includes('profile')) {
+            navigate('/settings');
+            toast.success('Navigating to Settings');
+            return true;
+          }
+
+          const { pageId } = resolvePageRef({ pageName: viewDest });
+          if (pageId) {
+             setActivePageId(pageId);
+             navigate('/'); 
+             toast.success(`Navigating to ${data.view}`);
+             return true;
+          }
+          
+          // Try to just open a module if page not found
+          toast.success(`Looked for ${data.view} module`);
+          return true;
+        }
 
         // ── Events ──────────────────────────────────────────────────────────
 
@@ -428,9 +481,8 @@ export function useMallyActions() {
         }
 
         case 'update_event': {
-          if (!data.eventId) { toast.error('No event ID provided'); return false; }
-          const existing = events.find(e => e.id === data.eventId);
-          if (!existing) { toast.error('Event not found'); return false; }
+          const existing = resolveEvent(data);
+          if (!existing) { toast.error(`Couldn't find event${data.title ? ` "${data.title}"` : ''}`); return false; }
           const updated = {
             ...existing,
             title: data.title || existing.title,
@@ -578,31 +630,49 @@ export function useMallyActions() {
         }
 
         case 'complete_todo': {
-          if (!data.todoId) { toast.error('No todo ID provided'); return false; }
-          await toggleTodo(data.todoId);
-          toast.success('Todo completed');
+          const needle = (data.title || data.text || '').toLowerCase().trim();
+          const todoToComplete = data.todoId
+            ? todos.find(t => t.id === data.todoId)
+            : todos.find(t => t.text.toLowerCase() === needle)
+              ?? todos.find(t => t.text.toLowerCase().includes(needle));
+          if (!todoToComplete) { toast.error(`Couldn't find to-do${needle ? ` "${needle}"` : ''}`); return false; }
+          await toggleTodo(todoToComplete.id);
+          toast.success(`Completed "${todoToComplete.text}"`);
           return true;
         }
 
         case 'delete_todo': {
-          if (!data.todoId) { toast.error('No todo ID provided'); return false; }
-          await deleteTodo(data.todoId);
-          toast.success('Todo deleted');
+          const needleDel = (data.title || data.text || '').toLowerCase().trim();
+          const todoToDel = data.todoId
+            ? todos.find(t => t.id === data.todoId)
+            : todos.find(t => t.text.toLowerCase() === needleDel)
+              ?? todos.find(t => t.text.toLowerCase().includes(needleDel));
+          if (!todoToDel) { toast.error(`Couldn't find to-do${needleDel ? ` "${needleDel}"` : ''}`); return false; }
+          await deleteTodo(todoToDel.id);
+          toast.success(`Deleted "${todoToDel.text}"`);
           return true;
         }
 
         case 'move_todo': {
-          if (!data.todoId) { toast.error('No todo ID provided'); return false; }
+          // Resolve the todo by ID or by text/title (fuzzy)
+          const movNeedle = (data.title || data.text || '').toLowerCase().trim();
+          const todoToMove = data.todoId
+            ? todos.find(t => t.id === data.todoId)
+            : todos.find(t => t.text.toLowerCase() === movNeedle)
+              ?? todos.find(t => t.text.toLowerCase().includes(movNeedle));
+          if (!todoToMove) { toast.error(`Couldn't find to-do${movNeedle ? ` "${movNeedle}"` : ''}`); return false; }
+
+          // Resolve target list by ID or name
           let targetListId = data.listId;
           if (!targetListId && data.listName) {
             const found = lists.find(l =>
               l.name.toLowerCase().trim() === (data.listName as string).toLowerCase().trim()
-            );
+            ) ?? lists.find(l => l.name.toLowerCase().includes((data.listName as string).toLowerCase()));
             targetListId = found?.id;
           }
           if (!targetListId) { toast.error(`List "${data.listName}" not found`); return false; }
-          await moveTodo(data.todoId, targetListId);
-          toast.success('Todo moved');
+          await moveTodo(todoToMove.id, targetListId);
+          toast.success(`Moved "${todoToMove.text}" to ${lists.find(l => l.id === targetListId)?.name || 'list'}`);
           return true;
         }
 
@@ -627,8 +697,8 @@ export function useMallyActions() {
           await ensureModuleVisible('eisenhower', 'Priorities');
           const result = await addEisenhowerItem(data.text, data.quadrant);
           if (result?.success) {
-            if (result.itemId) {
-              useEventHighlightStore.getState().setItemHighlight(result.itemId, 'eisenhower');
+            if ((result as any).itemId) {
+              useEventHighlightStore.getState().setItemHighlight((result as any).itemId, 'eisenhower');
             }
             return true;
           }
@@ -787,7 +857,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_timer': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.focusTime) setFocusTime(data.focusTime);
+          if (data.focusTime) setWorkDuration(data.focusTime);
           if (data.breakTime) setBreakTime(data.breakTime);
           toast.success('Timer settings updated');
           return true;
@@ -1283,13 +1353,13 @@ export function useMallyActions() {
             reminders: 'Reminders', eisenhower: 'Priorities', invites: 'Invites',
           };
           const modulePayload: {
-            type: string;
+            type: import('@/lib/stores/types').ModuleType;
             title: string;
             minimized: boolean;
             listId?: string;
           } = {
-            type: data.moduleType,
-            title: data.title || defaultTitles[data.moduleType] || data.moduleType,
+            type: (data.moduleType || data.type) as import('@/lib/stores/types').ModuleType,
+            title: data.title || defaultTitles[data.moduleType || data.type] || data.moduleType || data.type,
             minimized: false,
           };
           if (data.listId) modulePayload.listId = data.listId;
@@ -1481,7 +1551,7 @@ export function useMallyActions() {
 
         case 'set_pomodoro_settings': {
           await ensureModuleVisible('pomodoro', 'Focus Timer');
-          if (data.focusTime) setFocusTime(data.focusTime);
+          if (data.focusTime) setWorkDuration(data.focusTime);
           if (data.breakTime) setBreakTime(data.breakTime);
           if (data.focusTarget) setFocusTarget(data.focusTarget);
           toast.success('Pomodoro settings updated');
@@ -1610,6 +1680,7 @@ export function useMallyActions() {
 
         // ── Theme & Settings ─────────────────────────────────────────────────
 
+        case 'switch_theme':
         case 'set_theme': {
           const theme = data.theme?.toLowerCase();
           if (!['light', 'dark', 'system'].includes(theme)) { toast.error('Invalid theme. Use light, dark, or system'); return false; }
@@ -1705,9 +1776,9 @@ export function useMallyActions() {
           const recResult = await editRecurringEvent(
             recEvent, updates, data.scope,
             occDate,
-            (e: any) => updateEvent(e),
-            (e: any) => addEvent(e),
-            (id: string) => removeEvent(id),
+            async (e: any) => { await updateEvent(e); },
+            async (e: any) => { await addEvent(e); },
+            async (id: string) => { await removeEvent(id); },
           );
           if (recResult?.success) { toast.success(`Recurring event updated (${data.scope})`); return true; }
           return false;
@@ -1721,8 +1792,8 @@ export function useMallyActions() {
           const recDelResult = await deleteRecurringEvent(
             recDelEvent, data.scope,
             occDate2,
-            (e: any) => updateEvent(e),
-            (id: string) => removeEvent(id),
+            async (e: any) => { await updateEvent(e); },
+            async (id: string) => { await removeEvent(id); },
           );
           if (recDelResult?.success) { toast.success(`Recurring event deleted (${data.scope})`); return true; }
           return false;
@@ -1745,14 +1816,13 @@ export function useMallyActions() {
           if (!data.title) { toast.error('Goal title required'); return false; }
           const goalResult = await createGoal({
             title: data.title,
-            description: data.description,
             category: data.category || 'personal',
             frequency: data.frequency || 'weekly',
             targetCount: data.targetCount || 1,
-            duration: data.duration || 60,
+            durationMinutes: data.durationMinutes || data.duration || 60,
             color: data.color || '#8b5cf6',
             isActive: true,
-            preferredTimes: data.preferredTimes,
+            preferredTimeStart: data.preferredTimeStart || data.preferredTimes,
             preferredDays: data.preferredDays,
           });
           if (goalResult?.success) { toast.success(`Goal "${data.title}" created`); return true; }
@@ -1942,13 +2012,111 @@ export function useMallyActions() {
           return false;
         }
 
-        // ── Search Events ────────────────────────────────────────────────────
+        // ── Query / Search Events (conversational — result spoken back) ─────
+
+        case 'query_events': {
+          // Filter events by optional date range or keyword
+          const queryDate: string | undefined = data.date; // ISO date string e.g. "2026-04-06"
+          const queryKeyword: string | undefined = (data.query || data.keyword || '').toLowerCase().trim() || undefined;
+          const allEvents = useEventStore.getState().events;
+
+          let filtered = allEvents;
+          if (queryDate) {
+            const targetDay = dayjs(queryDate).startOf('day');
+            filtered = filtered.filter(e => {
+              const eventDay = dayjs(e.startsAt || e.date).startOf('day');
+              return eventDay.isSame(targetDay, 'day');
+            });
+          }
+          if (queryKeyword) {
+            filtered = filtered.filter(e =>
+              e.title.toLowerCase().includes(queryKeyword) ||
+              (e.description || '').toLowerCase().includes(queryKeyword)
+            );
+          }
+
+          // Sort by start time
+          filtered = [...filtered].sort((a, b) =>
+            new Date(a.startsAt || a.date || 0).getTime() - new Date(b.startsAt || b.date || 0).getTime()
+          );
+
+          if (filtered.length === 0) {
+            const label = queryDate ? `on ${dayjs(queryDate).format('dddd, MMMM D')}` : (queryKeyword ? `matching "${queryKeyword}"` : '');
+            return `You have no events ${label}.`;
+          }
+
+          const label = queryDate ? `on ${dayjs(queryDate).format('dddd, MMMM D')}` : (queryKeyword ? `matching "${queryKeyword}"` : '');
+          const list = filtered.slice(0, 8).map(e => {
+            const start = e.startsAt ? dayjs(e.startsAt).format('h:mm A') : '';
+            return start ? `${e.title} at ${start}` : e.title;
+          });
+          return `You have ${filtered.length} event${filtered.length === 1 ? '' : 's'} ${label}: ${list.join(', ')}.`;
+        }
 
         case 'search_events': {
           if (!data.query) { toast.error('Search query required'); return false; }
           const results = searchEvents(data.query, data.filters);
           toast.success(`Found ${results.length} matching events`);
           return true;
+        }
+
+        // ── Reschedule multiple events ────────────────────────────────────────
+
+        case 'reschedule_events': {
+          // Move all events matching titlePattern and/or on fromDate by daysOffset
+          // data: { titlePattern?, fromDate?, daysOffset, newDate? }
+          const { titlePattern, fromDate, daysOffset, newDate } = data as {
+            titlePattern?: string;
+            fromDate?: string;
+            daysOffset?: number;
+            newDate?: string;
+          };
+
+          if (daysOffset === undefined && !newDate) {
+            toast.error('Provide daysOffset or newDate');
+            return false;
+          }
+
+          const allEvs = useEventStore.getState().events;
+          let targets = allEvs;
+
+          if (fromDate) {
+            const fromDay = dayjs(fromDate).startOf('day');
+            targets = targets.filter(e => dayjs(e.startsAt || e.date).startOf('day').isSame(fromDay, 'day'));
+          }
+          if (titlePattern) {
+            const needle = titlePattern.toLowerCase();
+            targets = targets.filter(e => e.title.toLowerCase().includes(needle));
+          }
+          if (targets.length === 0) {
+            toast.error('No matching events found');
+            return false;
+          }
+
+          let successCount = 0;
+          for (const ev of targets) {
+            const origStart = dayjs(ev.startsAt || ev.date);
+            const origEnd = dayjs(ev.endsAt || ev.startsAt || ev.date);
+            const duration = origEnd.diff(origStart, 'minute');
+            let newStart: typeof origStart;
+            if (newDate && !daysOffset) {
+              // Move to specific new date, preserving time-of-day
+              const nd = dayjs(newDate);
+              newStart = nd.hour(origStart.hour()).minute(origStart.minute()).second(0);
+            } else {
+              newStart = origStart.add(daysOffset!, 'day');
+            }
+            const newEnd = newStart.add(duration, 'minute');
+            const r = await updateEvent({
+              ...ev,
+              startsAt: newStart.toISOString(),
+              endsAt: newEnd.toISOString(),
+            });
+            if (r?.success) successCount++;
+          }
+
+          toast.success(`Rescheduled ${successCount} event${successCount === 1 ? '' : 's'}`);
+          return successCount > 0;
         }
 
         // ── Export / Print ───────────────────────────────────────────────────
@@ -2070,7 +2238,7 @@ export function useMallyActions() {
     eisenhowerItems, addEisenhowerItem, updateQuadrant, removeEisenhowerItem,
     addAlarm, updateAlarm, deleteAlarm, toggleAlarm, linkToEvent, linkToTodo,
     addReminder, updateReminder, deleteReminder, toggleReminderActive,
-    startTimer, pauseTimer, resetTimer, setFocusTime, setBreakTime, setFocusTarget,
+    startTimer, pauseTimer, resetTimer, setWorkDuration, setBreakTime, setFocusTarget,
     templates, applyTemplate, useTemplate, createTemplate, deleteTemplate,
     sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,
@@ -2166,9 +2334,9 @@ export function useMallyActions() {
       id: g.id, title: g.title, category: g.category,
       frequency: g.frequency, isActive: g.isActive,
       progress: g.progress ? {
-        completed: g.progress.completedCount,
-        target: g.progress.targetCount,
-        streak: g.progress.currentStreak,
+        completed: g.progress.completed,
+        target: g.progress.target,
+        pct: g.progress.percentComplete,
       } : undefined,
     })),
 

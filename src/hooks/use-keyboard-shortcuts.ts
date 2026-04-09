@@ -20,6 +20,7 @@ export type ShortcutAction =
   | 'settings'
   | 'showShortcuts'
   | 'toggleBulkMode'
+  | 'toggleVoice'
   // Event actions
   | 'deleteEvent'
   | 'editEvent'
@@ -55,6 +56,7 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, Shortcut> = {
   settings: { key: 's', description: 'Open settings', category: 'actions' },
   showShortcuts: { key: '/', description: 'Show keyboard shortcuts', category: 'actions' },
   toggleBulkMode: { key: 'b', description: 'Toggle bulk select', category: 'actions' },
+  toggleVoice: { key: 'm', ctrl: true, shift: true, description: 'Toggle Voice Assistant', category: 'actions' },
 
   // Event actions
   deleteEvent: { key: 'Delete', description: 'Delete open event', category: 'events' },
@@ -238,8 +240,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         onSaveEvent?.();
         break;
       case 'cancelEdit':
-      case 'deleteEvent':
-      case 'editEvent':
         // Handled at app level
         break;
     }

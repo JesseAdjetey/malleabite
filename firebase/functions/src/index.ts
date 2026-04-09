@@ -325,8 +325,8 @@ export const processAIRequest = onRequest(
       'https://malleabite-97d35.web.app',
       'https://malleabite-97d35.firebaseapp.com',
       'https://malleabite.vercel.app',
-      'https://malleabite.com',
       'https://www.malleabite.com',
+      'https://malleabite.com',
       /\.vercel\.app$/  // Allow all Vercel preview deployments
     ],
     region: 'us-central1',

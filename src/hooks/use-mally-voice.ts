@@ -5,7 +5,10 @@ import { auth } from '@/integrations/firebase/config';
 
 // ─── Configuration ────────────────────────────────────────────────────
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
-const TOKEN_URL = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
+const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+const TOKEN_URL = isLocal 
+  ? `http://localhost:5001/${PROJECT_ID}/us-central1/getMallyRealtimeToken`
+  : `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
 const OPENAI_REALTIME_URL = 'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
 
 const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
@@ -78,10 +81,8 @@ export function useMallyVoice({
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
 
-  // Picovoice references
-  const webVoiceProcessorRef = useRef<any>(null);
-  const picovoiceWorkerRef = useRef<any>(null);
-  const picovoiceSubscribedRef = useRef(false);
+  // Web Speech API references
+  const recognitionRef = useRef<any>(null);
 
   const onCommandRef = useRef(onCommand);
   const getContextRef = useRef(getContext);
@@ -94,18 +95,15 @@ export function useMallyVoice({
   // ── Resume wake word (internal helper) ────────────────────────────
   const resumeWakeWordInternal = useCallback(() => {
     if (
-      webVoiceProcessorRef.current &&
-      picovoiceWorkerRef.current &&
-      !picovoiceSubscribedRef.current &&
+      recognitionRef.current &&
       useSettingsStore.getState().wakeWordEnabled
     ) {
-      webVoiceProcessorRef.current
-        .subscribe(picovoiceWorkerRef.current)
-        .then(() => {
-          picovoiceSubscribedRef.current = true;
-          console.log('[MallyVoice] Resumed wake word detection.');
-        })
-        .catch(console.error);
+      try {
+        recognitionRef.current.start();
+        console.log('[MallyVoice] Resumed native Web Speech wake word detection.');
+      } catch (e) {
+        // Ignored. Start throws if already started.
+      }
     }
   }, []);
 
@@ -202,14 +200,13 @@ export function useMallyVoice({
     setLastAction('');
 
     // Pause wake word before grabbing mic
-    if (picovoiceSubscribedRef.current && webVoiceProcessorRef.current && picovoiceWorkerRef.current) {
+    if (recognitionRef.current) {
       try {
-        await webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current);
-        picovoiceSubscribedRef.current = false;
-        console.log('[MallyVoice] Paused wake word detection to free up mic.');
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        recognitionRef.current.abort();
+        console.log('[MallyVoice] Paused native wake word detection to free up mic.');
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Brief pause
       } catch (e) {
-        console.warn('[MallyVoice] Could not pause wake word:', e);
+        // Ignored
       }
     }
 
@@ -278,7 +275,7 @@ export function useMallyVoice({
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: {
               type: 'server_vad',
-              silence_duration_ms: opts.ptt ? 999999 : 600, // Do not auto-interrupt if PTT
+              silence_duration_ms: opts.ptt ? 10000 : 600, // OpenAI max is 10s
               threshold: 0.5,
               prefix_padding_ms: 300,
             },
@@ -462,75 +459,109 @@ export function useMallyVoice({
   const startVoiceRef = useRef(startVoice);
   useEffect(() => { startVoiceRef.current = startVoice; }, [startVoice]);
 
-  // ── Picovoice Porcupine Wake Word ──────────────────────────────────
+  // ── Native Web Speech API Wake Word (Free & Limitless) ─────────────
   useEffect(() => {
     if (!wakeWordEnabled) return;
 
-    const accessKey = import.meta.env.VITE_PICOVOICE_ACCESS_KEY;
-    const keywordBase64 = import.meta.env.VITE_PICOVOICE_KEYWORD_B64;
-
-    if (!accessKey || !keywordBase64) {
-      console.warn('[MallyVoice] Picovoice credentials missing — wake word disabled.');
+    // Check browser support
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      console.warn('[MallyVoice] Web Speech API not supported in this browser. Wake word disabled.');
       return;
     }
 
-    let cancelled = false;
+    let isCancelled = false;
+    let isDictatingPause = false;
+    const recognition = new SpeechRecognitionAPI();
+    recognitionRef.current = recognition;
 
-    const init = async () => {
-      // If already created, just ensure subscription if not active
-      if (picovoiceWorkerRef.current) {
-        if (!isActiveRef.current && !picovoiceSubscribedRef.current) {
-          webVoiceProcessorRef.current?.subscribe(picovoiceWorkerRef.current)
-            .then(() => { picovoiceSubscribedRef.current = true; })
-            .catch(() => {});
-        }
-        return;
-      }
+    const handlePause = () => {
+      isDictatingPause = true;
+      try { recognition.abort(); } catch (e) {}
+    };
 
-      try {
-        const { PorcupineWorker } = await import('@picovoice/porcupine-web');
-        const { WebVoiceProcessor } = await import('@picovoice/web-voice-processor');
-
-        if (cancelled) return;
-        webVoiceProcessorRef.current = WebVoiceProcessor;
-
-        const worker = await PorcupineWorker.create(
-          accessKey,
-          { base64: keywordBase64, label: 'Hey Mally', sensitivity: 0.9 },
-          (detection: any) => {
-            console.log('[MallyVoice] Wake word detected:', detection.label);
-            if (!isActiveRef.current) {
-              startVoiceRef.current();
-            }
-          },
-          { publicPath: '/porcupine-params.pv' },
-        );
-
-        if (cancelled) { worker.release(); return; }
-
-        picovoiceWorkerRef.current = worker;
-        
-        // Start listening immediately if voice session isn't active
-        if (!isActiveRef.current) {
-          await WebVoiceProcessor.subscribe(worker);
-          picovoiceSubscribedRef.current = true;
-          console.log('[MallyVoice] Porcupine wake word active.');
-        }
-      } catch (err) {
-        console.error('[MallyVoice] Porcupine init error:', err);
+    const handleResume = () => {
+      isDictatingPause = false;
+      if (!isCancelled && wakeWordEnabled && !isActiveRef.current) {
+        try { recognition.start(); } catch (e) {}
       }
     };
 
-    init();
+    window.addEventListener('pause-wake-word', handlePause);
+    window.addEventListener('resume-wake-word', handleResume);
+
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      if (isActiveRef.current) return;
+
+      let currentTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        currentTranscript += event.results[i][0].transcript;
+      }
+      
+      const normalized = currentTranscript.toLowerCase().replace(/[.,!?]/g, '').trim();
+      
+      // Look for variants of the wake word
+      if (normalized.includes('mally') || normalized.includes('mali') || normalized.includes('hey mali')) {
+        console.log('[MallyVoice] Wake word detected natively:', normalized);
+        
+        try {
+          // Immediately abort background listening so it frees the mic for OpenAI
+          recognition.abort();
+        } catch (e) {}
+
+        if (!isActiveRef.current) {
+          // Start the realtime agent pipeline. Let it auto-greet since the user just said the wake word.
+          startVoiceRef.current();
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+        console.error('[MallyVoice] Microphone permission denied or unavailable for native wake word.');
+        isCancelled = true;
+      } else if (event.error !== 'aborted') {
+        // "aborted" is totally normal when we manually pause it or detect the wake word
+        console.warn(`[MallyVoice] Native Speech recognition error: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      // Browsers often force-kill continuous recognition after varying periods of silence.
+      // Auto-restart the loop indefinitely if we are still supposed to be listening.
+      if (!isCancelled && wakeWordEnabled && !isActiveRef.current && !isDictatingPause) {
+        try {
+          recognition.start();
+        } catch (e) {
+          // Ignore if it's already running or failed.
+        }
+      }
+    };
+
+    // Kick off the initial listen
+    if (!isActiveRef.current && !isCancelled) {
+      try {
+        recognition.start();
+        console.log('[MallyVoice] Native Web Speech wake word system active.');
+      } catch(e) {
+        console.warn('[MallyVoice] Could not start native speech recognition:', e);
+      }
+    }
 
     return () => {
-      cancelled = true;
-      if (picovoiceWorkerRef.current && webVoiceProcessorRef.current) {
-        webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current).catch(() => {});
-        picovoiceWorkerRef.current.release();
-        picovoiceWorkerRef.current = null;
-        picovoiceSubscribedRef.current = false;
-        console.log('[MallyVoice] Porcupine cleaned up.');
+      isCancelled = true;
+      window.removeEventListener('pause-wake-word', handlePause);
+      window.removeEventListener('resume-wake-word', handleResume);
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {}
+        recognitionRef.current = null;
+        console.log('[MallyVoice] Native wake word system cleaned up.');
       }
     };
   }, [wakeWordEnabled]);

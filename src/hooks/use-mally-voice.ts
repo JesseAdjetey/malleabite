@@ -5,10 +5,7 @@ import { auth } from '@/integrations/firebase/config';
 
 // ─── Configuration ────────────────────────────────────────────────────
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
-const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-const TOKEN_URL = isLocal 
-  ? `http://localhost:5001/${PROJECT_ID}/us-central1/getMallyRealtimeToken`
-  : `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
+const TOKEN_URL = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
 const OPENAI_REALTIME_URL = 'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
 
 const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];

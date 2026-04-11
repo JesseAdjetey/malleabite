@@ -233,7 +233,7 @@ export function useCalendarEvents() {
         .sort((a, b) => (a.startsAt || '').localeCompare(b.startsAt || ''));
       setEvents(eventsList);
       // Keep global store (used by calendar views) in sync with Firestore
-      useEventStore.getState().setEvents(eventsList);
+      useEventStore.getState().setFirestoreEvents(eventsList);
       setLoading(false);
       setError(null);
     }, (error) => {

@@ -57,6 +57,7 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, Shortcut> = {
   showShortcuts: { key: '/', description: 'Show keyboard shortcuts', category: 'actions' },
   toggleBulkMode: { key: 'b', description: 'Toggle bulk select', category: 'actions' },
   toggleVoice: { key: 'm', ctrl: true, shift: true, description: 'Toggle Voice Assistant', category: 'actions' },
+  // Note: Q (hold) = push-to-talk — handled directly in BottomMallyAI, not via this hook
 
   // Event actions
   deleteEvent: { key: 'Delete', description: 'Delete open event', category: 'events' },

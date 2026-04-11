@@ -11,6 +11,7 @@ type EventStore = {
   isEventSummaryOpen: boolean;
   selectedEvent: CalendarEventType | null;
   setEvents: (events: CalendarEventType[]) => void;
+  setFirestoreEvents: (events: CalendarEventType[]) => void;
   addEvent: (event: CalendarEventType) => void;
   updateEvent: (event: CalendarEventType) => void;
   deleteEvent: (id: string) => void;
@@ -49,6 +50,20 @@ export const useEventStore = create<EventStore>()(
           });
 
           set({ events: formattedEvents });
+        },
+        // Replaces only Firestore-owned events, preserving Google Calendar events
+        setFirestoreEvents: (events) => {
+          const formattedEvents = events.map(event =>
+            !event.date && event.startsAt
+              ? { ...event, date: dayjs(event.startsAt).format('YYYY-MM-DD') }
+              : event
+          );
+          set(state => ({
+            events: [
+              ...state.events.filter(e => e.source === 'google'),
+              ...formattedEvents,
+            ]
+          }));
         },
         addEvent: (event) => {
           // Ensure date property exists for backward compatibility

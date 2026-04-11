@@ -252,12 +252,59 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     voiceState,
     startVoice,
     stopVoice,
+    pttRelease,
     transcript: voiceTranscript,
     assistantText: voiceAssistantText,
     lastAction: voiceLastAction,
     volume: voiceVolume,
     isVoiceReady,
   } = useMallyVoice({ onCommand: executeAction, getContext: getVoiceContext });
+
+  // voiceState ref so PTT keydown always sees latest state without re-binding
+  const voiceStateRef = useRef(voiceState);
+  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
+
+  // ── Push-to-talk: hold Q to speak, release to get response ────────
+  useEffect(() => {
+    if (!isVoiceReady) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return; // Don't re-trigger on key held
+      if (e.key.toLowerCase() !== 'q') return;
+      // Skip if user is typing in an input
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) return;
+
+      e.preventDefault();
+      const state = voiceStateRef.current;
+      if (state === 'idle' || state === 'error') {
+        startVoice({ ptt: true });
+      } else if (state === 'listening' || state === 'speaking' || state === 'connecting') {
+        // Q again = hard exit voice mode
+        stopVoice();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'q') return;
+      // Only release PTT if voice is active (not if we just stopped it with Q)
+      const state = voiceStateRef.current;
+      if (state === 'listening' || state === 'speaking') {
+        pttRelease();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isVoiceReady, startVoice, stopVoice, pttRelease]);
 
   // Push voice transcripts into the chat
   const lastVoiceTranscriptRef = useRef('');
@@ -851,7 +898,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     const msg = messages.find(m => m.pendingActions?.some(a => a.id === actionId));
     if (!msg) return;
     const pending = msg.pendingActions?.find(a => a.id === actionId);
-    if (!pending) return;
+    if (!pending || pending.status !== 'pending') return;
+
+    // Immediately mark as approved so the button disables and no duplicate can fire
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msg.id) return m;
+      return {
+        ...m,
+        pendingActions: m.pendingActions?.map(a =>
+          a.id === actionId ? { ...a, status: 'approved' as const } : a
+        ),
+      };
+    }));
 
     // Execute
     const success = await executeAction({ type: pending.type, data: pending.data });
@@ -885,18 +943,13 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       };
     }
 
-    // Update status and add card
-    setMessages(prev => prev.map(m => {
-      if (m.id !== msg.id) return m;
-      const updatedPending = m.pendingActions?.map(a =>
-        a.id === actionId ? { ...a, status: 'approved' as const } : a
-      );
-      return {
-        ...m,
-        pendingActions: updatedPending,
-        actionCards: card ? [...(m.actionCards || []), card] : m.actionCards,
-      };
-    }));
+    // Add action card (status already set to approved above)
+    if (card) {
+      setMessages(prev => prev.map(m => {
+        if (m.id !== msg.id) return m;
+        return { ...m, actionCards: [...(m.actionCards || []), card!] };
+      }));
+    }
 
     // Spotlight reveal for manually approved event actions
     if (success) {
@@ -1470,18 +1523,17 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                             {/* AI messages use the rich renderer */}
                             {message.sender === "ai" ? (
                               message.isLoading ? (
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex space-x-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0ms' }} />
-                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '150ms' }} />
-                                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '300ms' }} />
-                                    </div>
-                                  </div>
-                                  {/* Show action progress during loading */}
-                                  {message.actionProgress && message.actionProgress.length > 0 && (
-                                    <ActionProgress steps={message.actionProgress} />
-                                  )}
+                                <div className="flex items-center gap-1 py-0.5">
+                                  {[0, 1, 2].map(i => (
+                                    <span
+                                      key={i}
+                                      className="w-1.5 h-1.5 rounded-full bg-purple-400/80"
+                                      style={{
+                                        animation: 'mallyPulse 1.2s ease-in-out infinite',
+                                        animationDelay: `${i * 0.2}s`,
+                                      }}
+                                    />
+                                  ))}
                                 </div>
                               ) : (
                                 <RichMessageRenderer
@@ -1813,20 +1865,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   <Send className="h-5 w-5" />
                 </motion.button>
 
-                {/* Voice (mic) button */}
+                {/* Voice (mic) button — hold to talk, release to get response */}
                 {isVoiceReady && (
                   <motion.button
-                    onClick={() => {
-                      if (voiceState === 'idle' || voiceState === 'error') {
-                        startVoice();
-                      } else {
-                        stopVoice();
-                      }
-                    }}
+                    onMouseDown={() => { if (voiceState === 'idle' || voiceState === 'error') startVoice({ ptt: true }); }}
+                    onMouseUp={() => { if (voiceState === 'listening' || voiceState === 'speaking') pttRelease(); else if (voiceState === 'connecting') stopVoice(); }}
+                    onMouseLeave={() => { if (voiceState === 'listening' || voiceState === 'speaking') pttRelease(); }}
+                    onTouchStart={(e) => { e.preventDefault(); if (voiceState === 'idle' || voiceState === 'error') startVoice({ ptt: true }); }}
+                    onTouchEnd={() => { if (voiceState === 'listening' || voiceState === 'speaking') pttRelease(); }}
                     whileTap={{ scale: 0.86 }}
                     transition={{ type: 'spring', damping: 18, stiffness: 400 }}
                     className={cn(
-                      "p-2.5 rounded-full transition-all relative overflow-hidden",
+                      "p-2.5 rounded-full transition-all relative overflow-hidden select-none",
                       voiceState === 'listening'
                         ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
                         : voiceState === 'speaking'
@@ -1836,11 +1886,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                         : "bg-black/5 dark:bg-white/10 text-muted-foreground hover:bg-black/10 dark:hover:bg-white/20 hover:text-foreground"
                     )}
                     title={
-                      voiceState === 'idle' ? 'Talk to Mally'
+                      voiceState === 'idle' ? 'Hold to talk to Mally  [ Q ]'
                       : voiceState === 'connecting' ? 'Connecting…'
-                      : voiceState === 'listening' ? 'Listening… (click to stop)'
-                      : voiceState === 'speaking' ? 'Mally is speaking… (click to stop)'
-                      : 'Voice error — click to retry'
+                      : voiceState === 'listening' ? 'Listening… (release to send)'
+                      : voiceState === 'speaking' ? 'Mally is speaking…'
+                      : 'Voice error — hold to retry'
                     }
                   >
                     {voiceState !== 'idle' && voiceState !== 'error' ? (

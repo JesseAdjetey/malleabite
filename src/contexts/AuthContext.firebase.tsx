@@ -169,8 +169,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         description: "You have been signed in with Google.",
       });
     } catch (firebaseError: any) {
+      if (firebaseError.code === 'auth/popup-closed-by-user' || firebaseError.code === 'auth/cancelled-popup-request') {
+        return; // User dismissed the popup — not an error
+      }
+
       logger.error('Auth', 'Google sign in failed', firebaseError);
-      
+
       errorHandler.handleAuthError(firebaseError);
       setError(firebaseError.message || 'An error occurred during Google sign in');
     } finally {

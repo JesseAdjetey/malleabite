@@ -25,8 +25,10 @@ export type VoiceState =
 
 export interface UseMallyVoiceReturn {
   voiceState: VoiceState;
-  startVoice: () => void;
+  startVoice: (opts?: { ptt?: boolean }) => void;
   stopVoice: () => void;
+  /** Call on key/button release when in PTT mode — mutes mic so Mally processes & responds */
+  pttRelease: () => void;
   transcript: string;
   volume: number;
   isVoiceReady: boolean;
@@ -49,55 +51,25 @@ export function useMallyVoice({
   const [lastAction, setLastAction] = useState('');
 
   const isActiveRef = useRef(false);
+  const isPTTModeRef = useRef(false);
+  // True when PTT key was released before Vapi finished connecting
+  const pttReleasePendingRef = useRef(false);
+
   const webVoiceProcessorRef = useRef<any>(null);
   const picovoiceWorkerRef = useRef<any>(null);
+  const picovoiceSubscribedRef = useRef(false);
 
   const onCommandRef = useRef(onCommand);
   const getContextRef = useRef(getContext);
   useEffect(() => { onCommandRef.current = onCommand; }, [onCommand]);
   useEffect(() => { getContextRef.current = getContext; }, [getContext]);
 
-  // Read the settings reactively
   const wakeWordEnabled = useSettingsStore((s) => s.wakeWordEnabled);
   const mallyVoiceId = useSettingsStore((s) => s.mallyVoiceId);
 
-  // ── Start a voice session ──────────────────────────────────────────
-  const startVoice = useCallback(async () => {
-    const vapi = getVapi();
-    if (!vapi || isActiveRef.current) return;
-    isActiveRef.current = true;
 
-    // Instant audio feedback so the user knows Mally heard them
-    sounds.play('micOn');
-
-    setVoiceState('connecting');
-    setTranscript('');
-    setAssistantText('');
-    setLastAction('');
-
-    // Yield mic from Picovoice to prevent Krisp/Daily.co crashes.
-    // We must stop the underlying MediaStream tracks (not just unsubscribe) so the
-    // OS fully releases the hardware microphone lock before Vapi tries to open it.
-    if (webVoiceProcessorRef.current && picovoiceWorkerRef.current) {
-      try {
-        await webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current);
-        console.log('[MallyVoice] Paused wake word detection to free up mic.');
-      } catch (e) {
-        console.warn('[MallyVoice] Could not pause wake word:', e);
-      }
-    }
-    // Stop any lingering MediaStream tracks so the hardware mic is truly released.
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      if (devices.length > 0) {
-        // getUserMedia just to enumerate — we close it immediately to flush any lock
-        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        tempStream.getTracks().forEach(t => t.stop());
-      }
-    } catch (_) { /* permission already granted — ignore errors */ }
-    // Give the OS 400ms to reclaim and re-open the mic cleanly
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
+  // ── Build assistant config ─────────────────────────────────────────
+  const buildAssistantConfig = useCallback((opts: { ptt?: boolean } = {}) => {
     const ctx = getContextRef.current();
 
     const systemPrompt = [
@@ -115,20 +87,20 @@ export function useMallyVoice({
       '',
       'EVENTS:',
       '- "create_event"         data: { title, start (ISO), end (ISO), isRecurring?: bool, recurrenceRule?: "FREQ=DAILY"|"FREQ=WEEKLY;BYDAY=MO,WE,FR"|"FREQ=MONTHLY" etc }',
-      '- "update_event"         data: { title (of event to update), newTitle?, start?, end?, calendarId? (to move to another calendar) }',
+      '- "update_event"         data: { title (of event to update), newTitle?, start?, end?, calendarId? }',
       '- "delete_event"         data: { title (of event to delete) }',
-      '- "reschedule_events"    data: { titlePattern? (partial title), fromDate? (ISO date of events to move), daysOffset?: number, newDate?: (ISO date to move to) }',
-      '- "query_events"         data: { date?: (ISO date e.g. "2026-04-06"), query?: (keyword search) } — USE THIS when the user asks what they have scheduled. Returns spoken result.',
+      '- "reschedule_events"    data: { titlePattern?, fromDate?, daysOffset?: number, newDate? }',
+      '- "query_events"         data: { date?, query? } — USE THIS when the user asks what they have scheduled.',
       '',
       'TO-DOS:',
       '- "create_todo"    data: { text }',
-      '- "complete_todo"  data: { title (todo text to mark done) }',
-      '- "delete_todo"    data: { title (todo text to delete) }',
-      '- "move_todo"      data: { title (todo text to move), listName (target list name) }',
+      '- "complete_todo"  data: { title }',
+      '- "delete_todo"    data: { title }',
+      '- "move_todo"      data: { title, listName }',
       '',
       'ALARMS & REMINDERS:',
       '- "create_alarm"    data: { title, time (ISO or "HH:MM" or "9:00 AM") }',
-      '- "create_reminder" data: { title, reminderTime (ISO or "HH:MM" or "9:00 AM"), description? }',
+      '- "create_reminder" data: { title, reminderTime, description? }',
       '',
       'NAVIGATION:',
       '- "navigate_view"  data: { view: "settings"|"dashboard"|pageName }',
@@ -137,11 +109,11 @@ export function useMallyVoice({
       '- "start_pomodoro" data: {}',
       '- "pause_pomodoro" data: {}',
       '- "reset_pomodoro" data: {}',
-      '- "set_pomodoro_timer" data: { focusTime?: number (minutes), breakTime?: number (minutes) }',
+      '- "set_pomodoro_timer" data: { focusTime?: number, breakTime?: number }',
       '',
       'PAGES & MODULES:',
       '- "create_page"    data: { title }',
-      '- "delete_page"    data: { title (page name to delete) }',
+      '- "delete_page"    data: { title }',
       '- "add_module"     data: { moduleType: "todo"|"pomodoro"|"alarms"|"reminders"|"eisenhower", pageName? }',
       '- "remove_module"  data: { moduleType, pageName? }',
       '',
@@ -171,19 +143,14 @@ export function useMallyVoice({
       }`,
     ].join('\n');
 
-    // First arg: CreateAssistantDTO — transcriber, model, voice, firstMessage, backgroundSound
-    // Second arg: AssistantOverrides — startSpeakingPlan (smart endpointing lives here)
-    const assistantConfig = {
-      // ── Transcription ────────────────────────────────────────────────
-      // nova-3 is Deepgram's most accurate model for conversational speech.
-      // smartFormat cleans up punctuation/numbers. endpointing=300ms gives
-      // a natural pause before the AI responds without cutting the user off.
+    const assistantConfig: any = {
       transcriber: {
         provider: 'deepgram' as const,
         model: 'nova-3',
         language: 'en' as const,
         smartFormat: true,
-        endpointing: 300,
+        // PTT: tighter endpointing since releasing the key is the real end-of-speech signal
+        endpointing: opts.ptt ? 150 : 300,
         keywords: ['Mally', 'Malleabite', 'pomodoro', 'eisenhower'],
       },
       backgroundSound: 'off' as const,
@@ -204,7 +171,7 @@ export function useMallyVoice({
               parameters: {
                 type: 'object' as const,
                 properties: {
-                  actionType: { type: 'string' as const, description: 'The exact type string from the list of valid actions (e.g. create_todo, add_module, set_theme, undo).' },
+                  actionType: { type: 'string' as const, description: 'The exact type string from the list of valid actions.' },
                   actionDataJSON: { type: 'string' as const, description: 'A JSON stringified representation of the required data payload.' },
                 },
                 required: ['actionType', 'actionDataJSON'],
@@ -215,39 +182,116 @@ export function useMallyVoice({
       },
       voice: {
         provider: 'openai' as const,
-        voiceId: (mallyVoiceId && ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(mallyVoiceId) ? mallyVoiceId : 'nova') as any,
+        voiceId: (mallyVoiceId && ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(mallyVoiceId)
+          ? mallyVoiceId
+          : 'nova') as any,
       },
-      firstMessage: "Hey! I'm listening.",
+      // No greeting — a firstMessage makes Mally speak before the user can,
+      // blocking mic input for its entire duration.
+      firstMessage: '',
     };
 
-    // AssistantOverrides: startSpeakingPlan (LiveKit smart endpointing) lives here.
-    // LiveKit uses a neural model to detect when the user is truly done speaking
-    // rather than relying purely on silence duration — prevents Mally cutting you off.
     const assistantOverrides = {
       startSpeakingPlan: {
         smartEndpointingPlan: { provider: 'livekit' as const },
       },
     };
 
+    return { assistantConfig, assistantOverrides };
+  }, [mallyVoiceId]);
+
+  // ── Resume wake word (internal helper) ────────────────────────────
+  const resumeWakeWordInternal = useCallback(() => {
+    if (
+      webVoiceProcessorRef.current &&
+      picovoiceWorkerRef.current &&
+      !picovoiceSubscribedRef.current &&
+      useSettingsStore.getState().wakeWordEnabled
+    ) {
+      webVoiceProcessorRef.current
+        .subscribe(picovoiceWorkerRef.current)
+        .then(() => {
+          picovoiceSubscribedRef.current = true;
+          console.log('[MallyVoice] Resumed wake word detection.');
+        })
+        .catch(console.error);
+    }
+  }, []);
+
+  // ── Start a voice session ──────────────────────────────────────────
+  const startVoice = useCallback(async (opts: { ptt?: boolean } = {}) => {
+    const vapi = getVapi();
+    if (!vapi || isActiveRef.current) return;
+    isActiveRef.current = true;
+    isPTTModeRef.current = !!opts.ptt;
+    pttReleasePendingRef.current = false;
+
+    sounds.play('micOn');
+    // PTT: show 'listening' immediately — no connecting screen.
+    // Non-PTT (button/wake word): show 'connecting' during WebRTC setup.
+    setVoiceState(opts.ptt ? 'listening' : 'connecting');
+    setTranscript('');
+    setAssistantText('');
+    setLastAction('');
+
+    // Only run the mic-release dance if Picovoice is actively holding the mic.
+    // For PTT (no Picovoice), skip entirely — saves ~600ms of unnecessary delay.
+    if (picovoiceSubscribedRef.current && webVoiceProcessorRef.current && picovoiceWorkerRef.current) {
+      try {
+        await webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current);
+        picovoiceSubscribedRef.current = false;
+        console.log('[MallyVoice] Paused wake word detection to free up mic.');
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (e) {
+        console.warn('[MallyVoice] Could not pause wake word:', e);
+      }
+    }
+
+    const { assistantConfig, assistantOverrides } = buildAssistantConfig(opts);
+
     vapi.start(assistantConfig, assistantOverrides).catch((err: unknown) => {
       console.error('[MallyVoice] start error:', err);
       isActiveRef.current = false;
+      isPTTModeRef.current = false;
+      pttReleasePendingRef.current = false;
       setVoiceState('error');
-      if (webVoiceProcessorRef.current && picovoiceWorkerRef.current && useSettingsStore.getState().wakeWordEnabled) {
-         webVoiceProcessorRef.current.subscribe(picovoiceWorkerRef.current).catch(console.error);
-      }
+      resumeWakeWordInternal();
     });
-  }, []);
+  }, [buildAssistantConfig, resumeWakeWordInternal]);
+
+  // ── PTT release — mute mic so Vapi's endpointing fires → Mally responds ──
+  const pttRelease = useCallback(() => {
+    const vapi = getVapi();
+    if (!isActiveRef.current) return;
+
+    if (voiceState === 'connecting') {
+      // Vapi not connected yet — flag it; mute will be applied on call-start
+      pttReleasePendingRef.current = true;
+      console.log('[MallyVoice] PTT released during connect — will mute on call-start.');
+      return;
+    }
+
+    if (vapi && isPTTModeRef.current) {
+      try {
+        vapi.setMuted(true);
+        console.log('[MallyVoice] PTT released — mic muted, waiting for Mally response.');
+      } catch (e) {
+        console.warn('[MallyVoice] setMuted failed:', e);
+      }
+    }
+  }, [voiceState]);
 
   // ── Stop ───────────────────────────────────────────────────────────
   const stopVoice = useCallback(() => {
     const vapi = getVapi();
     if (vapi) vapi.stop();
     isActiveRef.current = false;
+    isPTTModeRef.current = false;
+    pttReleasePendingRef.current = false;
     setVoiceState('idle');
   }, []);
 
-  // Keep startVoice in a ref so the Porcupine callback always has the latest
+  // Keep startVoice in a ref so Porcupine callback always has the latest version
   const startVoiceRef = useRef(startVoice);
   useEffect(() => { startVoiceRef.current = startVoice; }, [startVoice]);
 
@@ -259,35 +303,50 @@ export function useMallyVoice({
     const onCallStart = () => {
       isActiveRef.current = true;
       setVoiceState('listening');
-    };
-    
-    // Helper to resume wake word after call ends or errors
-    const resumeWakeWord = () => {
-      if (webVoiceProcessorRef.current && picovoiceWorkerRef.current && useSettingsStore.getState().wakeWordEnabled) {
-        webVoiceProcessorRef.current.subscribe(picovoiceWorkerRef.current).catch(console.error);
-        console.log('[MallyVoice] Resumed wake word detection.');
+
+      // If PTT key was released before we finished connecting, mute now
+      if (pttReleasePendingRef.current) {
+        pttReleasePendingRef.current = false;
+        try {
+          vapi.setMuted(true);
+          console.log('[MallyVoice] PTT pending release applied — mic muted.');
+        } catch (e) {
+          console.warn('[MallyVoice] setMuted on call-start failed:', e);
+        }
       }
     };
 
     const onCallEnd = () => {
       isActiveRef.current = false;
+      isPTTModeRef.current = false;
+      pttReleasePendingRef.current = false;
       setVoiceState('idle');
-      resumeWakeWord();
+      resumeWakeWordInternal();
     };
+
     const onSpeechStart = () => setVoiceState('speaking');
-    const onSpeechEnd = () => setVoiceState('listening');
+
+    const onSpeechEnd = () => {
+      setVoiceState('listening');
+      // After Mally finishes speaking in PTT mode, unmute mic so next hold works
+      if (isPTTModeRef.current) {
+        try { vapi.setMuted(false); } catch (_) {}
+      }
+    };
+
     const onVolumeLevel = (lvl: number) => setVolume(lvl);
 
     const onError = (e: any) => {
       console.error('[MallyVoice] Vapi error:', e);
       isActiveRef.current = false;
+      isPTTModeRef.current = false;
+      pttReleasePendingRef.current = false;
       setVoiceState('error');
-      resumeWakeWord();
+      resumeWakeWordInternal();
       setTimeout(() => setVoiceState('idle'), 3000);
     };
 
     const onMessage = (message: any) => {
-      // Log every single message so we can see what Vapi is actually sending
       console.log('[MallyVoice] RAW message:', JSON.stringify(message));
 
       if (message.type === 'transcript' && message.role === 'user' && message.transcriptType === 'final') {
@@ -297,8 +356,6 @@ export function useMallyVoice({
         setAssistantText(message.transcript);
       }
 
-      // Vapi v2 sends "tool-calls" with a toolCallList array.
-      // Older builds sent "function-call" with a functionCall object — handle both.
       const toolCallList: Array<{ id?: string; function: { name: string; arguments: string } }> =
         message.type === 'tool-calls'
           ? message.toolCallList
@@ -348,7 +405,6 @@ export function useMallyVoice({
       for (const toolCall of toolCallList) {
         const name = toolCall.function.name;
 
-        // Parse arguments — handle both JSON string and plain object
         let args: any = {};
         try {
           const raw = toolCall.function.arguments;
@@ -357,7 +413,6 @@ export function useMallyVoice({
           console.error('[MallyVoice] Failed to parse tool arguments:', toolCall.function.arguments, e);
         }
 
-        // Parse actionDataJSON — handle both JSON string and plain object
         if (args.actionDataJSON && typeof args.actionDataJSON !== 'string') {
           args.actionDataJSON = JSON.stringify(args.actionDataJSON);
         }
@@ -370,7 +425,6 @@ export function useMallyVoice({
         const actionType = name === 'execute_platform_action' ? args.actionType : name;
         setLastAction(actionLabels[actionType] ?? `Running ${actionType}…`);
 
-        // Map the god-tool to a native action payload
         const execPromise = name === 'execute_platform_action'
           ? onCommandRef.current({ type: args.actionType, data: actionData })
           : onCommandRef.current({ type: name, data: args });
@@ -380,8 +434,6 @@ export function useMallyVoice({
             console.log('[MallyVoice] Tool execution result:', name, result);
             setLastAction('');
 
-            // If the action returned a string (e.g. query_events), inject it directly
-            // so the AI speaks the answer without further processing.
             if (typeof result === 'string') {
               vapi.send({
                 type: 'add-message',
@@ -391,7 +443,6 @@ export function useMallyVoice({
             }
 
             const success = result;
-            // Include the action context so the model knows exactly what was done
             const resultCtx = actionType === 'create_event'
               ? `Created event titled "${actionData.title}". You can now reference it by that name.`
               : actionType === 'create_todo'
@@ -440,11 +491,10 @@ export function useMallyVoice({
       vapi.off('message', onMessage);
       vapi.off('error', onError);
     };
-  }, []);
+  }, [resumeWakeWordInternal]);
 
-  // ── Picovoice Porcupine Wake Word (conditional on setting) ─────────
+  // ── Picovoice Porcupine Wake Word ──────────────────────────────────
   useEffect(() => {
-    // Only initialise when the user has opted in
     if (!wakeWordEnabled) return;
 
     const accessKey = import.meta.env.VITE_PICOVOICE_ACCESS_KEY;
@@ -456,12 +506,13 @@ export function useMallyVoice({
     }
 
     let cancelled = false;
-    let workerRef: any = null;
 
     const init = async () => {
       if (picovoiceWorkerRef.current) {
-        if (!isActiveRef.current) {
-           webVoiceProcessorRef.current?.subscribe(picovoiceWorkerRef.current).catch(()=>{});
+        if (!isActiveRef.current && !picovoiceSubscribedRef.current) {
+          webVoiceProcessorRef.current?.subscribe(picovoiceWorkerRef.current)
+            .then(() => { picovoiceSubscribedRef.current = true; })
+            .catch(() => {});
         }
         return;
       }
@@ -475,11 +526,7 @@ export function useMallyVoice({
 
         const worker = await PorcupineWorker.create(
           accessKey,
-          {
-            base64: keywordBase64,
-            label: 'Hey Mally',
-            sensitivity: 0.9, // High sensitivity — picks up normal speech volume
-          },
+          { base64: keywordBase64, label: 'Hey Mally', sensitivity: 0.9 },
           (detection: any) => {
             console.log('[MallyVoice] Wake word detected:', detection.label);
             if (!isActiveRef.current) {
@@ -489,14 +536,12 @@ export function useMallyVoice({
           { publicPath: '/porcupine-params.pv' },
         );
 
-        if (cancelled) {
-          worker.release();
-          return;
-        }
+        if (cancelled) { worker.release(); return; }
 
         picovoiceWorkerRef.current = worker;
         if (!isActiveRef.current) {
           await WebVoiceProcessor.subscribe(worker);
+          picovoiceSubscribedRef.current = true;
           console.log('[MallyVoice] Porcupine wake word active.');
         }
       } catch (err) {
@@ -509,10 +554,11 @@ export function useMallyVoice({
     return () => {
       cancelled = true;
       if (picovoiceWorkerRef.current && webVoiceProcessorRef.current) {
-         webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current).catch(()=>{});
-         picovoiceWorkerRef.current.release();
-         picovoiceWorkerRef.current = null;
-         console.log('[MallyVoice] Porcupine cleaned up.');
+        webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current).catch(() => {});
+        picovoiceWorkerRef.current.release();
+        picovoiceWorkerRef.current = null;
+        picovoiceSubscribedRef.current = false;
+        console.log('[MallyVoice] Porcupine cleaned up.');
       }
     };
   }, [wakeWordEnabled]);
@@ -521,6 +567,7 @@ export function useMallyVoice({
     voiceState,
     startVoice,
     stopVoice,
+    pttRelease,
     transcript,
     assistantText,
     lastAction,

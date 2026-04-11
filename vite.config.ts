@@ -49,9 +49,11 @@ export default defineConfig(({ mode }) => {
     port: 8080,
     headers: {
       // Allow Google OAuth popup to communicate back to the opener
+      // NOTE: Cross-Origin-Embedder-Policy intentionally omitted — it strips credentials
+      // from the Firebase auth iframe (/__/auth/iframe) and breaks sign-in.
+      // If Porcupine WASM / SharedArrayBuffer is needed, serve those routes from a
+      // dedicated worker origin that opts in to COEP independently.
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-      // Required for SharedArrayBuffer (used by Porcupine wake word WASM worker)
-      'Cross-Origin-Embedder-Policy': 'credentialless',
     },
   },
   plugins: [

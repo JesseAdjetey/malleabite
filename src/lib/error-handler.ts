@@ -55,6 +55,11 @@ class ErrorHandler {
    * Handle Firebase authentication errors
    */
   handleAuthError(error: any): void {
+    // User intentionally closed the popup — not an error worth surfacing
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      return;
+    }
+
     const appError: AppError = {
       message: this.getAuthErrorMessage(error.code),
       code: error.code,

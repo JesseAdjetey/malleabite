@@ -435,8 +435,7 @@ export const todoistPushAction = onCall(
 
     switch (action.type) {
       case 'create': {
-        // Use REST v2 for task creation — it correctly assigns project_id.
-        // The /api/v1 endpoint ignores project_id on POST and sends tasks to Inbox.
+        // Use the REST API v1 to create a task with project_id.
         const body: Record<string, any> = {
           content: action.text,
           project_id: action.projectId,
@@ -444,27 +443,26 @@ export const todoistPushAction = onCall(
         if (action.description) body.description = action.description;
         if (action.deadline) body.due_date = action.deadline;
 
-        console.log('[pushAction:create] body sent to REST v2:', JSON.stringify(body));
-        const created = await todoistFetch(accessToken, '/tasks', {
+        const createRes = await todoistFetch(accessToken, '/tasks', {
           method: 'POST',
           body: JSON.stringify(body),
-        }, 'https://api.todoist.com/rest/v2') as TodoistTask;
-        console.log('[pushAction:create] Todoist response:', JSON.stringify(created));
+        });
+        const createdTask = createRes as { id: string };
+        const createdId = createdTask.id;
+        if (!createdId) throw new HttpsError('internal', 'Todoist did not return a task ID');
 
         // Write back to Firestore with deterministic ID (same scheme as todoistSync)
         // so a concurrent auto-sync won't create a second copy for the same task.
         const ts = admin.firestore.Timestamp.now();
-        const deterministicId = `todoist_${uid}_${created.id}`;
+        const deterministicId = `todoist_${uid}_${createdId}`;
         await getDb().collection('todo_items').doc(deterministicId).set({
           text: action.text,
           description: action.description || '',
           completed: false,
           listId: action.listId,
           userId: uid,
-          todoistId: created.id,
+          todoistId: createdId,
           todoistProjectId: action.projectId,
-          _debug_sentProjectId: action.projectId,
-          _debug_returnedProjectId: created.project_id || (created as any).projectId || null,
           deadline: action.deadline || null,
           createdAt: ts,
           updatedAt: ts,
@@ -472,7 +470,7 @@ export const todoistPushAction = onCall(
           pinned: false,
         });
 
-        return { todoistId: created.id };
+        return { todoistId: createdId };
       }
 
       case 'update': {

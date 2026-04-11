@@ -180,7 +180,7 @@ export function useCalendarEvents() {
       // Transform Firebase events to CalendarEventType
       const transformedEvents = firebaseEvents.map(transformFirebaseEvent);
       setEvents(transformedEvents);
-      useEventStore.getState().setEvents(transformedEvents);
+      useEventStore.getState().setFirestoreEvents(transformedEvents);
 
     } catch (err: any) {
       logger.error('useCalendarEvents', 'Fetch events error', err);

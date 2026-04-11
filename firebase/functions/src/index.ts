@@ -27,6 +27,9 @@ export {
   listGoogleCalendarsForAccount,
 } from './google-calendar-oauth';
 
+// Export OpenAI Realtime token endpoint
+export { getMallyRealtimeToken } from './openai-realtime';
+
 // Export Mally Action push notification handlers
 export {
   onCalendarEventActionWritten,

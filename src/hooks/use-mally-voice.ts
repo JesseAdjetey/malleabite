@@ -1,27 +1,45 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Vapi from '@vapi-ai/web';
 import { useSettingsStore } from '@/lib/stores/settings-store';
 import { sounds } from '@/lib/sounds';
+import { auth } from '@/integrations/firebase/config';
 
-// ─── Configuration ───────────────────────────────────────────────────
-const VAPI_PUBLIC_KEY = import.meta.env.VITE_VAPI_PUBLIC_KEY || '';
+// ─── Configuration ────────────────────────────────────────────────────
+const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
+const TOKEN_URL = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
+const OPENAI_REALTIME_URL = 'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
 
-// Lazily-created singleton
-let _vapiInstance: InstanceType<typeof Vapi> | null = null;
-function getVapi(): InstanceType<typeof Vapi> | null {
-  if (!VAPI_PUBLIC_KEY) return null;
-  if (!_vapiInstance) {
-    _vapiInstance = new Vapi(VAPI_PUBLIC_KEY);
-  }
-  return _vapiInstance;
-}
+const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
 
-export type VoiceState =
-  | 'idle'
-  | 'connecting'
-  | 'listening'
-  | 'speaking'
-  | 'error';
+const ACTION_LABELS: Record<string, string> = {
+  create_event: 'Creating event…',
+  update_event: 'Updating event…',
+  delete_event: 'Deleting event…',
+  reschedule_events: 'Rescheduling events…',
+  query_events: 'Looking up schedule…',
+  create_alarm: 'Setting alarm…',
+  create_reminder: 'Setting reminder…',
+  create_todo: 'Adding to-do…',
+  complete_todo: 'Completing to-do…',
+  delete_todo: 'Deleting to-do…',
+  move_todo: 'Moving to-do…',
+  navigate_view: 'Navigating…',
+  start_pomodoro: 'Starting timer…',
+  pause_pomodoro: 'Pausing timer…',
+  reset_pomodoro: 'Resetting timer…',
+  set_pomodoro_timer: 'Updating timer…',
+  create_page: 'Creating page…',
+  delete_page: 'Deleting page…',
+  add_module: 'Adding module…',
+  remove_module: 'Removing module…',
+  set_theme: 'Changing theme…',
+  switch_theme: 'Changing theme…',
+  undo: 'Undoing…',
+  redo: 'Redoing…',
+  send_slack_message: 'Sending message…',
+  send_email: 'Sending email…',
+};
+
+export type VoiceState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error';
 
 export interface UseMallyVoiceReturn {
   voiceState: VoiceState;
@@ -36,7 +54,7 @@ export interface UseMallyVoiceReturn {
   lastAction: string;
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────
 export function useMallyVoice({
   onCommand,
   getContext,
@@ -52,9 +70,15 @@ export function useMallyVoice({
 
   const isActiveRef = useRef(false);
   const isPTTModeRef = useRef(false);
-  // True when PTT key was released before Vapi finished connecting
-  const pttReleasePendingRef = useRef(false);
+  const responseActiveRef = useRef(false);
 
+  // OpenAI Realtime references
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+
+  // Picovoice references
   const webVoiceProcessorRef = useRef<any>(null);
   const picovoiceWorkerRef = useRef<any>(null);
   const picovoiceSubscribedRef = useRef(false);
@@ -66,139 +90,6 @@ export function useMallyVoice({
 
   const wakeWordEnabled = useSettingsStore((s) => s.wakeWordEnabled);
   const mallyVoiceId = useSettingsStore((s) => s.mallyVoiceId);
-
-
-  // ── Build assistant config ─────────────────────────────────────────
-  const buildAssistantConfig = useCallback((opts: { ptt?: boolean } = {}) => {
-    const ctx = getContextRef.current();
-
-    const systemPrompt = [
-      'You are Mally, the unified Voice Assistant for the Malleabite productivity app.',
-      'Be extremely concise — users are talking, not reading. No markdown.',
-      'You have "God Mode" platform permissions. Execute actions immediately using the `execute_platform_action` tool.',
-      '',
-      'CRITICAL RULES:',
-      '- NEVER ask the user for an ID. IDs are internal. Always use the title/name to reference items.',
-      '- For delete/update, pass the title in the data and the system will resolve it.',
-      '- If the user says "delete it" or "the event I just created", infer the title from the conversation.',
-      '- Always act, then confirm. Do not ask for permission unless genuinely ambiguous.',
-      '',
-      '--- VALID PLATFORM ACTIONS (actionType) ---',
-      '',
-      'EVENTS:',
-      '- "create_event"         data: { title, start (ISO), end (ISO), isRecurring?: bool, recurrenceRule?: "FREQ=DAILY"|"FREQ=WEEKLY;BYDAY=MO,WE,FR"|"FREQ=MONTHLY" etc }',
-      '- "update_event"         data: { title (of event to update), newTitle?, start?, end?, calendarId? }',
-      '- "delete_event"         data: { title (of event to delete) }',
-      '- "reschedule_events"    data: { titlePattern?, fromDate?, daysOffset?: number, newDate? }',
-      '- "query_events"         data: { date?, query? } — USE THIS when the user asks what they have scheduled.',
-      '',
-      'TO-DOS:',
-      '- "create_todo"    data: { text }',
-      '- "complete_todo"  data: { title }',
-      '- "delete_todo"    data: { title }',
-      '- "move_todo"      data: { title, listName }',
-      '',
-      'ALARMS & REMINDERS:',
-      '- "create_alarm"    data: { title, time (ISO or "HH:MM" or "9:00 AM") }',
-      '- "create_reminder" data: { title, reminderTime, description? }',
-      '',
-      'NAVIGATION:',
-      '- "navigate_view"  data: { view: "settings"|"dashboard"|pageName }',
-      '',
-      'POMODORO / FOCUS TIMER:',
-      '- "start_pomodoro" data: {}',
-      '- "pause_pomodoro" data: {}',
-      '- "reset_pomodoro" data: {}',
-      '- "set_pomodoro_timer" data: { focusTime?: number, breakTime?: number }',
-      '',
-      'PAGES & MODULES:',
-      '- "create_page"    data: { title }',
-      '- "delete_page"    data: { title }',
-      '- "add_module"     data: { moduleType: "todo"|"pomodoro"|"alarms"|"reminders"|"eisenhower", pageName? }',
-      '- "remove_module"  data: { moduleType, pageName? }',
-      '',
-      'APPEARANCE:',
-      '- "set_theme"      data: { theme: "light"|"dark"|"system" }',
-      '',
-      'HISTORY:',
-      '- "undo"           data: {}',
-      '- "redo"           data: {}',
-      '',
-      'COMMUNICATION:',
-      '- "send_slack_message" data: { recipient, message }',
-      '- "send_email"     data: { recipient, subject, body }',
-      '-------------------------------------------',
-      '',
-      `Current time: ${new Date().toISOString()}`,
-      `Active page: ${ctx?.sidebarPages?.find((p: any) => p.isActive)?.title || 'Dashboard'}`,
-      `Events (${ctx?.events?.length ?? 0}):\n${
-        ctx?.events?.length > 0
-          ? ctx.events.map((e: any) => `- "${e.title}" at ${new Date(e.start || e.startsAt).toLocaleTimeString()}`).join('\n')
-          : 'None'
-      }`,
-      `To-dos (${ctx?.todos?.length ?? 0}):\n${
-        ctx?.todos?.length > 0
-          ? ctx.todos.map((t: any) => `- "${t.text || t.title}" (${t.completed ? 'Done' : 'Pending'})`).join('\n')
-          : 'None'
-      }`,
-    ].join('\n');
-
-    const assistantConfig: any = {
-      transcriber: {
-        provider: 'deepgram' as const,
-        model: 'nova-3',
-        language: 'en' as const,
-        smartFormat: true,
-        // PTT: tighter endpointing since releasing the key is the real end-of-speech signal
-        endpointing: opts.ptt ? 150 : 300,
-        keywords: ['Mally', 'Malleabite', 'pomodoro', 'eisenhower'],
-      },
-      backgroundSound: 'off' as const,
-      model: {
-        provider: 'openai' as const,
-        model: 'gpt-4o-mini' as const,
-        messages: [{ role: 'system' as const, content: systemPrompt }],
-        tools: [
-          {
-            type: 'function' as const,
-            messages: [
-              { type: 'request-start' as const, content: 'Executing action…' },
-              { type: 'request-complete' as const, content: 'Done.' },
-            ],
-            function: {
-              name: 'execute_platform_action',
-              description: 'Executes ANY platform action. Provide the exact actionType and a JSON string of actionData.',
-              parameters: {
-                type: 'object' as const,
-                properties: {
-                  actionType: { type: 'string' as const, description: 'The exact type string from the list of valid actions.' },
-                  actionDataJSON: { type: 'string' as const, description: 'A JSON stringified representation of the required data payload.' },
-                },
-                required: ['actionType', 'actionDataJSON'],
-              },
-            },
-          },
-        ],
-      },
-      voice: {
-        provider: 'openai' as const,
-        voiceId: (mallyVoiceId && ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(mallyVoiceId)
-          ? mallyVoiceId
-          : 'nova') as any,
-      },
-      // No greeting — a firstMessage makes Mally speak before the user can,
-      // blocking mic input for its entire duration.
-      firstMessage: '',
-    };
-
-    const assistantOverrides = {
-      startSpeakingPlan: {
-        smartEndpointingPlan: { provider: 'livekit' as const },
-      },
-    };
-
-    return { assistantConfig, assistantOverrides };
-  }, [mallyVoiceId]);
 
   // ── Resume wake word (internal helper) ────────────────────────────
   const resumeWakeWordInternal = useCallback(() => {
@@ -218,24 +109,99 @@ export function useMallyVoice({
     }
   }, []);
 
-  // ── Start a voice session ──────────────────────────────────────────
+  // ── Build system prompt with live context ──────────────────────────
+  const buildSystemPrompt = useCallback(() => {
+    const ctx = getContextRef.current();
+    return [
+      'You are Mally, the unified Voice Assistant for the Malleabite productivity app.',
+      'Be extremely concise — users are talking, not reading. No markdown.',
+      'You have "God Mode" platform permissions. Execute actions immediately using the execute_platform_action tool.',
+      '',
+      'CRITICAL RULES:',
+      '- NEVER ask the user for an ID. IDs are internal. Always use the title/name.',
+      '- For delete/update, pass the title and the system will resolve it.',
+      '- If the user says "delete it" or "the one I just created", infer from context.',
+      '- Always act, then confirm. Do not ask for permission unless genuinely ambiguous.',
+      '',
+      '--- VALID PLATFORM ACTIONS (actionType) ---',
+      'EVENTS:',
+      '  create_event      { title, start (ISO), end (ISO), isRecurring?, recurrenceRule? }',
+      '  update_event      { title, newTitle?, start?, end?, calendarId? }',
+      '  delete_event      { title }',
+      '  reschedule_events { titlePattern?, fromDate?, daysOffset?, newDate? }',
+      '  query_events      { date?, query? }  ← use when asked what is scheduled',
+      'TO-DOS:',
+      '  create_todo  { text }',
+      '  complete_todo { title }',
+      '  delete_todo  { title }',
+      '  move_todo    { title, listName }',
+      'ALARMS & REMINDERS:',
+      '  create_alarm    { title, time }',
+      '  create_reminder { title, reminderTime, description? }',
+      'OTHER:',
+      '  navigate_view    { view: "settings"|"dashboard"|pageName }',
+      '  start_pomodoro | pause_pomodoro | reset_pomodoro | set_pomodoro_timer { focusTime?, breakTime? }',
+      '  create_page | delete_page  { title }',
+      '  add_module | remove_module { moduleType, pageName? }',
+      '  set_theme  { theme: "light"|"dark"|"system" }',
+      '  undo | redo  {}',
+      '  send_slack_message { recipient, message }',
+      '  send_email         { recipient, subject, body }',
+      '-------------------------------------------',
+      '',
+      `Current time: ${new Date().toISOString()}`,
+      `Active page: ${ctx?.sidebarPages?.find((p: any) => p.isActive)?.title || 'Dashboard'}`,
+      `Events (${ctx?.events?.length ?? 0}): ${
+        ctx?.events?.length > 0
+          ? ctx.events.map((e: any) => `"${e.title}" at ${new Date(e.start || e.startsAt).toLocaleTimeString()}`).join(', ')
+          : 'None'
+      }`,
+      `To-dos (${ctx?.todos?.length ?? 0}): ${
+        ctx?.todos?.length > 0
+          ? ctx.todos.map((t: any) => `"${t.text || t.title}" (${t.completed ? 'Done' : 'Pending'})`).join(', ')
+          : 'None'
+      }`,
+    ].join('\n');
+  }, []);
+
+  // ── Stop ───────────────────────────────────────────────────────────
+  const stopVoice = useCallback(() => {
+    pcRef.current?.close();
+    pcRef.current = null;
+    dcRef.current = null;
+    localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current = null;
+    isActiveRef.current = false;
+    isPTTModeRef.current = false;
+    setVoiceState('idle');
+    setVolume(0);
+    resumeWakeWordInternal();
+  }, [resumeWakeWordInternal]);
+
+  // ── PTT release — mute mic so Mally responds ───────────────────────
+  const pttRelease = useCallback(() => {
+    if (!isActiveRef.current || !isPTTModeRef.current) return;
+    
+    if (dcRef.current?.readyState === 'open') {
+      console.log('[MallyVoice] PTT released — forcing OpenAI response early.');
+      dcRef.current.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+      dcRef.current.send(JSON.stringify({ type: 'response.create' }));
+    }
+  }, []);
+
+  // ── Start ──────────────────────────────────────────────────────────
   const startVoice = useCallback(async (opts: { ptt?: boolean } = {}) => {
-    const vapi = getVapi();
-    if (!vapi || isActiveRef.current) return;
+    if (isActiveRef.current) return;
     isActiveRef.current = true;
     isPTTModeRef.current = !!opts.ptt;
-    pttReleasePendingRef.current = false;
 
     sounds.play('micOn');
-    // PTT: show 'listening' immediately — no connecting screen.
-    // Non-PTT (button/wake word): show 'connecting' during WebRTC setup.
     setVoiceState(opts.ptt ? 'listening' : 'connecting');
     setTranscript('');
     setAssistantText('');
     setLastAction('');
 
-    // Only run the mic-release dance if Picovoice is actively holding the mic.
-    // For PTT (no Picovoice), skip entirely — saves ~600ms of unnecessary delay.
+    // Pause wake word before grabbing mic
     if (picovoiceSubscribedRef.current && webVoiceProcessorRef.current && picovoiceWorkerRef.current) {
       try {
         await webVoiceProcessorRef.current.unsubscribe(picovoiceWorkerRef.current);
@@ -247,251 +213,254 @@ export function useMallyVoice({
       }
     }
 
-    const { assistantConfig, assistantOverrides } = buildAssistantConfig(opts);
+    try {
+      // 1. Fetch ephemeral token from Firebase function (key stays server-side)
+      const currentUser = auth.currentUser;
+      const authToken = currentUser ? await currentUser.getIdToken() : null;
+      const voice = VALID_VOICES.includes(mallyVoiceId ?? '') ? mallyVoiceId! : 'nova';
 
-    vapi.start(assistantConfig, assistantOverrides).catch((err: unknown) => {
-      console.error('[MallyVoice] start error:', err);
-      isActiveRef.current = false;
-      isPTTModeRef.current = false;
-      pttReleasePendingRef.current = false;
-      setVoiceState('error');
-      resumeWakeWordInternal();
-    });
-  }, [buildAssistantConfig, resumeWakeWordInternal]);
+      const tokenRes = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ voice }),
+      });
+      if (!tokenRes.ok) throw new Error(`Token fetch failed: ${tokenRes.status}`);
+      const { token } = await tokenRes.json();
 
-  // ── PTT release — mute mic so Vapi's endpointing fires → Mally responds ──
-  const pttRelease = useCallback(() => {
-    const vapi = getVapi();
-    if (!isActiveRef.current) return;
+      // 2. WebRTC peer connection
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
 
-    if (voiceState === 'connecting') {
-      // Vapi not connected yet — flag it; mute will be applied on call-start
-      pttReleasePendingRef.current = true;
-      console.log('[MallyVoice] PTT released during connect — will mute on call-start.');
-      return;
-    }
-
-    if (vapi && isPTTModeRef.current) {
-      try {
-        vapi.setMuted(true);
-        console.log('[MallyVoice] PTT released — mic muted, waiting for Mally response.');
-      } catch (e) {
-        console.warn('[MallyVoice] setMuted failed:', e);
+      // Output: OpenAI's audio → hidden <audio> element (autoplay)
+      if (!audioElRef.current) {
+        audioElRef.current = document.createElement('audio');
+        audioElRef.current.autoplay = true;
+        document.body.appendChild(audioElRef.current);
       }
-    }
-  }, [voiceState]);
+      pc.ontrack = (e) => {
+        if (audioElRef.current) audioElRef.current.srcObject = e.streams[0];
+      };
 
-  // ── Stop ───────────────────────────────────────────────────────────
-  const stopVoice = useCallback(() => {
-    const vapi = getVapi();
-    if (vapi) vapi.stop();
-    isActiveRef.current = false;
-    isPTTModeRef.current = false;
-    pttReleasePendingRef.current = false;
-    setVoiceState('idle');
-  }, []);
+      // Input: user mic → WebRTC track
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStreamRef.current = stream;
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
-  // Keep startVoice in a ref so Porcupine callback always has the latest version
-  const startVoiceRef = useRef(startVoice);
-  useEffect(() => { startVoiceRef.current = startVoice; }, [startVoice]);
+      // 3. Data channel for events
+      const dc = pc.createDataChannel('oai-events');
+      dcRef.current = dc;
 
-  // ── Vapi event listeners (mounted once) ────────────────────────────
-  useEffect(() => {
-    const vapi = getVapi();
-    if (!vapi) return;
-
-    const onCallStart = () => {
-      isActiveRef.current = true;
-      setVoiceState('listening');
-
-      // If PTT key was released before we finished connecting, mute now
-      if (pttReleasePendingRef.current) {
-        pttReleasePendingRef.current = false;
-        try {
-          vapi.setMuted(true);
-          console.log('[MallyVoice] PTT pending release applied — mic muted.');
-        } catch (e) {
-          console.warn('[MallyVoice] setMuted on call-start failed:', e);
+      const sendEvent = (obj: object) => {
+        if (dcRef.current?.readyState === 'open') {
+          dcRef.current.send(JSON.stringify(obj));
         }
-      }
-    };
+      };
 
-    const onCallEnd = () => {
+      const safeResponseCreate = () => {
+        if (!responseActiveRef.current) {
+          responseActiveRef.current = true;
+          sendEvent({ type: 'response.create' });
+        }
+      };
+
+      dc.onopen = () => {
+        console.log('[MallyVoice] Data channel open — configuring session.');
+        setVoiceState('listening');
+
+        // Configure session: voice, instructions, VAD, tools, transcription
+        sendEvent({
+          type: 'session.update',
+          session: {
+            instructions: buildSystemPrompt(),
+            input_audio_transcription: { model: 'whisper-1' },
+            turn_detection: {
+              type: 'server_vad',
+              silence_duration_ms: opts.ptt ? 999999 : 600, // Do not auto-interrupt if PTT
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+            },
+            tools: [
+              {
+                type: 'function',
+                name: 'execute_platform_action',
+                description: 'Executes ANY action on the Malleabite app. Use this for ALL user requests.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    actionType: {
+                      type: 'string',
+                      description: 'The exact action type string, e.g. create_event, create_todo, set_theme, undo.',
+                    },
+                    actionDataJSON: {
+                      type: 'string',
+                      description: 'JSON-stringified data payload for the action.',
+                    },
+                  },
+                  required: ['actionType', 'actionDataJSON'],
+                },
+              },
+            ],
+            tool_choice: 'auto',
+          },
+        });
+
+        // Trigger opening greeting only if NOT in PTT
+        if (!opts.ptt) {
+          sendEvent({
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'user',
+              content: [{ type: 'input_text', text: '[System] Greet the user very briefly — one sentence, say you are listening.' }],
+            },
+          });
+          safeResponseCreate();
+        }
+      };
+
+      dc.onmessage = (e) => {
+        let event: any;
+        try { event = JSON.parse(e.data); } catch { return; }
+
+        switch (event.type) {
+          case 'input_audio_buffer.speech_started':
+            setVoiceState('listening');
+            break;
+
+          case 'response.created':
+            responseActiveRef.current = true;
+            break;
+
+          case 'response.done':
+            responseActiveRef.current = false;
+            break;
+
+          case 'response.audio.delta':
+            setVoiceState('speaking');
+            setVolume(0.8);
+            break;
+
+          case 'response.audio.done':
+            setVoiceState('listening');
+            setVolume(0);
+            break;
+
+          case 'response.audio_transcript.delta':
+            setAssistantText(prev => prev + (event.delta || ''));
+            break;
+
+          case 'response.audio_transcript.done':
+            setAssistantText(event.transcript || '');
+            break;
+
+          case 'conversation.item.input_audio_transcription.completed':
+            setTranscript(event.transcript || '');
+            break;
+
+          // Tool call
+          case 'response.output_item.done': {
+            const item = event.item;
+            if (item?.type !== 'function_call') break;
+
+            const callId = item.call_id;
+            let args: any = {};
+            try { args = JSON.parse(item.arguments || '{}'); } catch {}
+
+            const actionData = args.actionDataJSON
+              ? (() => { try { return JSON.parse(args.actionDataJSON); } catch { return {}; } })()
+              : {};
+            const actionType = item.name === 'execute_platform_action' ? args.actionType : item.name;
+
+            console.log('[MallyVoice] Tool call:', actionType, actionData);
+            setLastAction(ACTION_LABELS[actionType] ?? `Running ${actionType}…`);
+
+            onCommandRef.current({ type: actionType, data: actionData })
+              .then((result) => {
+                setLastAction('');
+                const output = typeof result === 'string'
+                  ? `Query result: ${result}. Read this to the user conversationally.`
+                  : `Action "${actionType}" ${result ? 'completed successfully' : 'failed'}.`;
+                sendEvent({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output } });
+                safeResponseCreate();
+              })
+              .catch((err) => {
+                console.error('[MallyVoice] Tool error:', err);
+                setLastAction('');
+                sendEvent({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: callId, output: `Action "${actionType}" failed. Tell the user there was a problem.` } });
+                safeResponseCreate();
+              });
+            break;
+          }
+
+          case 'error':
+            console.error('[MallyVoice] Realtime error:', event.error);
+            setVoiceState('error');
+            isActiveRef.current = false;
+            isPTTModeRef.current = false;
+            setTimeout(() => {
+              setVoiceState('idle');
+              resumeWakeWordInternal();
+            }, 3000);
+            break;
+        }
+      };
+
+      dc.onclose = () => {
+        if (isActiveRef.current) {
+          isActiveRef.current = false;
+          isPTTModeRef.current = false;
+          setVoiceState('idle');
+          resumeWakeWordInternal();
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          console.warn('[MallyVoice] WebRTC connection lost:', pc.connectionState);
+          isActiveRef.current = false;
+          isPTTModeRef.current = false;
+          setVoiceState('error');
+          setTimeout(() => {
+             setVoiceState('idle');
+             resumeWakeWordInternal();
+          }, 3000);
+        }
+      };
+
+      // 4. SDP handshake with OpenAI
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpRes = await fetch(OPENAI_REALTIME_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: offer.sdp,
+      });
+
+      if (!sdpRes.ok) throw new Error(`SDP exchange failed: ${sdpRes.status} ${await sdpRes.text()}`);
+      const sdp = await sdpRes.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp });
+
+      console.log('[MallyVoice] OpenAI Realtime connected via WebRTC.');
+    } catch (err: any) {
+      console.error('[MallyVoice] startVoice error:', err);
       isActiveRef.current = false;
       isPTTModeRef.current = false;
-      pttReleasePendingRef.current = false;
-      setVoiceState('idle');
-      resumeWakeWordInternal();
-    };
-
-    const onSpeechStart = () => setVoiceState('speaking');
-
-    const onSpeechEnd = () => {
-      setVoiceState('listening');
-      // After Mally finishes speaking in PTT mode, unmute mic so next hold works
-      if (isPTTModeRef.current) {
-        try { vapi.setMuted(false); } catch (_) {}
-      }
-    };
-
-    const onVolumeLevel = (lvl: number) => setVolume(lvl);
-
-    const onError = (e: any) => {
-      console.error('[MallyVoice] Vapi error:', e);
-      isActiveRef.current = false;
-      isPTTModeRef.current = false;
-      pttReleasePendingRef.current = false;
       setVoiceState('error');
       resumeWakeWordInternal();
       setTimeout(() => setVoiceState('idle'), 3000);
-    };
+    }
+  }, [mallyVoiceId, buildSystemPrompt, resumeWakeWordInternal]);
 
-    const onMessage = (message: any) => {
-      console.log('[MallyVoice] RAW message:', JSON.stringify(message));
-
-      if (message.type === 'transcript' && message.role === 'user' && message.transcriptType === 'final') {
-        setTranscript(message.transcript);
-      }
-      if (message.type === 'transcript' && message.role === 'assistant' && message.transcriptType === 'final') {
-        setAssistantText(message.transcript);
-      }
-
-      const toolCallList: Array<{ id?: string; function: { name: string; arguments: string } }> =
-        message.type === 'tool-calls'
-          ? message.toolCallList
-          : message.type === 'function-call'
-          ? [{
-              id: undefined,
-              function: {
-                name: message.functionCall?.name,
-                arguments: typeof message.functionCall?.parameters === 'string'
-                  ? message.functionCall.parameters
-                  : JSON.stringify(message.functionCall?.parameters ?? {}),
-              },
-            }]
-          : [];
-
-      if (toolCallList.length === 0) return;
-
-      const actionLabels: Record<string, string> = {
-        create_event: 'Creating event…',
-        update_event: 'Updating event…',
-        delete_event: 'Deleting event…',
-        reschedule_events: 'Rescheduling events…',
-        query_events: 'Looking up your schedule…',
-        create_alarm: 'Setting alarm…',
-        create_reminder: 'Setting reminder…',
-        create_todo: 'Adding to-do…',
-        complete_todo: 'Completing to-do…',
-        delete_todo: 'Deleting to-do…',
-        move_todo: 'Moving to-do…',
-        navigate_view: 'Navigating…',
-        start_pomodoro: 'Starting focus timer…',
-        pause_pomodoro: 'Pausing timer…',
-        reset_pomodoro: 'Resetting timer…',
-        set_pomodoro_timer: 'Updating timer settings…',
-        create_page: 'Creating page…',
-        delete_page: 'Deleting page…',
-        add_module: 'Adding module…',
-        remove_module: 'Removing module…',
-        set_theme: 'Changing theme…',
-        switch_theme: 'Changing theme…',
-        undo: 'Undoing…',
-        redo: 'Redoing…',
-        send_slack_message: 'Sending Slack message…',
-        send_email: 'Sending email…',
-      };
-
-      for (const toolCall of toolCallList) {
-        const name = toolCall.function.name;
-
-        let args: any = {};
-        try {
-          const raw = toolCall.function.arguments;
-          args = typeof raw === 'string' ? JSON.parse(raw) : raw ?? {};
-        } catch (e) {
-          console.error('[MallyVoice] Failed to parse tool arguments:', toolCall.function.arguments, e);
-        }
-
-        if (args.actionDataJSON && typeof args.actionDataJSON !== 'string') {
-          args.actionDataJSON = JSON.stringify(args.actionDataJSON);
-        }
-        const actionData = args.actionDataJSON
-          ? (() => { try { return JSON.parse(args.actionDataJSON); } catch { return {}; } })()
-          : {};
-
-        console.log('[MallyVoice] Tool call resolved:', name, '| actionType:', args.actionType, '| data:', actionData);
-
-        const actionType = name === 'execute_platform_action' ? args.actionType : name;
-        setLastAction(actionLabels[actionType] ?? `Running ${actionType}…`);
-
-        const execPromise = name === 'execute_platform_action'
-          ? onCommandRef.current({ type: args.actionType, data: actionData })
-          : onCommandRef.current({ type: name, data: args });
-
-        execPromise
-          .then((result) => {
-            console.log('[MallyVoice] Tool execution result:', name, result);
-            setLastAction('');
-
-            if (typeof result === 'string') {
-              vapi.send({
-                type: 'add-message',
-                message: { role: 'system', content: `Query result: ${result} Read this to the user conversationally.` },
-              });
-              return;
-            }
-
-            const success = result;
-            const resultCtx = actionType === 'create_event'
-              ? `Created event titled "${actionData.title}". You can now reference it by that name.`
-              : actionType === 'create_todo'
-              ? `Created to-do: "${actionData.text}". You can reference it by that text.`
-              : actionType === 'delete_event'
-              ? `Deleted event titled "${actionData.title}".`
-              : actionType === 'delete_todo'
-              ? `Deleted to-do: "${actionData.title || actionData.text}".`
-              : actionType === 'complete_todo'
-              ? `Marked to-do "${actionData.title || actionData.text}" as done.`
-              : actionType === 'move_todo'
-              ? `Moved to-do "${actionData.title || actionData.text}" to list "${actionData.listName}".`
-              : actionType === 'reschedule_events'
-              ? `Rescheduled events successfully.`
-              : `Action "${actionType}" ${success ? 'completed successfully' : 'failed'}.`;
-            vapi.send({
-              type: 'add-message',
-              message: { role: 'system', content: resultCtx },
-            });
-          })
-          .catch((err) => {
-            console.error('[MallyVoice] Tool execution error:', name, err);
-            setLastAction('');
-            vapi.send({
-              type: 'add-message',
-              message: { role: 'system', content: `Action "${actionType}" failed. Tell the user there was a problem.` },
-            });
-          });
-      }
-    };
-
-    vapi.on('call-start', onCallStart);
-    vapi.on('call-end', onCallEnd);
-    vapi.on('speech-start', onSpeechStart);
-    vapi.on('speech-end', onSpeechEnd);
-    vapi.on('volume-level', onVolumeLevel);
-    vapi.on('message', onMessage);
-    vapi.on('error', onError);
-
-    return () => {
-      vapi.off('call-start', onCallStart);
-      vapi.off('call-end', onCallEnd);
-      vapi.off('speech-start', onSpeechStart);
-      vapi.off('speech-end', onSpeechEnd);
-      vapi.off('volume-level', onVolumeLevel);
-      vapi.off('message', onMessage);
-      vapi.off('error', onError);
-    };
-  }, [resumeWakeWordInternal]);
+  // Keep startVoice in a ref so the wake word callback always has the latest
+  const startVoiceRef = useRef(startVoice);
+  useEffect(() => { startVoiceRef.current = startVoice; }, [startVoice]);
 
   // ── Picovoice Porcupine Wake Word ──────────────────────────────────
   useEffect(() => {
@@ -508,6 +477,7 @@ export function useMallyVoice({
     let cancelled = false;
 
     const init = async () => {
+      // If already created, just ensure subscription if not active
       if (picovoiceWorkerRef.current) {
         if (!isActiveRef.current && !picovoiceSubscribedRef.current) {
           webVoiceProcessorRef.current?.subscribe(picovoiceWorkerRef.current)
@@ -539,6 +509,8 @@ export function useMallyVoice({
         if (cancelled) { worker.release(); return; }
 
         picovoiceWorkerRef.current = worker;
+        
+        // Start listening immediately if voice session isn't active
         if (!isActiveRef.current) {
           await WebVoiceProcessor.subscribe(worker);
           picovoiceSubscribedRef.current = true;
@@ -563,6 +535,9 @@ export function useMallyVoice({
     };
   }, [wakeWordEnabled]);
 
+  // Cleanup on unmount
+  useEffect(() => () => { stopVoice(); }, [stopVoice]);
+
   return {
     voiceState,
     startVoice,
@@ -572,6 +547,6 @@ export function useMallyVoice({
     assistantText,
     lastAction,
     volume,
-    isVoiceReady: !!VAPI_PUBLIC_KEY,
+    isVoiceReady: true, // Token is fetched on demand — always ready
   };
 }

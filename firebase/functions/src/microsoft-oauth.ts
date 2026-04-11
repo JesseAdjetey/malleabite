@@ -82,6 +82,11 @@ function integrationDoc(uid: string) {
   return getDb().collection('users').doc(uid).collection('integrations').doc('microsoft');
 }
 
+/** Per-account credential doc — supports multiple MS accounts per user. */
+function accountDoc(uid: string, msUserId: string) {
+  return getDb().collection('users').doc(uid).collection('microsoft_accounts').doc(msUserId);
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StoredMicrosoftIntegration {
@@ -173,51 +178,14 @@ async function exchangeCodeForTokens(code: string): Promise<MsTokenResponse> {
   return res.json() as Promise<MsTokenResponse>;
 }
 
-async function refreshAccessToken(uid: string): Promise<{ accessToken: string; integration: StoredMicrosoftIntegration }> {
-  const snap = await integrationDoc(uid).get();
-  if (!snap.exists) throw new HttpsError('not-found', 'Microsoft not connected');
-  const integration = snap.data() as StoredMicrosoftIntegration;
-
-  const refreshToken = decryptString(integration.refreshTokenEncrypted);
-  const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: msClientId.value(),
-      client_secret: msClientSecret.value(),
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-      scope: MS_SCOPES,
-    }),
-  });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => 'unknown');
-    const tokenStatus = detail.includes('invalid_grant') ? 'needs_reauth' : integration.tokenStatus;
-    await integrationDoc(uid).update({ tokenStatus, updatedAt: new Date().toISOString() });
-    throw new HttpsError('failed-precondition', `MS token refresh failed: ${detail}`);
-  }
-
-  const tokens = await res.json() as MsTokenResponse;
-  const now = new Date().toISOString();
-  const updated: Partial<StoredMicrosoftIntegration> = {
-    accessTokenEncrypted: encryptString(tokens.access_token),
-    accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-    tokenStatus: 'active',
-  };
-  if (tokens.refresh_token) {
-    updated.refreshTokenEncrypted = encryptString(tokens.refresh_token);
-  }
-  await integrationDoc(uid).update({ ...updated, updatedAt: now });
-
-  return {
-    accessToken: tokens.access_token,
-    integration: { ...integration, ...updated } as StoredMicrosoftIntegration,
-  };
-}
-
-async function getValidAccessToken(uid: string): Promise<string> {
-  const snap = await integrationDoc(uid).get();
+/**
+ * Get a valid access token for a Microsoft account.
+ * If accountId (microsoftUserId) is provided, reads from the per-account doc.
+ * Otherwise falls back to the legacy integrations/microsoft doc (for Tasks backward compat).
+ */
+async function getValidAccessToken(uid: string, accountId?: string): Promise<string> {
+  const ref = accountId ? accountDoc(uid, accountId) : integrationDoc(uid);
+  const snap = await ref.get();
   if (!snap.exists) throw new HttpsError('not-found', 'Microsoft not connected');
   const integration = snap.data() as StoredMicrosoftIntegration;
 
@@ -228,8 +196,34 @@ async function getValidAccessToken(uid: string): Promise<string> {
   // Refresh if expiring within 5 minutes
   const expiresSoon = Date.now() >= (new Date(integration.accessTokenExpiresAt).getTime() - 5 * 60 * 1000);
   if (expiresSoon) {
-    const { accessToken } = await refreshAccessToken(uid);
-    return accessToken;
+    // Refresh inline
+    const refreshToken = decryptString(integration.refreshTokenEncrypted);
+    const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: msClientId.value(),
+        client_secret: msClientSecret.value(),
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+        scope: MS_SCOPES,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => 'unknown');
+      const tokenStatus = detail.includes('invalid_grant') ? 'needs_reauth' : integration.tokenStatus;
+      await ref.update({ tokenStatus, updatedAt: new Date().toISOString() });
+      throw new HttpsError('failed-precondition', `MS token refresh failed: ${detail}`);
+    }
+    const tokens = await res.json() as MsTokenResponse;
+    const updated: Partial<StoredMicrosoftIntegration> = {
+      accessTokenEncrypted: encryptString(tokens.access_token),
+      accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      tokenStatus: 'active',
+    };
+    if (tokens.refresh_token) updated.refreshTokenEncrypted = encryptString(tokens.refresh_token);
+    await ref.update({ ...updated, updatedAt: new Date().toISOString() });
+    return tokens.access_token;
   }
 
   return decryptString(integration.accessTokenEncrypted);
@@ -278,9 +272,14 @@ async function graphFetchAll<T>(accessToken: string, initialPath: string): Promi
 
 // ─── Popup closer HTML ────────────────────────────────────────────────────────
 
-function popupCloserHtml(success: boolean, origin: string, errorMsg = ''): string {
+function popupCloserHtml(
+  success: boolean,
+  origin: string,
+  errorMsg = '',
+  meta?: { email: string; accountId: string; displayName: string }
+): string {
   const message = success
-    ? JSON.stringify({ type: 'microsoft_oauth', status: 'connected' })
+    ? JSON.stringify({ type: 'microsoft_oauth', status: 'connected', ...meta })
     : JSON.stringify({ type: 'microsoft_oauth', status: 'error', error: errorMsg });
   const targetOrigin = origin || '*';
   return `<!DOCTYPE html>
@@ -350,9 +349,14 @@ export const microsoftOAuthCallback = onRequest(
   async (req, res) => {
     const { code, state, error } = req.query as Record<string, string>;
 
-    const sendHtml = (success: boolean, origin: string, errorMsg = '') => {
+    const sendHtml = (
+      success: boolean,
+      origin: string,
+      errorMsg = '',
+      meta?: { email: string; accountId: string; displayName: string }
+    ) => {
       res.setHeader('Content-Type', 'text/html');
-      res.send(popupCloserHtml(success, origin, errorMsg));
+      res.send(popupCloserHtml(success, origin, errorMsg, meta));
     };
 
     if (error || !code || !state) {
@@ -382,7 +386,7 @@ export const microsoftOAuthCallback = onRequest(
       const displayName = userInfo.displayName || email;
 
       const now = new Date().toISOString();
-      await integrationDoc(uid).set({
+      const tokenData: StoredMicrosoftIntegration = {
         accessTokenEncrypted: encryptString(tokens.access_token),
         refreshTokenEncrypted: encryptString(tokens.refresh_token),
         accessTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
@@ -393,9 +397,14 @@ export const microsoftOAuthCallback = onRequest(
         lastTaskSyncAt: null,
         lastCalendarSyncAt: null,
         tokenStatus: 'active',
-      } as StoredMicrosoftIntegration);
+      };
 
-      sendHtml(true, storedOrigin);
+      // Write to per-account doc (multi-account calendar support)
+      await accountDoc(uid, userInfo.id).set(tokenData);
+      // Also keep legacy doc in sync (used by Microsoft Tasks)
+      await integrationDoc(uid).set(tokenData);
+
+      sendHtml(true, storedOrigin, '', { email, accountId: userInfo.id, displayName });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       sendHtml(false, storedOrigin, msg);
@@ -661,30 +670,58 @@ export const microsoftListCalendars = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
     const uid = request.auth.uid;
-    const accessToken = await getValidAccessToken(uid);
+    const { accountId } = (request.data as { accountId?: string }) || {};
+    const accessToken = await getValidAccessToken(uid, accountId);
 
     const calendars = await graphFetchAll<MsCalendar>(accessToken, '/me/calendars');
     return { calendars };
   }
 );
 
-// ─── 8. Sync Outlook Calendar Events (read-only) ──────────────────────────────
+/** List all connected Microsoft accounts for a user (for multi-account calendar support). */
+export const microsoftGetConnectedAccounts = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
+    const uid = request.auth.uid;
+    const snap = await getDb().collection('users').doc(uid).collection('microsoft_accounts').get();
+    const accounts = snap.docs.map(d => {
+      const data = d.data() as StoredMicrosoftIntegration;
+      return {
+        accountId: d.id,
+        email: data.email,
+        displayName: data.displayName,
+        connectedAt: data.connectedAt,
+        tokenStatus: data.tokenStatus,
+      };
+    });
+    return { accounts };
+  }
+);
+
+// ─── 8. Sync Outlook Calendar Events → users/{uid}/syncedEvents ──────────────
+//
+// Writes events in the same SyncedCalendarEvent format used by Google Calendar
+// so they appear in the calendar views via use-synced-events-loader.
 
 export const microsoftSyncCalendarEvents = onCall(
   { region: 'us-central1', secrets: [msClientId, msClientSecret, msEncryptionKey] },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
     const uid = request.auth.uid;
-    const { msCalendarId, windowDays = 60 } = request.data as {
+    const { accountId, msCalendarId, connectedCalendarId, windowDays = 60 } = request.data as {
+      accountId?: string;
       msCalendarId: string;
+      connectedCalendarId: string;  // The ConnectedCalendar.id used as calendarId on events
       windowDays?: number;
     };
     if (!msCalendarId) throw new HttpsError('invalid-argument', 'msCalendarId required');
+    if (!connectedCalendarId) throw new HttpsError('invalid-argument', 'connectedCalendarId required');
 
-    const accessToken = await getValidAccessToken(uid);
+    const accessToken = await getValidAccessToken(uid, accountId);
     const db = getDb();
 
-    // Fetch events in a rolling window: 7 days ago → windowDays ahead
+    // Fetch events: 7 days back → windowDays ahead (same window as Google sync)
     const startDt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const endDt = new Date(Date.now() + windowDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -693,67 +730,83 @@ export const microsoftSyncCalendarEvents = onCall(
       `/me/calendars/${msCalendarId}/calendarView?startDateTime=${startDt}&endDateTime=${endDt}&$select=id,subject,body,start,end,isAllDay,location,organizer,webLink,isCancelled`
     );
 
-    const now = admin.firestore.Timestamp.now();
-    const nowIso = now.toDate().toISOString();
-    const batch = db.batch();
+    const nowIso = new Date().toISOString();
+    const syncedEventsRef = db.collection('users').doc(uid).collection('syncedEvents');
 
-    // Fetch existing MS-sourced events for this user
-    const existingSnap = await db.collection('calendar_events')
-      .where('userId', '==', uid)
-      .where('source', '==', 'microsoft')
-      .where('msCalendarId', '==', msCalendarId)
+    // Fetch existing synced events for this connected calendar
+    const existingSnap = await syncedEventsRef
+      .where('calendarId', '==', connectedCalendarId)
       .get();
 
-    const existingByMsEventId = new Map<string, admin.firestore.QueryDocumentSnapshot>();
+    const existingByExternalId = new Map<string, admin.firestore.QueryDocumentSnapshot>();
     for (const docSnap of existingSnap.docs) {
-      const msEventId = docSnap.data().msEventId as string | undefined;
-      if (msEventId) existingByMsEventId.set(msEventId, docSnap);
+      const externalId = docSnap.data().externalId as string | undefined;
+      if (externalId) existingByExternalId.set(externalId, docSnap);
     }
 
     const seenIds = new Set<string>();
+    const batchSize = 400;
+    let batchOps: Array<{ ref: admin.firestore.DocumentReference; data: any; merge?: boolean }> = [];
+
+    const flush = async () => {
+      if (batchOps.length === 0) return;
+      const batch = db.batch();
+      for (const op of batchOps) {
+        if (op.merge) batch.set(op.ref, op.data, { merge: true });
+        else batch.delete(op.ref);
+      }
+      await batch.commit();
+      batchOps = [];
+    };
 
     for (const event of events) {
       if (event.isCancelled) continue;
       seenIds.add(event.id);
 
+      const startTime = event.start.dateTime
+        ? event.start.dateTime
+        : `${(event.start as any).date}T00:00:00Z`;
+      const endTime = event.end.dateTime
+        ? event.end.dateTime
+        : `${(event.end as any).date}T00:00:00Z`;
+
       const payload = {
-        title: event.subject,
+        id: `${connectedCalendarId}_${event.id}`,
+        calendarId: connectedCalendarId,
+        externalId: event.id,
+        title: event.subject || 'Untitled',
         description: event.body?.content || '',
-        startDate: event.start.dateTime,
-        endDate: event.end.dateTime,
-        isAllDay: event.isAllDay || false,
         location: event.location?.displayName || '',
-        organizerName: event.organizer?.emailAddress?.name || '',
-        organizerEmail: event.organizer?.emailAddress?.address || '',
-        webLink: event.webLink || '',
-        source: 'microsoft',
-        msEventId: event.id,
-        msCalendarId,
-        userId: uid,
-        updatedAt: now,
+        startTime,
+        endTime,
+        isAllDay: event.isAllDay || false,
+        status: 'confirmed' as const,
+        source: 'microsoft' as const,
+        meetingUrl: event.webLink || '',
+        syncedAt: nowIso,
       };
 
-      const existing = existingByMsEventId.get(event.id);
-      if (existing) {
-        batch.update(existing.ref, payload);
-      } else {
-        const deterministicId = `ms_cal_${uid}_${event.id}`;
-        batch.set(db.collection('calendar_events').doc(deterministicId), {
-          ...payload,
-          createdAt: now,
-        });
+      // Doc ID matches calendarService.upsertSyncedEvents: `${calendarId}_${externalId}`
+      const docId = `${connectedCalendarId}_${event.id}`;
+      const ref = syncedEventsRef.doc(docId);
+
+      batchOps.push({ ref, data: payload, merge: true });
+      if (batchOps.length >= batchSize) await flush();
+    }
+    await flush();
+
+    // Remove events no longer in the sync window
+    for (const [externalId, docSnap] of existingByExternalId.entries()) {
+      if (!seenIds.has(externalId)) {
+        batchOps.push({ ref: docSnap.ref, data: null });
+        if (batchOps.length >= batchSize) await flush();
       }
     }
+    await flush();
 
-    // Remove events no longer in the window
-    for (const [msEventId, docSnap] of existingByMsEventId.entries()) {
-      if (!seenIds.has(msEventId)) {
-        batch.delete(docSnap.ref);
-      }
-    }
-
-    await batch.commit();
-    await integrationDoc(uid).update({ lastCalendarSyncAt: nowIso });
+    // Update lastCalendarSyncAt on the account doc
+    const accountRef = accountId ? accountDoc(uid, accountId) : integrationDoc(uid);
+    await accountRef.update({ lastCalendarSyncAt: nowIso }).catch(() => {});
 
     return { synced: seenIds.size };
   }

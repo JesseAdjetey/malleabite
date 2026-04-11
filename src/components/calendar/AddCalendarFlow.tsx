@@ -37,13 +37,13 @@ interface AddCalendarFlowProps {
   groups: CalendarGroup[];
   defaultGroupId?: string;
   onOpenTemplates: (groupId?: string) => void;
-  onConnectMicrosoft?: () => void;
   onComplete: (result: {
     source: CalendarSource;
     selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
     targetGroupId: string;
     accountEmail?: string;
     googleAccountId?: string;
+    msAccountId?: string;
   }) => void;
 }
 
@@ -89,7 +89,6 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   groups,
   defaultGroupId,
   onOpenTemplates,
-  onConnectMicrosoft,
   onComplete,
 }) => {
   const {
@@ -97,6 +96,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
     availableCalendars,
     lastAuthEmail,
     lastAuthGoogleAccountId,
+    lastAuthMsAccountId,
     authenticateSource,
     discoverCalendars,
     resetSyncState,
@@ -165,13 +165,6 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   };
 
   const handleSelectSource = async (source: CalendarSource) => {
-    // Microsoft is handled by a separate OAuth sheet — close this dialog and hand off.
-    if (source === 'microsoft') {
-      handleOpenChange(false);
-      setTimeout(() => onConnectMicrosoft?.(), 300);
-      return;
-    }
-
     resetSyncState();
     setDiscoveryStatus('idle');
     setDiscoveryError(null);
@@ -243,6 +236,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
       targetGroupId,
       accountEmail: lastAuthEmail || undefined,
       googleAccountId: lastAuthGoogleAccountId || undefined,
+      msAccountId: lastAuthMsAccountId || undefined,
     });
 
     handleOpenChange(false);
@@ -376,7 +370,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
                       {syncState.message || 'Connecting...'}
                     </p>
                     <p className="text-[11px] text-muted-foreground/60 text-center">
-                      A Google sign-in window should open.
+                      A sign-in window should open.
                       <br />
                       If it doesn't appear, check your popup blocker.
                     </p>
@@ -385,7 +379,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
                       size="sm"
                       className="mt-1 text-xs text-muted-foreground"
                       onClick={() => {
-                        cancelGoogleAuth();
+                        if (selectedSource === 'google') cancelGoogleAuth();
                         setAuthError(null);
                         setStep('select-source');
                         resetSyncState();

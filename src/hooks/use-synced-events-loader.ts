@@ -32,13 +32,13 @@ function syncedToCalendarEvent(synced: SyncedCalendarEvent): CalendarEventType {
     date: start.format('YYYY-MM-DD'),
     timeStart: start.format('HH:mm'),
     timeEnd: end.format('HH:mm'),
-    color: synced.color || '#4285F4', // Default Google blue
+    color: synced.color || (synced.source === 'microsoft' ? '#0078D4' : '#4285F4'),
     isAllDay: synced.isAllDay,
     location: synced.location,
     meetingUrl: synced.meetingUrl,
     status: synced.status,
     calendarId: synced.calendarId,
-    source: synced.source === 'google' ? 'google' : 'malleabite',
+    source: synced.source === 'google' ? 'google' : synced.source === 'microsoft' ? 'microsoft' : 'malleabite',
     googleEventId: synced.source === 'google' ? synced.externalId : undefined,
     isLocked: true, // Synced events are read-only in the local calendar
     attendees: synced.attendees?.map(a => ({

@@ -40,8 +40,6 @@ import GroupSection from './GroupSection';
 import GroupManager from './GroupManager';
 import AddCalendarFlow from './AddCalendarFlow';
 import TemplateManager from './TemplateManager';
-import { lazy, Suspense } from 'react';
-const OutlookCalendarConnectDialog = lazy(() => import('./OutlookCalendarConnectDialog'));
 import MergeCalendarsDialog from './MergeCalendarsDialog';
 import { useTemplateEventsLoader, templateCalendarId, TEMPLATE_CALENDAR_PREFIX } from '@/hooks/use-template-events-loader';
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
@@ -187,7 +185,6 @@ const CalendarDropdown: React.FC = () => {
   const [groupManagerOpen, setGroupManagerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<CalendarGroup | null>(null);
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
-  const [outlookSheetOpen, setOutlookSheetOpen] = useState(false);
   const [addCalendarGroupId, setAddCalendarGroupId] = useState<string | undefined>();
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [templateDefaultGroupId, setTemplateDefaultGroupId] = useState<string | undefined>();
@@ -253,6 +250,7 @@ const CalendarDropdown: React.FC = () => {
       targetGroupId: string;
       accountEmail?: string;
       googleAccountId?: string;
+      msAccountId?: string;
     }) => {
       const addedCalendars: ConnectedCalendar[] = [];
       const nextVisible = new Set(
@@ -266,6 +264,7 @@ const CalendarDropdown: React.FC = () => {
           source: result.source,
           groupId: result.targetGroupId,
           googleAccountId: result.googleAccountId,
+          msAccountId: result.msAccountId,
           accountEmail: result.accountEmail || user?.email || '',
           name: cal.name,
           color: cal.color,
@@ -824,16 +823,8 @@ const CalendarDropdown: React.FC = () => {
           setTemplateDefaultGroupId(groupId);
           setTemplateManagerOpen(true);
         }}
-        onConnectMicrosoft={() => setOutlookSheetOpen(true)}
         onComplete={handleAddCalendarComplete}
       />
-
-      <Suspense fallback={null}>
-        <OutlookCalendarConnectDialog
-          open={outlookSheetOpen}
-          onOpenChange={setOutlookSheetOpen}
-        />
-      </Suspense>
 
       {/* Template Manager Dialog */}
       <TemplateManager

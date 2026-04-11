@@ -23,7 +23,12 @@ import {
   GOOGLE_SYNC_DAYS_BACK,
   GOOGLE_SYNC_DAYS_FORWARD,
 } from '@/lib/google-calendar';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '@/integrations/firebase/config';
 import dayjs from 'dayjs';
+
+// Initialize once at module level with explicit app + region (same as use-microsoft-integration.ts)
+const _functions = getFunctions(app, 'us-central1');
 
 export type SyncStatus = 'idle' | 'authenticating' | 'syncing' | 'success' | 'error';
 
@@ -48,6 +53,7 @@ interface UseCalendarSyncReturn {
   availableCalendars: AvailableExternalCalendar[];
   lastAuthEmail: string | null;
   lastAuthGoogleAccountId: string | null;
+  lastAuthMsAccountId: string | null;
 
   // Authentication
   authenticateSource: (source: CalendarSource) => Promise<boolean>;
@@ -72,6 +78,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
   const syncAbortRef = useRef<AbortController | null>(null);
   const lastAuthEmailRef = useRef<string | null>(null);
   const lastAuthGoogleAccountIdRef = useRef<string | null>(null);
+  const lastAuthMsAccountIdRef = useRef<string | null>(null);
 
   // ─── Authentication ─────────────────────────────────────────────────────
 
@@ -88,11 +95,47 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           return true;
         }
         case 'microsoft': {
-          // Microsoft Graph OAuth - placeholder for future implementation
-          // Will use MSAL.js for authentication
-          toast.info('Microsoft Calendar integration coming soon');
+          // Open Microsoft OAuth popup via Firebase Function
+          const getAuthUrl = httpsCallable<{ origin: string }, { url: string }>(_functions, 'microsoftGetAuthUrl');
+          const { data } = await getAuthUrl({ origin: window.location.origin });
+
+          // Open popup
+          const popup = window.open(data.url, 'microsoft_oauth', 'width=520,height=620,scrollbars=yes');
+          if (!popup) throw new Error('Popup was blocked. Please allow popups for this site and try again.');
+
+          // Wait for postMessage from the popup
+          const result = await new Promise<{ email: string; accountId: string } | null>((resolve) => {
+            const TIMEOUT = 5 * 60 * 1000;
+            const timer = setTimeout(() => { cleanup(); resolve(null); }, TIMEOUT);
+
+            const handler = (e: MessageEvent) => {
+              if (!e.data || typeof e.data !== 'object') return;
+              if (e.data.type !== 'microsoft_oauth') return;
+              cleanup();
+              if (e.data.status === 'connected') {
+                resolve({ email: e.data.email || '', accountId: e.data.accountId || '' });
+              } else {
+                resolve(null);
+              }
+            };
+
+            const cleanup = () => {
+              clearTimeout(timer);
+              window.removeEventListener('message', handler);
+            };
+
+            window.addEventListener('message', handler);
+          });
+
+          if (!result) {
+            setSyncState({ status: 'idle' });
+            return false;
+          }
+
+          lastAuthEmailRef.current = result.email;
+          lastAuthMsAccountIdRef.current = result.accountId;
           setSyncState({ status: 'idle' });
-          return false;
+          return true;
         }
         case 'apple': {
           // Apple Calendar - primarily through CalDAV or native Capacitor
@@ -231,9 +274,27 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           discovered = googleCalendars;
           break;
         }
-        case 'microsoft':
-          // TODO: Microsoft Graph API calendar list
+        case 'microsoft': {
+          const listCalendars = httpsCallable<
+            { accountId?: string },
+            { calendars: { id: string; name: string; color?: string; isDefaultCalendar?: boolean }[] }
+          >(_functions, 'microsoftListCalendars');
+          const { data } = await listCalendars({ accountId: lastAuthMsAccountIdRef.current || undefined });
+          const MS_COLORS: Record<string, string> = {
+            auto: '#0078D4', lightBlue: '#0078D4', lightGreen: '#107C10',
+            lightOrange: '#D83B01', lightGray: '#767676', lightYellow: '#E6A118',
+            lightTeal: '#008272', lightPink: '#E3008C', lightBrown: '#7E3878',
+            lightRed: '#E81123', maxOrange: '#FF8C00', maxBlue: '#0078D4',
+          };
+          discovered = data.calendars.map(c => ({
+            id: c.id,
+            name: c.name,
+            color: (c.color && MS_COLORS[c.color]) || '#0078D4',
+            primary: c.isDefaultCalendar || false,
+            source: 'microsoft' as CalendarSource,
+          }));
           break;
+        }
         case 'apple':
           // TODO: CalDAV calendar discovery
           break;
@@ -308,9 +369,24 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           }));
           break;
         }
-        case 'microsoft':
-          // TODO: Microsoft Graph events
-          break;
+        case 'microsoft': {
+          const syncFn = httpsCallable<
+            { accountId?: string; msCalendarId: string; connectedCalendarId: string },
+            { synced: number }
+          >(_functions, 'microsoftSyncCalendarEvents');
+          const { data } = await syncFn({
+            accountId: calendar.msAccountId || undefined,
+            msCalendarId: calendar.sourceCalendarId,
+            connectedCalendarId: calendar.id,
+          });
+          await calendarService.updateConnectedCalendar(user.uid, calendar.id, {
+            lastSyncAt: new Date().toISOString(),
+            lastSyncError: '',
+            eventCount: data.synced,
+          }).catch(() => {});
+          setSyncState({ status: 'success', message: `Synced ${data.synced} events from ${calendar.name}`, progress: 100 });
+          return data.synced;
+        }
         case 'apple':
           // TODO: CalDAV events
           break;
@@ -408,6 +484,7 @@ export function useCalendarSync(): UseCalendarSyncReturn {
     availableCalendars,
     lastAuthEmail: lastAuthEmailRef.current,
     lastAuthGoogleAccountId: lastAuthGoogleAccountIdRef.current,
+    lastAuthMsAccountId: lastAuthMsAccountIdRef.current,
     authenticateSource,
     disconnectSource,
     isAuthenticated,

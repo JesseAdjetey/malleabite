@@ -59,6 +59,7 @@ export {
   microsoftSyncTasks,
   microsoftPushTaskAction,
   microsoftListCalendars,
+  microsoftGetConnectedAccounts,
   microsoftSyncCalendarEvents,
   microsoftDisconnect,
 } from './microsoft-oauth';

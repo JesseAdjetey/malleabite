@@ -1,6 +1,5 @@
 // Calendar Settings Page - Comprehensive settings for all calendar features
-import React, { useState, lazy, Suspense } from 'react';
-const OutlookCalendarConnectDialog = lazy(() => import('@/components/calendar/OutlookCalendarConnectDialog'));
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -323,7 +322,6 @@ function IntegrationSettings() {
     syncCalendar,
     removeCalendar,
     connectGoogleCalendar,
-    connectOutlookCalendar,
     syncing,
     getSubscriptionUrl,
     exportAsICS,
@@ -331,8 +329,6 @@ function IntegrationSettings() {
 
   const [newIcsUrl, setNewIcsUrl] = useState('');
   const [newIcsName, setNewIcsName] = useState('');
-  const [outlookSheetOpen, setOutlookSheetOpen] = useState(false);
-
   const handleAddIcs = async () => {
     if (newIcsUrl && newIcsName) {
       await addICSSubscription(newIcsName, newIcsUrl);
@@ -442,13 +438,13 @@ function IntegrationSettings() {
                 />
                 Google Calendar
               </Button>
-              <Button variant="outline" onClick={() => setOutlookSheetOpen(true)}>
+              <Button variant="outline" onClick={() => toast.info('Add Microsoft Outlook via "Add Calendar" in the calendar header.')}>
                 <img
                   src="https://outlook.live.com/favicon.ico"
                   alt="Outlook"
                   className="h-4 w-4 mr-2"
                 />
-                Outlook
+                Microsoft Outlook
               </Button>
             </div>
           </div>
@@ -488,12 +484,6 @@ function IntegrationSettings() {
         </CardContent>
       </Card>
 
-      <Suspense fallback={null}>
-        <OutlookCalendarConnectSheet
-          open={outlookSheetOpen}
-          onOpenChange={setOutlookSheetOpen}
-        />
-      </Suspense>
     </div>
   );
 }

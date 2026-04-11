@@ -22,7 +22,8 @@
 | Phase | Integration | Status |
 |-------|-------------|--------|
 | 1 | Todo ← Todoist | ✅ DONE |
-| 2 | Todo ← Microsoft To Do + Google Tasks | ⬜ NEXT |
+| 2 | Todo ← Microsoft To Do + Outlook Calendar | ✅ DONE |
+| 2b | Todo ← Google Tasks | ⬜ (deferred — requires Google re-verification) |
 | 3 | Reminders ← piggyback on Phase 2 | ⬜ |
 | 4 | Pomodoro → Toggl (push sessions) | ⬜ |
 | 5 | Eisenhower ← pull from connected Todo source | ⬜ |

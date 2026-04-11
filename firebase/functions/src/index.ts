@@ -47,6 +47,19 @@ export {
   todoistGetStatus,
 } from './todoist-oauth';
 
+// Export Microsoft OAuth + sync handlers (To Do + Outlook Calendar)
+export {
+  microsoftGetAuthUrl,
+  microsoftOAuthCallback,
+  microsoftGetStatus,
+  microsoftListTaskLists,
+  microsoftSyncTasks,
+  microsoftPushTaskAction,
+  microsoftListCalendars,
+  microsoftSyncCalendarEvents,
+  microsoftDisconnect,
+} from './microsoft-oauth';
+
 // Initialize Firebase Admin
 admin.initializeApp();
 admin.firestore().settings({ ignoreUndefinedProperties: true });

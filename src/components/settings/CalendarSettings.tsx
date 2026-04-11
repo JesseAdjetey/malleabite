@@ -1,5 +1,6 @@
 // Calendar Settings Page - Comprehensive settings for all calendar features
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
+const OutlookCalendarConnectDialog = lazy(() => import('@/components/calendar/OutlookCalendarConnectDialog'));
 import {
   Card,
   CardContent,
@@ -330,6 +331,7 @@ function IntegrationSettings() {
 
   const [newIcsUrl, setNewIcsUrl] = useState('');
   const [newIcsName, setNewIcsName] = useState('');
+  const [outlookSheetOpen, setOutlookSheetOpen] = useState(false);
 
   const handleAddIcs = async () => {
     if (newIcsUrl && newIcsName) {
@@ -440,7 +442,7 @@ function IntegrationSettings() {
                 />
                 Google Calendar
               </Button>
-              <Button variant="outline" onClick={connectOutlookCalendar}>
+              <Button variant="outline" onClick={() => setOutlookSheetOpen(true)}>
                 <img
                   src="https://outlook.live.com/favicon.ico"
                   alt="Outlook"
@@ -485,6 +487,13 @@ function IntegrationSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <Suspense fallback={null}>
+        <OutlookCalendarConnectSheet
+          open={outlookSheetOpen}
+          onOpenChange={setOutlookSheetOpen}
+        />
+      </Suspense>
     </div>
   );
 }

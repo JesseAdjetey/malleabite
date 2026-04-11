@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Heart,
   Settings2,
+  Phone,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
@@ -180,6 +181,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
     };
   }, []);
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
+  const [isDictating, setIsDictating] = useState(false);
+  const dictationRef = useRef<any>(null);
   const [uploadedImage, setUploadedImage] = useState<{
     dataUrl: string;
     fileName: string;
@@ -568,13 +571,18 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       }
 
       // Prepare history for Gemini (limited to last 10 messages for token efficiency)
-      const messageHistory = messages
+      let messageHistory = messages
         .filter(m => !m.isLoading && m.text !== "Thinking...")
         .slice(-10)
         .map(m => ({
           role: (m.sender === 'user' ? 'user' : 'model') as 'user' | 'model',
           parts: m.text || ""
         }));
+
+      // Gemini constraint: history must start with a user message
+      while (messageHistory.length > 0 && messageHistory[0].role !== 'user') {
+        messageHistory.shift();
+      }
 
       console.log('MallyAI: Sending request', {
         historyLength: messageHistory.length,
@@ -669,7 +677,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
               };
             }));
             const success = await executeAction(allActions[i] as { type: string; data: any });
-            executionResults.push(success);
+            executionResults.push(success !== false);
             if (success) haptics.success();
             setMessages(prev => prev.map(m => {
               if (m.id !== loadingId || !m.actionProgress) return m;
@@ -843,6 +851,79 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
       ));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Text dictation mode toggle
+  const handleToggleDictation = () => {
+    if (isDictating) {
+      if (dictationRef.current) dictationRef.current.stop();
+      setIsDictating(false);
+      window.dispatchEvent(new Event('resume-wake-word'));
+      return;
+    }
+
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      toast.error('Dictation is not supported in this browser.');
+      return;
+    }
+
+    // Pause the background wake-word listener so it releases the microphone lock
+    window.dispatchEvent(new Event('pause-wake-word'));
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true; 
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let finalTranscriptFragment = '';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let latestFinal = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          latestFinal += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      if (latestFinal) finalTranscriptFragment += latestFinal + ' ';
+      setInputText(finalTranscriptFragment + interimTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error !== 'aborted') {
+        toast.error(`Dictation error: ${event.error}`);
+      }
+      setIsDictating(false);
+      window.dispatchEvent(new Event('resume-wake-word'));
+    };
+
+    recognition.onend = () => {
+      setIsDictating(false);
+      window.dispatchEvent(new Event('resume-wake-word'));
+      // Wait for React to apply input change, then submit
+      setTimeout(() => {
+        if (inputRef.current?.value.trim()) {
+          sounds.play('uiClick');
+          handleSendMessage(inputRef.current.value.trim());
+        }
+      }, 300);
+    };
+
+    try {
+      sounds.play('micOn');
+      recognition.start();
+      setIsDictating(true);
+      dictationRef.current = recognition;
+    } catch (err) {
+      toast.error('Could not start dictation.');
+      setIsDictating(false);
+      window.dispatchEvent(new Event('resume-wake-word'));
     }
   };
 
@@ -1865,7 +1946,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                   <Send className="h-5 w-5" />
                 </motion.button>
 
-                {/* Voice (mic) button — hold to talk, release to get response */}
+                {/* Voice Call (Push-to-Talk) button */}
                 {isVoiceReady && (
                   <motion.button
                     onMouseDown={() => { if (voiceState === 'idle' || voiceState === 'error') startVoice({ ptt: true }); }}
@@ -1878,7 +1959,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     className={cn(
                       "p-2.5 rounded-full transition-all relative overflow-hidden select-none",
                       voiceState === 'listening'
-                        ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                        ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30"
                         : voiceState === 'speaking'
                         ? "bg-purple-500 text-white shadow-lg shadow-purple-500/30"
                         : voiceState === 'connecting'
@@ -1893,15 +1974,11 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                       : 'Voice error — hold to retry'
                     }
                   >
-                    {voiceState !== 'idle' && voiceState !== 'error' ? (
-                      <MicOff className="h-5 w-5" />
-                    ) : (
-                      <Mic className="h-5 w-5" />
-                    )}
+                    <Phone className="h-5 w-5" />
                     {/* Pulsing ring when actively listening */}
                     {voiceState === 'listening' && (
                       <motion.span
-                        className="absolute inset-0 rounded-full border-2 border-red-300"
+                        className="absolute inset-0 rounded-full border-2 border-purple-300"
                         animate={{ scale: [1, 1.3 + voiceVolume], opacity: [0.6, 0] }}
                         transition={{ repeat: Infinity, duration: 0.8, ease: 'easeOut' }}
                       />
@@ -1915,6 +1992,34 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                     )}
                   </motion.button>
                 )}
+
+                {/* Voice (mic) button — text dictation toggle */}
+                <motion.button
+                  onClick={handleToggleDictation}
+                  whileTap={{ scale: 0.86 }}
+                  transition={{ type: 'spring', damping: 18, stiffness: 400 }}
+                  className={cn(
+                    "p-2.5 rounded-full transition-all relative overflow-hidden select-none",
+                    isDictating
+                      ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                      : "bg-black/5 dark:bg-white/10 text-muted-foreground hover:bg-black/10 dark:hover:bg-white/20 hover:text-foreground"
+                  )}
+                  title={isDictating ? 'Listening… (click to stop & send)' : 'Click to dictate text'}
+                >
+                  {isDictating ? (
+                    <MicOff className="h-5 w-5" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
+                  {/* Pulsing ring when actively listening */}
+                  {isDictating && (
+                    <motion.span
+                      className="absolute inset-0 rounded-full border-2 border-red-300"
+                      animate={{ scale: [1, 1.4], opacity: [0.6, 0] }}
+                      transition={{ repeat: Infinity, duration: 1.2, ease: 'easeOut' }}
+                    />
+                  )}
+                </motion.button>
               </motion.div>
             </div>
 

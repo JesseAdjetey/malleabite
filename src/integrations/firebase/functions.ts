@@ -112,6 +112,7 @@ export interface ListGoogleCalendarsResponse {
 export class FirebaseFunctions {
   // Process AI requests with intelligent scheduling (replaces process-scheduling)
   static async processScheduling(data: SchedulingRequest): Promise<SchedulingResponse> {
+    const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
     try {
       // Ensure user is authenticated and get fresh token
       const currentUser = auth.currentUser;
@@ -122,7 +123,9 @@ export class FirebaseFunctions {
       const token = await currentUser.getIdToken();
 
       const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
-      const functionUrl = `https://us-central1-${projectId}.cloudfunctions.net/processAIRequest`;
+      const functionUrl = isLocal
+        ? `http://localhost:5001/${projectId}/us-central1/processAIRequest`
+        : `https://us-central1-${projectId}.cloudfunctions.net/processAIRequest`;
 
       const response = await fetch(functionUrl, {
         method: 'POST',
@@ -304,8 +307,11 @@ export class FirebaseFunctions {
   static async *processSchedulingStreamEvents(
     data: SchedulingRequest,
   ): AsyncGenerator<{ type: string; text?: string; speechText?: string; actions?: any[]; intent?: string; actionRequired?: boolean; message?: string }> {
+    const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
     const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35';
-    const STREAM_URL = `https://us-central1-${projectId}.cloudfunctions.net/processSchedulingStream`;
+    const STREAM_URL = isLocal
+      ? `http://localhost:5001/${projectId}/us-central1/processSchedulingStream`
+      : `https://us-central1-${projectId}.cloudfunctions.net/processSchedulingStream`;
 
     const currentUser = auth.currentUser;
     if (!currentUser) throw new Error('Not authenticated');

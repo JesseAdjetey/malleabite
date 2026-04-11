@@ -331,52 +331,47 @@ export function useNotificationManager() {
         }, 120000);
     }, [showNotification]);
 
+    // Keep latest alarms/reminders/callbacks in refs so the interval effect never needs to restart
+    const alarmsRef = useRef(alarms);
+    alarmsRef.current = alarms;
+    const remindersRef = useRef(reminders);
+    remindersRef.current = reminders;
+    const shouldTriggerAlarmRef = useRef(shouldTriggerAlarm);
+    shouldTriggerAlarmRef.current = shouldTriggerAlarm;
+    const shouldTriggerReminderRef = useRef(shouldTriggerReminder);
+    shouldTriggerReminderRef.current = shouldTriggerReminder;
+    const triggerAlarmRef = useRef(triggerAlarm);
+    triggerAlarmRef.current = triggerAlarm;
+    const triggerReminderRef = useRef(triggerReminder);
+    triggerReminderRef.current = triggerReminder;
+
     // Check alarms and reminders every 30 seconds (web only — native uses OS-scheduled notifications)
     useEffect(() => {
         if (isNative) return; // Native relies on pre-scheduled OS notifications
 
         const checkNotifications = () => {
             const now = new Date();
-            console.log('[NotificationManager] Checking notifications at:', now.toISOString());
-            console.log('[NotificationManager] Total alarms:', alarms.length, 'Total reminders:', reminders.length);
+            const currentAlarms = alarmsRef.current;
+            const currentReminders = remindersRef.current;
 
-            // Check alarms
-            if (alarms.length > 0) {
-                console.log('[NotificationManager] Checking', alarms.length, 'alarms...');
-                alarms.forEach(alarm => {
-                    if (shouldTriggerAlarm(alarm, now)) {
-                        console.log('[NotificationManager] TRIGGERING ALARM:', alarm.title);
-                        triggerAlarm(alarm);
-                    }
-                });
-            }
+            currentAlarms.forEach(alarm => {
+                if (shouldTriggerAlarmRef.current(alarm, now)) {
+                    triggerAlarmRef.current(alarm);
+                }
+            });
 
-            // Check reminders
-            if (reminders.length > 0) {
-                console.log('[NotificationManager] Checking', reminders.length, 'reminders...');
-                reminders.forEach(reminder => {
-                    if (shouldTriggerReminder(reminder, now)) {
-                        console.log('[NotificationManager] TRIGGERING REMINDER:', reminder.title);
-                        triggerReminder(reminder);
-                    }
-                });
-            }
-
+            currentReminders.forEach(reminder => {
+                if (shouldTriggerReminderRef.current(reminder, now)) {
+                    triggerReminderRef.current(reminder);
+                }
+            });
         };
 
-        // Check immediately on mount
-        console.log('[NotificationManager] Running initial check...');
+        // Check immediately on mount, then every 30 seconds
         checkNotifications();
-
-        // Then check every 30 seconds
-        console.log('[NotificationManager] Setting up 30-second interval...');
         const interval = setInterval(checkNotifications, 30000);
-
-        return () => {
-            console.log('[NotificationManager] Cleaning up interval...');
-            clearInterval(interval);
-        };
-    }, [alarms, reminders, shouldTriggerAlarm, shouldTriggerReminder, triggerAlarm, triggerReminder]);
+        return () => clearInterval(interval);
+    }, []); // stable — all data accessed via refs
 
     // Countdown reminders — separate effect so countdown clock updates don't re-trigger the alarm loop
     const countdownsRef = useRef(countdowns);

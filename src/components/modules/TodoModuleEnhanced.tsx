@@ -3,7 +3,10 @@ import { sounds } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
 import TodoistConnectSheet from "./todoist/TodoistConnectSheet";
+import MicrosoftTasksConnectDialog from "./todoist/MicrosoftTasksConnectDialog";
+import TaskSyncPickerDialog from "./todoist/TaskSyncPickerDialog";
 import { useTodoistIntegration } from "@/hooks/use-todoist-integration";
+import { useMicrosoftIntegration } from "@/hooks/use-microsoft-integration";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
@@ -110,6 +113,8 @@ interface TodoModuleEnhancedProps {
   contentReadOnly?: boolean;
   todoistProjectId?: string;
   onTodoistProjectChange?: (projectId: string | null, projectName?: string) => void;
+  msListId?: string;
+  onMsListChange?: (listId: string | null, listName?: string) => void;
 }
 
 // ── TodoItem Row ──────────────────────────────────────────────────────────────
@@ -419,12 +424,19 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   contentReadOnly = false,
   todoistProjectId,
   onTodoistProjectChange,
+  msListId,
+  onMsListChange,
 }) => {
   const { sizeLevel } = useModuleSize();
 
   // ── Todoist integration ──────────────────────────────────────────────────────
   const [todoistSheetOpen, setTodoistSheetOpen] = useState(false);
   const todoist = useTodoistIntegration(moduleListId, todoistProjectId);
+
+  // ── Microsoft Tasks integration ──────────────────────────────────────────────
+  const [msSheetOpen, setMsSheetOpen] = useState(false);
+  const [pickerSheetOpen, setPickerSheetOpen] = useState(false);
+  const ms = useMicrosoftIntegration(moduleListId, msListId);
 
   const isSharedModule = !!sharedFromInstanceId;
   const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
@@ -483,6 +495,12 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         toast.error("Couldn't reach Todoist — task saved locally");
         await addTodo(text, moduleListId, { deadline });
       }
+    } else if (ms.isLinked) {
+      const msTaskId = await ms.pushCreate({ text, deadline });
+      if (!msTaskId) {
+        toast.error("Couldn't reach Microsoft Tasks — task saved locally");
+        await addTodo(text, moduleListId, { deadline });
+      }
     } else {
       await addTodo(text, moduleListId, { deadline });
     }
@@ -509,6 +527,11 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       if (isDone) await todoist.pushUncomplete(item.todoistId);
       else await todoist.pushComplete(item.todoistId);
     }
+    // Push to Microsoft Tasks
+    if (ms.isLinked && (item as any).msTaskId) {
+      if (isDone) await ms.pushUncomplete((item as any).msTaskId);
+      else await ms.pushComplete((item as any).msTaskId);
+    }
 
     if (!isDone) {
       toast("Marked as done", {
@@ -533,6 +556,10 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     // Push deletion to Todoist
     if (todoist.isLinked && item?.todoistId) {
       todoist.pushDelete(item.todoistId);
+    }
+    // Push deletion to Microsoft Tasks
+    if (ms.isLinked && (item as any)?.msTaskId) {
+      ms.pushDelete((item as any).msTaskId);
     }
   };
 
@@ -561,6 +588,13 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     const item = rawTodos.find((t) => t.id === id);
     if (todoist.isLinked && item?.todoistId) {
       await todoist.pushUpdate(item.todoistId, {
+        deadline: updates.deadline ?? null,
+        description: updates.description,
+      });
+    }
+    // Push update to Microsoft Tasks
+    if (ms.isLinked && (item as any)?.msTaskId) {
+      await ms.pushUpdate((item as any).msTaskId, {
         deadline: updates.deadline ?? null,
         description: updates.description,
       });
@@ -626,11 +660,18 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     moveTargets,
     onMoveToPage,
     onShare,
-    // Todoist
-    onConnectTodoist: isViewOnly ? undefined : () => setTodoistSheetOpen(true),
+    // Task sync (Todoist / Microsoft Tasks)
+    onConnectTodoist: isViewOnly ? undefined : () => {
+      if (todoist.isLinked) setTodoistSheetOpen(true);
+      else if (ms.isLinked) setMsSheetOpen(true);
+      else setPickerSheetOpen(true);
+    },
     todoistLinked: todoist.isLinked,
     todoistSyncing: todoist.isSyncing,
     onSyncTodoist: todoist.isLinked ? () => todoist.sync() : undefined,
+    msTasksLinked: ms.isLinked,
+    msTasksSyncing: ms.isSyncing,
+    onSyncMsTasks: ms.isLinked ? () => ms.syncTasks() : undefined,
   };
 
   const rowProps = {
@@ -672,6 +713,38 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     />
   );
 
+  const msDialog = (
+    <MicrosoftTasksConnectDialog
+      open={msSheetOpen}
+      onOpenChange={setMsSheetOpen}
+      linkedListId={msListId}
+      onListLinked={(listId, listName) => {
+        onMsListChange?.(listId, listName);
+        setMsSheetOpen(false);
+      }}
+      onListUnlinked={() => {
+        onMsListChange?.(null);
+      }}
+      status={ms.status}
+      isSyncing={ms.isSyncing}
+      taskLists={ms.taskLists}
+      taskListsLoading={ms.taskListsLoading}
+      connect={ms.connect}
+      disconnect={ms.disconnect}
+      loadTaskLists={ms.loadTaskLists}
+      syncTasks={ms.syncTasks}
+    />
+  );
+
+  const pickerDialog = (
+    <TaskSyncPickerDialog
+      open={pickerSheetOpen}
+      onOpenChange={setPickerSheetOpen}
+      onPickTodoist={() => setTodoistSheetOpen(true)}
+      onPickMicrosoft={() => setMsSheetOpen(true)}
+    />
+  );
+
   if (!user) {
     return (
       <>
@@ -679,6 +752,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">Sign in to use todos</div>
         </ModuleContainer>
         {todoistSheet}
+        {msDialog}
+        {pickerDialog}
       </>
     );
   }
@@ -721,6 +796,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         </div>
       </ModuleContainer>
       {todoistSheet}
+      {msDialog}
+      {pickerDialog}
       </>
     );
   }
@@ -789,6 +866,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         </div>
       </ModuleContainer>
       {todoistSheet}
+      {msDialog}
+      {pickerDialog}
       </>
     );
   }
@@ -926,6 +1005,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       </div>
     </ModuleContainer>
     {todoistSheet}
+    {msDialog}
+    {pickerDialog}
     </>
   );
 };

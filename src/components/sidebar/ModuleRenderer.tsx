@@ -97,6 +97,13 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
                 ...(projectName ? { title: projectName } : {}),
               });
             }}
+            msListId={module.msListId}
+            onMsListChange={(listId, listName) => {
+              onUpdateModule?.(module.id, {
+                msListId: listId ?? undefined,
+                ...(listName ? { title: listName } : {}),
+              });
+            }}
           />
         </div>
       );

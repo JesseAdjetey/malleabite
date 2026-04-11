@@ -37,6 +37,7 @@ interface AddCalendarFlowProps {
   groups: CalendarGroup[];
   defaultGroupId?: string;
   onOpenTemplates: (groupId?: string) => void;
+  onConnectMicrosoft?: () => void;
   onComplete: (result: {
     source: CalendarSource;
     selectedCalendars: { id: string; name: string; color: string; primary: boolean }[];
@@ -76,11 +77,9 @@ const SOURCE_OPTIONS: AddFlowOption[] = [
   {
     id: 'microsoft',
     label: 'Microsoft Outlook',
-    description: 'Coming soon',
+    description: 'Sync your Outlook calendar',
     color: '#0078D4',
     icon: Mail,
-    disabled: true,
-    badge: 'Coming soon',
   },
 ];
 
@@ -90,6 +89,7 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   groups,
   defaultGroupId,
   onOpenTemplates,
+  onConnectMicrosoft,
   onComplete,
 }) => {
   const {
@@ -165,6 +165,13 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   };
 
   const handleSelectSource = async (source: CalendarSource) => {
+    // Microsoft is handled by a separate OAuth sheet — close this dialog and hand off.
+    if (source === 'microsoft') {
+      handleOpenChange(false);
+      setTimeout(() => onConnectMicrosoft?.(), 300);
+      return;
+    }
+
     resetSyncState();
     setDiscoveryStatus('idle');
     setDiscoveryError(null);

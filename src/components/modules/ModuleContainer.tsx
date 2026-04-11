@@ -1,7 +1,7 @@
 
 import React, { ReactNode, useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Layers, MoreVertical, Zap } from 'lucide-react';
+import { Check, ChevronRight, Layers, MoreVertical, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -48,11 +48,14 @@ interface ModuleContainerProps {
   isReadOnly?: boolean;
   sizeLevel?: SizeLevel;
   onSizeChange?: (level: SizeLevel) => void;
-  // Todoist integration
+  // Task sync integrations (Todoist + Microsoft Tasks)
   onConnectTodoist?: () => void;
   todoistLinked?: boolean;
   todoistSyncing?: boolean;
   onSyncTodoist?: () => void;
+  msTasksLinked?: boolean;
+  msTasksSyncing?: boolean;
+  onSyncMsTasks?: () => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -72,6 +75,9 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   todoistLinked = false,
   todoistSyncing = false,
   onSyncTodoist,
+  msTasksLinked = false,
+  msTasksSyncing = false,
+  onSyncMsTasks,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
@@ -194,6 +200,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                 />
               </span>
             )}
+            {msTasksLinked && (
+              <span
+                title={msTasksSyncing ? 'Syncing with Microsoft Tasks…' : 'Synced with Microsoft Tasks'}
+                className="flex-shrink-0"
+              >
+                <Zap
+                  size={11}
+                  className={msTasksSyncing ? 'animate-pulse' : ''}
+                  style={{ color: '#0078d4' }}
+                />
+              </span>
+            )}
           </div>
         )}
 
@@ -273,14 +291,32 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                 {onConnectTodoist && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={onConnectTodoist} className="gap-2">
-                      <Zap size={13} style={{ color: '#db4035' }} />
-                      {todoistLinked ? 'Todoist settings' : 'Connect Todoist'}
+                    <DropdownMenuItem
+                      onSelect={() => setTimeout(() => onConnectTodoist(), 0)}
+                      className="gap-2 justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Zap
+                          size={13}
+                          style={{ color: todoistLinked ? '#db4035' : msTasksLinked ? '#0078d4' : undefined }}
+                          className={!todoistLinked && !msTasksLinked ? 'text-muted-foreground' : ''}
+                        />
+                        {todoistLinked ? 'Todoist settings' : msTasksLinked ? 'Microsoft Tasks settings' : 'Sync tasks'}
+                      </span>
+                      {!todoistLinked && !msTasksLinked && (
+                        <ChevronRight size={13} className="text-muted-foreground" />
+                      )}
                     </DropdownMenuItem>
                     {todoistLinked && onSyncTodoist && (
                       <DropdownMenuItem onSelect={onSyncTodoist} className="gap-2" disabled={todoistSyncing}>
                         <Zap size={13} className="text-muted-foreground" />
                         {todoistSyncing ? 'Syncing…' : 'Sync now'}
+                      </DropdownMenuItem>
+                    )}
+                    {msTasksLinked && onSyncMsTasks && (
+                      <DropdownMenuItem onSelect={onSyncMsTasks} className="gap-2" disabled={msTasksSyncing}>
+                        <Zap size={13} className="text-muted-foreground" />
+                        {msTasksSyncing ? 'Syncing…' : 'Sync now'}
                       </DropdownMenuItem>
                     )}
                   </>

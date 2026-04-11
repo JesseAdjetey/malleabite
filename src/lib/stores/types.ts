@@ -64,6 +64,8 @@ export interface ModuleInstance {
   sharedOwnerName?: string; // Display name of the module owner (for UI)
   // Todoist integration
   todoistProjectId?: string; // If set, this Todo module is linked to a Todoist project
+  // Microsoft To Do integration
+  msListId?: string; // If set, this Todo module is linked to a Microsoft To Do list
 }
 
 /** Generate a unique module ID */

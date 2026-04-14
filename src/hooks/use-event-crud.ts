@@ -122,6 +122,19 @@ export function useEventCRUD() {
 
       const id = typeof eventOrId === 'string' ? eventOrId : eventOrId.id;
 
+      // Microsoft synced events: remove from store + delete syncedEvents doc (no API call needed)
+      if (eventObj?.source === 'microsoft' && id.startsWith('synced_')) {
+        useEventStore.getState().deleteEvent(id);
+        if (user?.uid) {
+          const syncedDocId = id.replace(/^synced_/, '');
+          deleteDoc(doc(db, `users/${user.uid}/syncedEvents`, syncedDocId)).catch((err) => {
+            logger.error('useEventCRUD', 'Failed to delete Microsoft syncedEvents doc', { error: err });
+          });
+        }
+        toast.success('Event removed');
+        return { success: true };
+      }
+
       // Google Calendar events: use API delete + local state removal to avoid
       // Firestore permission errors on imported/synced events.
       if (eventObj?.googleEventId && bridge) {

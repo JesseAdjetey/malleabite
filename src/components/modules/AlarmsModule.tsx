@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
 import ModuleContainer from './ModuleContainer';
-import { Clock, Bell, Loader2 } from 'lucide-react';
+import { Clock, Bell, Loader2, Smartphone } from 'lucide-react';
 import { useAlarms } from '@/hooks/use-alarms';
 import { REMINDER_SOUNDS } from '@/hooks/use-notification-manager';
+import { isAndroidClockAvailable, openAndroidAlarm } from '@/lib/native-clock';
 
 interface AlarmsModuleProps {
   title?: string;
@@ -101,6 +102,18 @@ const AlarmsModule: React.FC<AlarmsModuleProps> = ({
                   {formatAlarmTime(alarm.time)}
                 </span>
               </div>
+              {isAndroidClockAvailable() && alarm.time && (
+                <button
+                  onClick={() => {
+                    const t = alarm.time instanceof Date ? alarm.time : new Date(alarm.time as any);
+                    openAndroidAlarm(t.getHours(), t.getMinutes(), alarm.title);
+                  }}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="Open in Android Clock"
+                >
+                  <Smartphone size={13} />
+                </button>
+              )}
               <button
                 onClick={() => alarm.id && handleDelete(alarm.id)}
                 className="text-destructive/70 hover:text-destructive"

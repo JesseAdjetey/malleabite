@@ -104,7 +104,7 @@ export function useReminders(instanceId?: string) {
               recurrence: data.recurrence || 'none',
               customDays: data.customDays || [],
               createdAt: data.createdAt,
-              userId: data.userId
+              userId: data.userId,
             });
           });
 

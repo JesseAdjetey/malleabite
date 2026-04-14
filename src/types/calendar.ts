@@ -234,12 +234,10 @@ export function createConnectedCalendar(
   partial: Partial<ConnectedCalendar> & Pick<ConnectedCalendar, 'source' | 'groupId' | 'name' | 'accountEmail'>
 ): Omit<ConnectedCalendar, 'id'> {
   const now = new Date().toISOString();
-  return {
+  const result: Omit<ConnectedCalendar, 'id'> = {
     source: partial.source,
     sourceCalendarId: partial.sourceCalendarId || '',
     groupId: partial.groupId,
-    googleAccountId: partial.googleAccountId,
-    msAccountId: partial.msAccountId,
     accountEmail: partial.accountEmail,
     accountName: partial.accountName || partial.accountEmail,
     name: partial.name,
@@ -251,4 +249,8 @@ export function createConnectedCalendar(
     createdAt: now,
     updatedAt: now,
   };
+  // Only include optional ID fields when present — Firestore rejects explicit `undefined`
+  if (partial.googleAccountId !== undefined) result.googleAccountId = partial.googleAccountId;
+  if (partial.msAccountId !== undefined) result.msAccountId = partial.msAccountId;
+  return result;
 }

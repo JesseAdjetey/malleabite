@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, GripVertical, Zap, Globe, AppWindow, Timer, ListTodo, Bell } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Zap, Globe, AppWindow, Timer, ListTodo, Bell, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ const ACTION_TYPES: { value: MallyActionType; label: string; icon: React.ReactNo
   { value: 'start_pomodoro', label: 'Start Focus', icon: <Timer size={14} />, description: 'Start a Pomodoro focus timer' },
   { value: 'create_todo', label: 'Create Todo', icon: <ListTodo size={14} />, description: 'Add a task to your todo list' },
   { value: 'show_reminder', label: 'Show Reminder', icon: <Bell size={14} />, description: 'Display a reminder message' },
+  { value: 'open_shortcut', label: 'Apple Shortcut', icon: <Workflow size={14} />, description: 'Run an Apple Shortcut (iOS/macOS)' },
 ];
 
 const POPULAR_APPS = [
@@ -164,6 +165,31 @@ function ActionFields({ action, onChange }: { action: MallyAction; onChange: (up
             onChange={e => onChange({ ...action, message: e.target.value })}
             className="h-7 text-xs"
           />
+        </div>
+      );
+
+    case 'open_shortcut':
+      return (
+        <div className="space-y-2">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Shortcut name</Label>
+            <Input
+              placeholder="e.g. Morning Routine"
+              value={action.shortcutName || ''}
+              onChange={e => onChange({ ...action, shortcutName: e.target.value })}
+              className="h-7 text-xs"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">Must match the exact name in your Apple Shortcuts app.</p>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Input (optional)</Label>
+            <Input
+              placeholder="e.g. event title or a custom value"
+              value={action.shortcutInput || ''}
+              onChange={e => onChange({ ...action, shortcutInput: e.target.value })}
+              className="h-7 text-xs"
+            />
+          </div>
         </div>
       );
 

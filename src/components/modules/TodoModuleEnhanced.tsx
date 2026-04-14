@@ -4,9 +4,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
 import TodoistConnectSheet from "./todoist/TodoistConnectSheet";
 import MicrosoftTasksConnectDialog from "./todoist/MicrosoftTasksConnectDialog";
+import GoogleTasksConnectDialog from "./todoist/GoogleTasksConnectDialog";
 import TaskSyncPickerDialog from "./todoist/TaskSyncPickerDialog";
 import { useTodoistIntegration } from "@/hooks/use-todoist-integration";
 import { useMicrosoftIntegration } from "@/hooks/use-microsoft-integration";
+import { useGoogleTasksIntegration } from "@/hooks/use-google-tasks";
+import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
@@ -115,6 +118,8 @@ interface TodoModuleEnhancedProps {
   onTodoistProjectChange?: (projectId: string | null, projectName?: string) => void;
   msListId?: string;
   onMsListChange?: (listId: string | null, listName?: string) => void;
+  googleTaskListId?: string;
+  onGoogleTaskListChange?: (taskListId: string | null, taskListTitle?: string) => void;
 }
 
 // ── TodoItem Row ──────────────────────────────────────────────────────────────
@@ -426,6 +431,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   onTodoistProjectChange,
   msListId,
   onMsListChange,
+  googleTaskListId,
+  onGoogleTaskListChange,
 }) => {
   const { sizeLevel } = useModuleSize();
 
@@ -437,6 +444,22 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   const [msSheetOpen, setMsSheetOpen] = useState(false);
   const [pickerSheetOpen, setPickerSheetOpen] = useState(false);
   const ms = useMicrosoftIntegration(moduleListId, msListId);
+
+  // ── Google Tasks integration ──────────────────────────────────────────────────
+  const [googleTasksDialogOpen, setGoogleTasksDialogOpen] = useState(false);
+  const googleTasks = useGoogleTasksIntegration(moduleListId, googleTaskListId);
+  const { calendars: connectedCalendars } = useCalendarGroups();
+  const googleAccounts = React.useMemo(() =>
+    connectedCalendars
+      .filter(c => c.source === 'google' && c.googleAccountId)
+      .reduce<{ googleAccountId: string; email: string }[]>((acc, c) => {
+        if (!acc.find(a => a.googleAccountId === c.googleAccountId)) {
+          acc.push({ googleAccountId: c.googleAccountId!, email: c.accountEmail });
+        }
+        return acc;
+      }, []),
+    [connectedCalendars]
+  );
 
   const isSharedModule = !!sharedFromInstanceId;
   const { myRole: liveRole, isShared: isLiveShared } = useModuleShare(sharedFromInstanceId || moduleId);
@@ -501,6 +524,12 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         toast.error("Couldn't reach Microsoft Tasks — task saved locally");
         await addTodo(text, moduleListId, { deadline });
       }
+    } else if (googleTasks.isLinked) {
+      const googleTaskId = await googleTasks.pushCreate({ text, deadline });
+      if (!googleTaskId) {
+        toast.error("Couldn't reach Google Tasks — task saved locally");
+        await addTodo(text, moduleListId, { deadline });
+      }
     } else {
       await addTodo(text, moduleListId, { deadline });
     }
@@ -532,6 +561,11 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       if (isDone) await ms.pushUncomplete((item as any).msTaskId);
       else await ms.pushComplete((item as any).msTaskId);
     }
+    // Push to Google Tasks
+    if (googleTasks.isLinked && (item as any).googleTaskId) {
+      if (isDone) await googleTasks.pushUncomplete((item as any).googleTaskId);
+      else await googleTasks.pushComplete((item as any).googleTaskId);
+    }
 
     if (!isDone) {
       toast("Marked as done", {
@@ -560,6 +594,10 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     // Push deletion to Microsoft Tasks
     if (ms.isLinked && (item as any)?.msTaskId) {
       ms.pushDelete((item as any).msTaskId);
+    }
+    // Push deletion to Google Tasks
+    if (googleTasks.isLinked && (item as any)?.googleTaskId) {
+      googleTasks.pushDelete((item as any).googleTaskId);
     }
   };
 
@@ -660,10 +698,11 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     moveTargets,
     onMoveToPage,
     onShare,
-    // Task sync (Todoist / Microsoft Tasks)
+    // Task sync (Todoist / Microsoft Tasks / Google Tasks)
     onConnectTodoist: isViewOnly ? undefined : () => {
       if (todoist.isLinked) setTodoistSheetOpen(true);
       else if (ms.isLinked) setMsSheetOpen(true);
+      else if (googleTasks.isLinked) setGoogleTasksDialogOpen(true);
       else setPickerSheetOpen(true);
     },
     todoistLinked: todoist.isLinked,
@@ -672,6 +711,9 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     msTasksLinked: ms.isLinked,
     msTasksSyncing: ms.isSyncing,
     onSyncMsTasks: ms.isLinked ? () => ms.syncTasks() : undefined,
+    googleTasksLinked: googleTasks.isLinked,
+    googleTasksSyncing: googleTasks.isSyncing,
+    onSyncGoogleTasks: googleTasks.isLinked ? () => googleTasks.sync() : undefined,
   };
 
   const rowProps = {
@@ -736,12 +778,37 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     />
   );
 
+  const googleTasksDialog = (
+    <GoogleTasksConnectDialog
+      open={googleTasksDialogOpen}
+      onOpenChange={setGoogleTasksDialogOpen}
+      linkedTaskListId={googleTaskListId}
+      onListLinked={(taskListId, taskListTitle) => {
+        onGoogleTaskListChange?.(taskListId, taskListTitle);
+        setGoogleTasksDialogOpen(false);
+      }}
+      onListUnlinked={() => {
+        onGoogleTaskListChange?.(null);
+      }}
+      status={googleTasks.status}
+      isSyncing={googleTasks.isSyncing}
+      taskLists={googleTasks.taskLists}
+      taskListsLoading={googleTasks.taskListsLoading}
+      googleAccounts={googleAccounts}
+      connect={googleTasks.connect}
+      disconnect={googleTasks.disconnect}
+      loadTaskLists={googleTasks.loadTaskLists}
+      sync={googleTasks.sync}
+    />
+  );
+
   const pickerDialog = (
     <TaskSyncPickerDialog
       open={pickerSheetOpen}
       onOpenChange={setPickerSheetOpen}
       onPickTodoist={() => setTodoistSheetOpen(true)}
       onPickMicrosoft={() => setMsSheetOpen(true)}
+      onPickGoogleTasks={() => setGoogleTasksDialogOpen(true)}
     />
   );
 
@@ -753,6 +820,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         </ModuleContainer>
         {todoistSheet}
         {msDialog}
+        {googleTasksDialog}
         {pickerDialog}
       </>
     );
@@ -797,6 +865,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       </ModuleContainer>
       {todoistSheet}
       {msDialog}
+      {googleTasksDialog}
       {pickerDialog}
       </>
     );
@@ -867,6 +936,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       </ModuleContainer>
       {todoistSheet}
       {msDialog}
+      {googleTasksDialog}
       {pickerDialog}
       </>
     );

@@ -282,9 +282,11 @@ const CalendarDropdown: React.FC = () => {
       // Persist explicit visibility set once to avoid toggle races
       await setVisibleCalendars(Array.from(nextVisible));
 
-      toast.success(
-        `Added ${result.selectedCalendars.length} calendar${result.selectedCalendars.length > 1 ? 's' : ''}`
-      );
+      if (addedCalendars.length > 0) {
+        toast.success(
+          `Added ${addedCalendars.length} calendar${addedCalendars.length > 1 ? 's' : ''}`
+        );
+      }
 
       // Trigger initial sync for newly added calendars
       for (const cal of addedCalendars) {

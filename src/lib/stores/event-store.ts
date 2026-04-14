@@ -51,7 +51,7 @@ export const useEventStore = create<EventStore>()(
 
           set({ events: formattedEvents });
         },
-        // Replaces only Firestore-owned events, preserving Google Calendar events
+        // Replaces only Firestore-owned events, preserving synced external calendar events
         setFirestoreEvents: (events) => {
           const formattedEvents = events.map(event =>
             !event.date && event.startsAt
@@ -60,7 +60,7 @@ export const useEventStore = create<EventStore>()(
           );
           set(state => ({
             events: [
-              ...state.events.filter(e => e.source === 'google'),
+              ...state.events.filter(e => e.source === 'google' || e.source === 'microsoft'),
               ...formattedEvents,
             ]
           }));

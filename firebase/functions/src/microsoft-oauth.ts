@@ -32,11 +32,8 @@ const MS_SCOPES = [
   'profile',
   'offline_access',
   'User.Read',
-  'MailboxSettings.Read',
   'Tasks.ReadWrite',
-  'Tasks.ReadWrite.Shared',
-  'Calendars.ReadWrite',
-  'Calendars.ReadWrite.Shared',
+  'Calendars.Read',
 ].join(' ');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

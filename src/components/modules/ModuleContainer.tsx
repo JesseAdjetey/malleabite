@@ -48,7 +48,7 @@ interface ModuleContainerProps {
   isReadOnly?: boolean;
   sizeLevel?: SizeLevel;
   onSizeChange?: (level: SizeLevel) => void;
-  // Task sync integrations (Todoist + Microsoft Tasks)
+  // Task sync integrations (Todoist + Microsoft Tasks + Google Tasks)
   onConnectTodoist?: () => void;
   todoistLinked?: boolean;
   todoistSyncing?: boolean;
@@ -56,6 +56,9 @@ interface ModuleContainerProps {
   msTasksLinked?: boolean;
   msTasksSyncing?: boolean;
   onSyncMsTasks?: () => void;
+  googleTasksLinked?: boolean;
+  googleTasksSyncing?: boolean;
+  onSyncGoogleTasks?: () => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -78,6 +81,9 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   msTasksLinked = false,
   msTasksSyncing = false,
   onSyncMsTasks,
+  googleTasksLinked = false,
+  googleTasksSyncing = false,
+  onSyncGoogleTasks,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
@@ -212,6 +218,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                 />
               </span>
             )}
+            {googleTasksLinked && (
+              <span
+                title={googleTasksSyncing ? 'Syncing with Google Tasks…' : 'Synced with Google Tasks'}
+                className="flex-shrink-0"
+              >
+                <Zap
+                  size={11}
+                  className={googleTasksSyncing ? 'animate-pulse' : ''}
+                  style={{ color: '#1a73e8' }}
+                />
+              </span>
+            )}
           </div>
         )}
 
@@ -298,12 +316,20 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                       <span className="flex items-center gap-2">
                         <Zap
                           size={13}
-                          style={{ color: todoistLinked ? '#db4035' : msTasksLinked ? '#0078d4' : undefined }}
-                          className={!todoistLinked && !msTasksLinked ? 'text-muted-foreground' : ''}
+                          style={{
+                            color: todoistLinked ? '#db4035'
+                              : msTasksLinked ? '#0078d4'
+                              : googleTasksLinked ? '#1a73e8'
+                              : undefined
+                          }}
+                          className={!todoistLinked && !msTasksLinked && !googleTasksLinked ? 'text-muted-foreground' : ''}
                         />
-                        {todoistLinked ? 'Todoist settings' : msTasksLinked ? 'Microsoft Tasks settings' : 'Sync tasks'}
+                        {todoistLinked ? 'Todoist settings'
+                          : msTasksLinked ? 'Microsoft Tasks settings'
+                          : googleTasksLinked ? 'Google Tasks settings'
+                          : 'Sync tasks'}
                       </span>
-                      {!todoistLinked && !msTasksLinked && (
+                      {!todoistLinked && !msTasksLinked && !googleTasksLinked && (
                         <ChevronRight size={13} className="text-muted-foreground" />
                       )}
                     </DropdownMenuItem>
@@ -317,6 +343,12 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                       <DropdownMenuItem onSelect={onSyncMsTasks} className="gap-2" disabled={msTasksSyncing}>
                         <Zap size={13} className="text-muted-foreground" />
                         {msTasksSyncing ? 'Syncing…' : 'Sync now'}
+                      </DropdownMenuItem>
+                    )}
+                    {googleTasksLinked && onSyncGoogleTasks && (
+                      <DropdownMenuItem onSelect={onSyncGoogleTasks} className="gap-2" disabled={googleTasksSyncing}>
+                        <Zap size={13} className="text-muted-foreground" />
+                        {googleTasksSyncing ? 'Syncing…' : 'Sync now'}
                       </DropdownMenuItem>
                     )}
                   </>

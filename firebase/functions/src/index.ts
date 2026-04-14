@@ -25,6 +25,7 @@ export {
   googleCalendarOAuthCallback,
   refreshGoogleCalendarAccessToken,
   listGoogleCalendarsForAccount,
+  getGoogleTasksAuthUrl,
 } from './google-calendar-oauth';
 
 // Export OpenAI Realtime token endpoint
@@ -49,6 +50,25 @@ export {
   todoistDisconnect,
   todoistGetStatus,
 } from './todoist-oauth';
+
+// Export Google Tasks handlers
+export {
+  googleTasksGetStatus,
+  googleTasksListTaskLists,
+  googleTasksConnect,
+  googleTasksSync,
+  googleTasksPushAction,
+  googleTasksDisconnect,
+} from './google-tasks';
+
+// Export Canvas LMS integration handlers
+export {
+  canvasConnect,
+  canvasSync,
+  canvasGetStatus,
+  canvasDisconnect,
+  canvasSyncScheduled,
+} from './canvas-integration';
 
 // Export Microsoft OAuth + sync handlers (To Do + Outlook Calendar)
 export {
@@ -438,6 +458,7 @@ export const processAIRequest = onRequest(
       let todosContext = 'No todos.';
       let eisenhowerContext = 'No priority items.';
       let alarmsContext = 'No alarms set.';
+      let canvasContext = '';
 
       // Extract AI-enabled calendar filter (used for both events fetch and calendars context)
       const aiEnabledCalendarIds: string[] | null = (clientContext as any)?.aiEnabledCalendarIds ?? null;
@@ -586,6 +607,30 @@ export const processAIRequest = onRequest(
         }
       } catch (dbError) {
         console.warn('Could not fetch alarms:', dbError);
+      }
+
+      // Fetch Canvas assignments for Mally context
+      try {
+        const canvasIntegration = await db.collection('users').doc(userId).collection('integrations').doc('canvas').get();
+        if (canvasIntegration.exists) {
+          const canvasSnap = await db.collection('users').doc(userId).collection('canvas_assignments')
+            .where('submitted', '==', false)
+            .orderBy('dueAt')
+            .limit(30)
+            .get();
+          const canvasAssignments: any[] = canvasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          if (canvasAssignments.length > 0) {
+            canvasContext = canvasAssignments.map(a => {
+              const dueLabel = a.dueAt
+                ? `due ${new Date(a.dueAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                : 'no due date';
+              const submittedLabel = a.submitted ? ' [submitted]' : '';
+              return `- [ID: ${a.id}] "${a.title}" (${a.courseName}) — ${dueLabel}${submittedLabel}`;
+            }).join('\n');
+          }
+        }
+      } catch (dbError) {
+        console.warn('Could not fetch Canvas assignments:', dbError);
       }
 
       // Build available calendars context for multi-account support
@@ -945,6 +990,9 @@ ${eisenhowerContext}
 
 ALARMS:
 ${alarmsContext}
+
+CANVAS ASSIGNMENTS (upcoming, not yet submitted):
+${canvasContext || 'No Canvas assignments (not connected or none due).'}
 
 CALENDARS:
 ${calendarsContext}

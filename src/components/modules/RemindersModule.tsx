@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import ModuleContainer from './ModuleContainer';
 import {
   Bell, Calendar, Clock, Plus, Edit2, Trash2, AlarmClock, Check, RotateCcw,
-  X, Sparkles, Info, Volume2, VolumeX, ChevronDown, ChevronUp, CalendarSearch
+  X, Sparkles, Info, Volume2, VolumeX, ChevronDown, ChevronUp, CalendarSearch,
 } from 'lucide-react';
 import { useReminders, Reminder, ReminderFormData, ReminderRecurrence } from '@/hooks/use-reminders';
 import { useAlarms, Alarm } from '@/hooks/use-alarms';

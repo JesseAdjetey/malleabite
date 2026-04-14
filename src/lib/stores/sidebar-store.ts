@@ -76,6 +76,7 @@ export const useSidebarStore = create<SidebarStoreType>()(
                 case 'alarms': defaultTitle = 'Reminders'; break;
                 case 'eisenhower': defaultTitle = 'Eisenhower Matrix'; break;
                 case 'booking': defaultTitle = 'Booking'; break;
+                case 'canvas': defaultTitle = 'Canvas'; break;
               }
               
               newPages[pageIndex] = {

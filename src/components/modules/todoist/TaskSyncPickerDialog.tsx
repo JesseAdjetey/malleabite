@@ -15,6 +15,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   onPickTodoist: () => void;
   onPickMicrosoft: () => void;
+  onPickGoogleTasks: () => void;
 }
 
 const OPTIONS = [
@@ -40,14 +41,27 @@ const OPTIONS = [
       </svg>
     ),
   },
+  {
+    id: 'google_tasks' as const,
+    label: 'Google Tasks',
+    description: 'Sync with a Google Tasks list',
+    color: '#1a73e8',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M9 11l3 3L22 4" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    ),
+  },
 ];
 
-export default function TaskSyncPickerDialog({ open, onOpenChange, onPickTodoist, onPickMicrosoft }: Props) {
-  const handlePick = (id: 'todoist' | 'microsoft') => {
+export default function TaskSyncPickerDialog({ open, onOpenChange, onPickTodoist, onPickMicrosoft, onPickGoogleTasks }: Props) {
+  const handlePick = (id: 'todoist' | 'microsoft' | 'google_tasks') => {
     onOpenChange(false);
     setTimeout(() => {
       if (id === 'todoist') onPickTodoist();
-      else onPickMicrosoft();
+      else if (id === 'microsoft') onPickMicrosoft();
+      else onPickGoogleTasks();
     }, 200);
   };
 
@@ -65,7 +79,7 @@ export default function TaskSyncPickerDialog({ open, onOpenChange, onPickTodoist
               key={opt.id}
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handlePick(opt.id)}
+              onClick={() => handlePick(opt.id as any)}
               className={cn(
                 'w-full flex items-center gap-3 p-3.5 rounded-xl border border-border/60',
                 'hover:border-primary/30 hover:bg-primary/[0.02]',

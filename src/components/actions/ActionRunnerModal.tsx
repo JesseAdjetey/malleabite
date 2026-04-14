@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Globe, AppWindow, Timer, ListTodo, Bell, Play, X, CheckCircle2 } from 'lucide-react';
+import { Zap, Globe, AppWindow, Timer, ListTodo, Bell, Play, X, CheckCircle2, Workflow } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,7 @@ function ActionTypeIcon({ type, size = 14 }: { type: MallyActionType; size?: num
     case 'start_pomodoro': return <Timer size={size} />;
     case 'create_todo': return <ListTodo size={size} />;
     case 'show_reminder': return <Bell size={size} />;
+    case 'open_shortcut': return <Workflow size={size} />;
   }
 }
 
@@ -32,6 +33,9 @@ function actionSummary(action: MallyAction): string {
       : `Start ${action.pomodoroMinutes ?? 25}min focus`;
     case 'create_todo': return `Create task: "${action.todoTitle || 'New task'}"`;
     case 'show_reminder': return action.message || 'Reminder';
+    case 'open_shortcut': return action.shortcutName
+      ? `Run shortcut: "${action.shortcutName}"`
+      : 'Apple Shortcut';
   }
 }
 
@@ -115,6 +119,15 @@ export function ActionRunnerModal({ onClose }: ActionRunnerModalProps) {
         case 'show_reminder': {
           if (action.message) {
             toast.info(action.message, { duration: 8000 });
+          }
+          break;
+        }
+        case 'open_shortcut': {
+          const name = action.shortcutName?.trim();
+          if (name) {
+            const params = new URLSearchParams({ name });
+            if (action.shortcutInput) params.set('input', action.shortcutInput);
+            window.location.href = `shortcuts://run-shortcut?${params.toString()}`;
           }
           break;
         }

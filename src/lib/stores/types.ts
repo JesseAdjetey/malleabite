@@ -1,5 +1,5 @@
 
-export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'booking';
+export type ModuleType = 'todo' | 'pomodoro' | 'alarms' | 'reminders' | 'eisenhower' | 'booking' | 'canvas';
 
 /**
  * Module size levels:
@@ -66,6 +66,8 @@ export interface ModuleInstance {
   todoistProjectId?: string; // If set, this Todo module is linked to a Todoist project
   // Microsoft To Do integration
   msListId?: string; // If set, this Todo module is linked to a Microsoft To Do list
+  // Google Tasks integration
+  googleTaskListId?: string; // If set, this Todo module is linked to a Google Tasks list
 }
 
 /** Generate a unique module ID */
@@ -183,7 +185,8 @@ export type MallyActionType =
   | 'open_app'
   | 'start_pomodoro'
   | 'create_todo'
-  | 'show_reminder';
+  | 'show_reminder'
+  | 'open_shortcut';
 
 export interface MallyAction {
   id: string;
@@ -202,6 +205,9 @@ export interface MallyAction {
   todoTitle?: string;
   // show_reminder
   message?: string;
+  // open_shortcut — Apple Shortcuts (iOS/macOS)
+  shortcutName?: string;
+  shortcutInput?: string;
 }
 
 // Event attendee type

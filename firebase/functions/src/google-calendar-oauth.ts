@@ -248,7 +248,7 @@ async function refreshGoogleAccessToken(uid: string, googleAccountId: string): P
   };
 }
 
-async function getValidAccessToken(uid: string, googleAccountId: string): Promise<{ account: StoredGoogleAccount; accessToken: string; expiresIn: number }> {
+export async function getValidAccessToken(uid: string, googleAccountId: string): Promise<{ account: StoredGoogleAccount; accessToken: string; expiresIn: number }> {
   const snapshot = await accountDoc(uid, googleAccountId).get();
   if (!snapshot.exists) {
     throw new Error(`Google account ${googleAccountId} not found`);
@@ -497,5 +497,59 @@ export const listGoogleCalendarsForAccount = onCall(
       const message = error instanceof Error ? error.message : 'Failed to list Google calendars';
       throw new HttpsError('failed-precondition', message);
     }
+  }
+);
+
+// ─── Google Tasks incremental auth URL ───────────────────────────────────────
+// Requests ONLY the tasks scope. Uses include_granted_scopes=true so users who
+// already connected Google Calendar just get a small incremental consent prompt
+// rather than a full re-auth flow. Keeps Tasks consent completely separate from
+// the calendar OAuth so adding Tasks doesn't affect your verified calendar scopes.
+
+const TASKS_SCOPE = 'https://www.googleapis.com/auth/tasks';
+
+export const getGoogleTasksAuthUrl = onCall(
+  {
+    region: 'us-central1',
+    secrets: [googleClientId],
+  },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'You must be signed in to connect Google Tasks.');
+    }
+
+    const origin = typeof request.data?.origin === 'string' ? request.data.origin : '';
+    const googleAccountId = typeof request.data?.googleAccountId === 'string' ? request.data.googleAccountId : undefined;
+    if (!origin) {
+      throw new HttpsError('invalid-argument', 'Missing origin.');
+    }
+
+    const state = randomBytes(24).toString('hex');
+    await stateDoc(state).set({
+      uid: request.auth.uid,
+      origin,
+      createdAt: new Date().toISOString(),
+      flow: 'tasks', // so the callback knows what this is for
+    });
+
+    const params = new URLSearchParams({
+      client_id: getGoogleClientIdValue(),
+      redirect_uri: getCallbackUrl(),
+      response_type: 'code',
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: 'true', // incremental — stacks on top of existing calendar grants
+      scope: TASKS_SCOPE,
+      state,
+    });
+    if (googleAccountId) {
+      params.set('login_hint', googleAccountId);
+    }
+
+    return {
+      authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      callbackUrl: getCallbackUrl(),
+      state,
+    };
   }
 );

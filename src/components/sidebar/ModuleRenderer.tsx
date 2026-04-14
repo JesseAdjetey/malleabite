@@ -7,6 +7,7 @@ import PomodoroModule from '../modules/PomodoroModule';
 import EisenhowerModule from '../modules/EisenhowerModule';
 import RemindersModule from '../modules/RemindersModule';
 import BookingModule from '../modules/BookingModule';
+import CanvasModule from '../modules/CanvasModule';
 
 interface MoveTarget {
   id: string;
@@ -104,6 +105,13 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
                 ...(listName ? { title: listName } : {}),
               });
             }}
+            googleTaskListId={module.googleTaskListId}
+            onGoogleTaskListChange={(taskListId, taskListTitle) => {
+              onUpdateModule?.(module.id, {
+                googleTaskListId: taskListId ?? undefined,
+                ...(taskListTitle ? { title: taskListTitle } : {}),
+              });
+            }}
           />
         </div>
       );
@@ -130,6 +138,12 @@ const ModuleRenderer: React.FC<ModuleRendererProps> = ({
       return wrap(
         <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
           <BookingModule {...moduleProps} instanceId={module.instanceId} />
+        </div>
+      );
+    case 'canvas':
+      return wrap(
+        <div key={module.id} data-module-id={module.id} style={moduleStyle} className={moduleClassName}>
+          <CanvasModule {...moduleProps} />
         </div>
       );
     default:

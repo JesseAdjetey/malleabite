@@ -219,13 +219,17 @@ const Settings = () => {
               rightElement={
                 <select 
                   className="bg-transparent border-none text-right outline-none text-sm text-muted-foreground mr-1"
-                  value={['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(mallyVoiceId) ? mallyVoiceId : 'nova'}
+                  value={['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'].includes(mallyVoiceId) ? mallyVoiceId : 'alloy'}
                   onChange={(e) => setMallyVoiceId(e.target.value)}
                 >
-                  <option value="nova">Nova (Conversational female)</option>
+                  <option value="alloy">Alloy (Conversational)</option>
                   <option value="echo">Echo (Calm male)</option>
-                  <option value="onyx">Onyx (Authoritative male)</option>
                   <option value="shimmer">Shimmer (Energetic female)</option>
+                  <option value="ash">Ash (Smooth male)</option>
+                  <option value="coral">Coral (Warm female)</option>
+                  <option value="sage">Sage (Thoughtful)</option>
+                  <option value="marin">Marin (Bright female)</option>
+                  <option value="cedar">Cedar (Deep male)</option>
                 </select>
               }
             />

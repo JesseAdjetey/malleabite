@@ -8,7 +8,7 @@ const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'malleabite-97d35
 const TOKEN_URL = `https://us-central1-${PROJECT_ID}.cloudfunctions.net/getMallyRealtimeToken`;
 const OPENAI_REALTIME_URL = 'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
 
-const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
+const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
 
 const ACTION_LABELS: Record<string, string> = {
   create_event: 'Creating event…',
@@ -211,7 +211,7 @@ export function useMallyVoice({
       // 1. Fetch ephemeral token from Firebase function (key stays server-side)
       const currentUser = auth.currentUser;
       const authToken = currentUser ? await currentUser.getIdToken() : null;
-      const voice = VALID_VOICES.includes(mallyVoiceId ?? '') ? mallyVoiceId! : 'nova';
+      const voice = VALID_VOICES.includes(mallyVoiceId ?? '') ? mallyVoiceId! : 'alloy';
 
       const tokenRes = await fetch(TOKEN_URL, {
         method: 'POST',

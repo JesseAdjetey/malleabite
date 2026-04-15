@@ -110,7 +110,7 @@ export const useSettingsStore = create<SettingsState>()(
       reschedulingPrefs: DEFAULT_RESCHEDULING_PREFS,
       setReschedulingPrefs: (prefs) =>
         set((state) => ({ reschedulingPrefs: { ...state.reschedulingPrefs, ...prefs } })),
-      mallyVoiceId: 'sarah',
+      mallyVoiceId: 'alloy',
       setMallyVoiceId: (id) => set({ mallyVoiceId: id }),
     }),
     {

@@ -17,8 +17,7 @@ export const getMallyRealtimeToken = onRequest(
     cors: true,
     region: 'us-central1',
     secrets: [openaiKey],
-    // Low memory — just an API proxy
-    memory: '128MiB',
+    memory: '256MiB',
     timeoutSeconds: 15,
   },
   async (req, res) => {
@@ -27,8 +26,8 @@ export const getMallyRealtimeToken = onRequest(
       return;
     }
 
-    const voice = req.body?.voice || 'nova';
-    const validVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
+    const voice = req.body?.voice || 'alloy';
+    const validVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
     const safeVoice = validVoices.includes(voice) ? voice : 'nova';
 
     try {

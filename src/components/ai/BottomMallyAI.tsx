@@ -29,7 +29,7 @@ import {
   ExternalLink,
   Heart,
   Settings2,
-  Phone,
+  AudioLines,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
@@ -1974,7 +1974,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                       : 'Voice error — hold to retry'
                     }
                   >
-                    <Phone className="h-5 w-5" />
+                    <AudioLines className="h-5 w-5" />
                     {/* Pulsing ring when actively listening */}
                     {voiceState === 'listening' && (
                       <motion.span

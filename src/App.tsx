@@ -24,6 +24,7 @@ import { useFCM } from '@/hooks/use-fcm';
 import { useCalendarEvents } from '@/hooks/use-calendar-events';
 import { useActionRunnerStore } from '@/lib/stores/action-runner-store';
 import { isNative, isAndroid, isIOS } from '@/lib/platform';
+const ElectronAuthPage = lazy(() => import('@/pages/ElectronAuth'));
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
 import { CountdownPanel } from '@/components/countdown/CountdownPanel';
@@ -68,7 +69,7 @@ const PageLoader = () => (
 // A wrapper component to determine if the current page is the auth page
 const AppRoutes = () => {
   const location = useLocation();
-  const isAuthPage = location.pathname === '/auth';
+  const isAuthPage = location.pathname === '/auth' || location.pathname === '/electron-auth';
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const navigate = useNavigate();
@@ -242,6 +243,7 @@ const AppRoutes = () => {
           >
             <Routes location={location}>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/electron-auth" element={<React.Suspense fallback={null}><ElectronAuthPage /></React.Suspense>} />
               <Route path="/" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

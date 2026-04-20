@@ -69,22 +69,49 @@ export const signUp = async (credentials: SignUpCredentials): Promise<UserCreden
 export const signInWithGoogle = async (rememberMe = true): Promise<UserCredential> => {
   const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
   await setPersistence(auth, persistence);
+
   if (isNative) {
-    // Use the Capacitor Firebase Authentication plugin for native Google Sign-In
+    // Capacitor iOS/Android — use native Google Sign-In
     const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
     const result = await FirebaseAuthentication.signInWithGoogle();
-    
-    // Use the credential from the native sign-in to authenticate with the Firebase web SDK
     const idToken = result.credential?.idToken;
     const accessToken = result.credential?.accessToken;
-    if (!idToken) {
-      throw new Error('Google Sign-In failed: no ID token returned');
-    }
+    if (!idToken) throw new Error('Google Sign-In failed: no ID token returned');
     const credential = GoogleAuthProvider.credential(idToken, accessToken);
     return await signInWithCredential(auth, credential);
   }
 
-  // Web: use popup
+  const electronAPI = (window as any).electronAPI;
+  if (electronAPI) {
+    // Electron — open sign-in in the user's real browser (Safari/Chrome) so
+    // they get the familiar Google account picker with all signed-in accounts
+    // and full passkey/2FA support. The /electron-auth page completes the flow
+    // and redirects back via malleabite://auth?idToken=...
+    return new Promise((resolve, reject) => {
+      electronAPI.openExternal('http://localhost:8080/electron-auth');
+
+      const handler = (e: Event) => {
+        window.removeEventListener('electron-oauth-callback', handler);
+        try {
+          const { idToken, accessToken } = (e as CustomEvent).detail;
+          if (!idToken) { reject(new Error('No token received')); return; }
+          const credential = GoogleAuthProvider.credential(idToken, accessToken || undefined);
+          signInWithCredential(auth, credential).then(resolve).catch(reject);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      window.addEventListener('electron-oauth-callback', handler);
+
+      // Timeout after 3 minutes
+      setTimeout(() => {
+        window.removeEventListener('electron-oauth-callback', handler);
+        reject(new Error('Sign-in timed out'));
+      }, 3 * 60 * 1000);
+    });
+  }
+
+  // Web browser
   const provider = new GoogleAuthProvider();
   return await signInWithPopup(auth, provider);
 };

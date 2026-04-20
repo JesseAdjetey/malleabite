@@ -26,6 +26,12 @@ import {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '@/integrations/firebase/config';
 import dayjs from 'dayjs';
+import {
+  isAppleDataAvailable,
+  requestCalendarPermission,
+  getAppleCalendars,
+  getAppleEvents,
+} from '@/lib/native-apple';
 
 // Initialize once at module level with explicit app + region (same as use-microsoft-integration.ts)
 const _functions = getFunctions(app, 'us-central1');
@@ -138,10 +144,20 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           return true;
         }
         case 'apple': {
-          // Apple Calendar - primarily through CalDAV or native Capacitor
-          toast.info('Apple Calendar integration coming soon');
+          if (!isAppleDataAvailable()) {
+            toast.error('Apple Calendar is only available on iOS.');
+            setSyncState({ status: 'idle' });
+            return false;
+          }
+          setSyncState({ status: 'syncing', message: 'Requesting calendar permission…' });
+          const granted = await requestCalendarPermission();
+          if (!granted) {
+            toast.error('Calendar permission denied. Enable it in iOS Settings → Malleabite.');
+            setSyncState({ status: 'idle' });
+            return false;
+          }
           setSyncState({ status: 'idle' });
-          return false;
+          return true;
         }
         default:
           setSyncState({ status: 'error', message: `Unknown source: ${source}` });
@@ -295,9 +311,19 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           }));
           break;
         }
-        case 'apple':
-          // TODO: CalDAV calendar discovery
+        case 'apple': {
+          const appleCalendars = await getAppleCalendars();
+          discovered = appleCalendars
+            .filter(c => c.allowsContentModifications)
+            .map(c => ({
+              id: c.id,
+              name: c.title,
+              color: c.color || '#ff6b35',
+              primary: false,
+              source: 'apple' as CalendarSource,
+            }));
           break;
+        }
       }
 
       setAvailableCalendars(discovered);
@@ -387,9 +413,29 @@ export function useCalendarSync(): UseCalendarSyncReturn {
           setSyncState({ status: 'success', message: `Synced ${data.synced} events from ${calendar.name}`, progress: 100 });
           return data.synced;
         }
-        case 'apple':
-          // TODO: CalDAV events
+        case 'apple': {
+          const appleEvents = await getAppleEvents(
+            timeMin.toISOString(),
+            timeMax.toISOString(),
+          );
+          events = appleEvents
+            .filter(ae => ae.calendarId === calendar.sourceCalendarId)
+            .map(ae => ({
+              id: `${calendar.id}_${ae.id}`,
+              calendarId: calendar.id,
+              externalId: ae.id,
+              title: ae.title || 'Untitled Event',
+              description: ae.notes || '',
+              location: '',
+              startTime: ae.startDate,
+              endTime: ae.endDate,
+              isAllDay: ae.allDay,
+              status: 'confirmed' as const,
+              source: 'apple' as const,
+              syncedAt: new Date().toISOString(),
+            }));
           break;
+        }
       }
 
       // Replace cached synced events for this calendar inside the current sync window.

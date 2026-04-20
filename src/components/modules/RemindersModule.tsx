@@ -4,7 +4,9 @@ import ModuleContainer from './ModuleContainer';
 import {
   Bell, Calendar, Clock, Plus, Edit2, Trash2, AlarmClock, Check, RotateCcw,
   X, Sparkles, Info, Volume2, VolumeX, ChevronDown, ChevronUp, CalendarSearch,
+  List, ArrowRight, RefreshCw, Unlink, AlertCircle,
 } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useReminders, Reminder, ReminderFormData, ReminderRecurrence } from '@/hooks/use-reminders';
 import { useAlarms, Alarm } from '@/hooks/use-alarms';
 import { toast } from 'sonner';
@@ -18,11 +20,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import dayjs from 'dayjs';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, updateDoc, doc } from 'firebase/firestore';
+import { db } from '@/integrations/firebase/config';
 import { useEventHighlightStore } from '@/lib/stores/event-highlight-store';
 import { useReminderEventPickerStore } from '@/lib/stores/reminder-event-picker-store';
 import { cn } from '@/lib/utils';
 import { useModuleSize } from '@/contexts/ModuleSizeContext';
+import { useAppleReminders } from '@/hooks/use-apple-reminders';
 
 const resolveDate = (date: any): Date => {
   if (date?.toDate && typeof date.toDate === 'function') return date.toDate();
@@ -270,9 +274,25 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   // Sound toggle
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Apple Reminders setup sheet
+  const [appleSheetOpen, setAppleSheetOpen] = useState(false);
+  const [appleSetupStep, setAppleSetupStep] = useState<'intro' | 'connecting' | 'pick-list' | 'settings'>('intro');
+  const [listsLoadError, setListsLoadError] = useState(false);
+
+  // Fetch lists whenever the sheet is open and we're on a step that needs them
+  useEffect(() => {
+    if (!appleSheetOpen) return;
+    if (appleSetupStep !== 'pick-list' && appleSetupStep !== 'settings') return;
+    setListsLoadError(false);
+    appleReminders.fetchLists().catch(() => setListsLoadError(true));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appleSheetOpen, appleSetupStep]);
+
   const {
     reminders, loading, addReminder, updateReminder, deleteReminder, completeReminder, getSounds,
   } = useReminders(instanceId);
+
+  const appleReminders = useAppleReminders(instanceId);
   const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms(instanceId);
   const { events } = useEventStore();
   const { accounts } = useCalendarFilterStore();
@@ -483,7 +503,22 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
       if (isEditing && selectedReminder) {
         await updateReminder(selectedReminder.id, payload);
       } else {
-        await addReminder(payload);
+        const result = await addReminder(payload);
+        if (appleReminders.isLinked && result.success && result.reminderId) {
+          const appleId = await appleReminders.pushCreate({
+            title: payload.title,
+            description: payload.description,
+            reminderTime: payload.reminderTime,
+            flagged: soundEnabled,
+          });
+          // Link the Firestore doc back to its Apple counterpart so sync/delete/complete works
+          if (appleId) {
+            await updateDoc(doc(db, 'reminders', result.reminderId), {
+              externalId: appleId,
+              externalSource: 'apple_reminders',
+            });
+          }
+        }
       }
       setIsDialogOpen(false);
     } catch {
@@ -493,17 +528,44 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
 
   const handleQuickAdd = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && quickTitle.trim()) {
-      await addReminder({ title: quickTitle.trim(), reminderTime: dayjs().add(1, 'hour').format('YYYY-MM-DDTHH:mm'), soundId: 'default', recurrence: 'none' });
+      const t = quickTitle.trim();
+      const defaultTime = dayjs().add(1, 'hour').format('YYYY-MM-DDTHH:mm');
+      const result = await addReminder({ title: t, reminderTime: defaultTime, soundId: 'default', recurrence: 'none' });
+      if (appleReminders.isLinked && result.success && result.reminderId) {
+        const appleId = await appleReminders.pushCreate({ title: t, reminderTime: defaultTime });
+        if (appleId) {
+          await updateDoc(doc(db, 'reminders', result.reminderId), {
+            externalId: appleId,
+            externalSource: 'apple_reminders',
+          });
+        }
+      }
       setQuickTitle('');
     }
   };
+
+  const handleCompleteReminder = useCallback(async (reminder: Reminder) => {
+    await completeReminder(reminder.id);
+    const r = reminder as any;
+    if (appleReminders.isLinked && r.externalId && r.externalSource === 'apple_reminders') {
+      await appleReminders.pushComplete(r.externalId);
+    }
+  }, [completeReminder, appleReminders]);
+
+  const handleDeleteReminder = useCallback(async (id: string) => {
+    const reminder = reminders.find(r => r.id === id) as any;
+    await deleteReminder(id);
+    if (appleReminders.isLinked && reminder?.externalId && reminder?.externalSource === 'apple_reminders') {
+      await appleReminders.pushDelete(reminder.externalId);
+    }
+  }, [deleteReminder, reminders, appleReminders]);
 
   const openEditDialog = (reminder: Reminder) => {
     setSelectedReminder(reminder); setIsEditing(true); setIsDialogOpen(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (deletingId === id) { await deleteReminder(id); setDeletingId(null); }
+    if (deletingId === id) { await handleDeleteReminder(id); setDeletingId(null); }
     else { setDeletingId(id); setTimeout(() => setDeletingId(null), 3000); }
   };
 
@@ -567,7 +629,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
               : "hover:bg-gray-100/60 dark:hover:bg-white/5",
           isHighlighted && "event-spotlight"
         )}>
-        <button onClick={() => completeReminder(item.id)}
+        <button onClick={() => handleCompleteReminder(item)}
           className={cn("mt-0.5 flex-shrink-0 w-4 h-4 rounded-full border-2 transition-all flex items-center justify-center",
             isOverdue ? "border-red-400 hover:bg-red-400" : "border-gray-300 dark:border-gray-600 hover:border-primary hover:bg-primary/10")}
           title="Mark as done">
@@ -926,7 +988,14 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   return (
     <ModuleContainer title={title} onRemove={onRemove} onTitleChange={onTitleChange}
       onMinimize={onMinimize} isMinimized={isMinimized} isDragging={isDragging}
-      moveTargets={moveTargets} onMoveToPage={onMoveToPage} onShare={onShare} isReadOnly={isReadOnly}>
+      moveTargets={moveTargets} onMoveToPage={onMoveToPage} onShare={onShare} isReadOnly={isReadOnly}
+      onConnectAppleReminders={() => {
+        setAppleSetupStep(appleReminders.isLinked ? 'settings' : 'intro');
+        setAppleSheetOpen(true);
+      }}
+      appleRemindersLinked={appleReminders.isLinked}
+      appleRemindersSyncing={appleReminders.isSyncing}
+      onSyncAppleReminders={() => appleReminders.pullSync(false)}>
       <div className={cn("space-y-2", sizeLevel >= 2 && "flex flex-col h-full min-h-0")}>
         <div className="flex items-center gap-1.5">
           <input value={quickTitle} onChange={e => setQuickTitle(e.target.value)} onKeyDown={handleQuickAdd}
@@ -1004,7 +1073,11 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
                 <div className="flex items-center gap-2">
                   {soundEnabled ? <Volume2 size={14} className="text-primary" /> : <VolumeX size={14} className="text-gray-400" />}
                   <span className="text-sm font-medium">Sound</span>
-                  <span className="text-[11px] text-gray-400">{soundEnabled ? 'plays sound' : 'silent'}</span>
+                  <span className="text-[11px] text-gray-400">
+                    {soundEnabled
+                      ? appleReminders.isLinked ? 'plays alarm · urgent on iPhone' : 'plays sound'
+                      : 'silent'}
+                  </span>
                 </div>
                 <button type="button" onClick={() => setSoundEnabled(v => !v)}
                   className={cn("relative w-9 h-5 rounded-full transition-colors flex items-center px-0.5",
@@ -1042,6 +1115,248 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* ── Apple Reminders Setup / Settings Sheet ───────────────────────── */}
+      <Sheet open={appleSheetOpen} onOpenChange={setAppleSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md bg-background border-border flex flex-col">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <span className="text-lg">🍎</span>
+              {appleReminders.isLinked ? 'Apple Reminders Settings' : 'Connect Apple Reminders'}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4 py-2">
+
+            {/* ── Not available (web / non-macOS) ── */}
+            {!appleReminders.status.available && (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center px-4">
+                <AlertCircle size={36} className="text-amber-500" />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  Apple Reminders is only available on macOS (Electron) or iOS.
+                </p>
+                <p className="text-xs text-gray-400">
+                  Open this app on a Mac or iPhone to sync your reminders.
+                </p>
+              </div>
+            )}
+
+            {/* ── INTRO: not yet connected ── */}
+            {appleReminders.status.available && !appleReminders.isLinked && appleSetupStep === 'intro' && (
+              <div className="space-y-6">
+                <div className="rounded-xl border border-border bg-gray-50 dark:bg-white/5 p-4 space-y-3">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white">What happens when you connect:</p>
+                  <ul className="space-y-2">
+                    {[
+                      'Your Apple Reminders are imported into this module',
+                      'New reminders you create here appear in Apple Reminders',
+                      'Completing or deleting syncs back to Apple',
+                      'Sound-enabled reminders are flagged as urgent on iPhone',
+                    ].map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
+                        <Check size={14} className="text-green-500 mt-0.5 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={async () => {
+                    setAppleSetupStep('connecting');
+                    const granted = await appleReminders.connect();
+                    if (granted) {
+                      await appleReminders.fetchLists();
+                      setAppleSetupStep('pick-list');
+                    } else {
+                      setAppleSetupStep('intro');
+                    }
+                  }}
+                >
+                  Grant Access to Reminders
+                  <ArrowRight size={16} className="ml-2" />
+                </Button>
+              </div>
+            )}
+
+            {/* ── CONNECTING: spinner ── */}
+            {appleReminders.status.available && !appleReminders.isLinked && appleSetupStep === 'connecting' && (
+              <div className="flex flex-col items-center justify-center gap-3 py-10">
+                <RefreshCw size={28} className="animate-spin text-primary" />
+                <p className="text-sm text-gray-500">Requesting permission…</p>
+              </div>
+            )}
+
+            {/* ── PICK LIST: step 2 ── */}
+            {appleReminders.status.available && appleSetupStep === 'pick-list' && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white mb-1">Select a list to sync</p>
+                  <p className="text-xs text-gray-400">This module will import reminders from the chosen list. You can change this later.</p>
+                </div>
+
+                {listsLoadError ? (
+                  <div className="flex flex-col items-center gap-3 py-6 text-center">
+                    <AlertCircle size={24} className="text-red-400" />
+                    <p className="text-sm text-gray-500">Couldn't load lists. Make sure Reminders is open.</p>
+                    <Button variant="outline" size="sm" onClick={() => { setListsLoadError(false); appleReminders.fetchLists().catch(() => setListsLoadError(true)); }}>
+                      <RefreshCw size={13} className="mr-1.5" /> Retry
+                    </Button>
+                  </div>
+                ) : appleReminders.lists.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-6 text-gray-400">
+                    <RefreshCw size={20} className="animate-spin" />
+                    <p className="text-xs">Loading lists…</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {/* All Lists option */}
+                    <button
+                      type="button"
+                      onClick={() => appleReminders.setSelectedListId(null)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                        appleReminders.selectedListId === null
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/40 hover:bg-accent text-gray-700 dark:text-gray-200"
+                      )}
+                    >
+                      <List size={15} className="flex-shrink-0" />
+                      <span className="text-sm font-medium">All Lists</span>
+                      {appleReminders.selectedListId === null && <Check size={14} className="ml-auto flex-shrink-0" />}
+                    </button>
+
+                    {appleReminders.lists.map(l => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => appleReminders.setSelectedListId(l.id)}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                          appleReminders.selectedListId === l.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-primary/40 hover:bg-accent text-gray-700 dark:text-gray-200"
+                        )}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-orange-400 flex-shrink-0" />
+                        <span className="text-sm font-medium">{l.title}</span>
+                        {appleReminders.selectedListId === l.id && <Check size={14} className="ml-auto flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  className="w-full mt-2"
+                  disabled={appleReminders.lists.length === 0 && !listsLoadError}
+                  onClick={async () => {
+                    await appleReminders.pullSync(false);
+                    setAppleSheetOpen(false);
+                  }}
+                >
+                  Start Syncing
+                  <Check size={16} className="ml-2" />
+                </Button>
+              </div>
+            )}
+
+            {/* ── SETTINGS: already connected ── */}
+            {appleReminders.status.available && appleReminders.isLinked && appleSetupStep === 'settings' && (
+              <div className="space-y-5">
+                {/* Current list */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Syncing list</p>
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => appleReminders.setSelectedListId(null)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                        appleReminders.selectedListId === null
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/40 hover:bg-accent text-gray-700 dark:text-gray-200"
+                      )}
+                    >
+                      <List size={15} className="flex-shrink-0" />
+                      <span className="text-sm font-medium">All Lists</span>
+                      {appleReminders.selectedListId === null && <Check size={14} className="ml-auto flex-shrink-0" />}
+                    </button>
+
+                    {listsLoadError ? (
+                      <div className="flex items-center gap-2 py-2 px-1">
+                        <AlertCircle size={13} className="text-red-400 flex-shrink-0" />
+                        <span className="text-xs text-gray-500">Couldn't load lists.</span>
+                        <button type="button" onClick={() => { setListsLoadError(false); appleReminders.fetchLists().catch(() => setListsLoadError(true)); }}
+                          className="text-xs text-primary hover:underline flex-shrink-0">Retry</button>
+                      </div>
+                    ) : appleReminders.lists.length === 0 ? (
+                      <div className="flex items-center gap-2 py-2 px-1 text-gray-400">
+                        <RefreshCw size={13} className="animate-spin flex-shrink-0" />
+                        <span className="text-xs">Loading…</span>
+                      </div>
+                    ) : appleReminders.lists.map(l => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => appleReminders.setSelectedListId(l.id)}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors",
+                          appleReminders.selectedListId === l.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-primary/40 hover:bg-accent text-gray-700 dark:text-gray-200"
+                        )}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-orange-400 flex-shrink-0" />
+                        <span className="text-sm font-medium">{l.title}</span>
+                        {appleReminders.selectedListId === l.id && <Check size={14} className="ml-auto flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sync + last synced */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Sync</p>
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start gap-2"
+                      disabled={appleReminders.isSyncing}
+                      onClick={async () => {
+                        await appleReminders.pullSync(false);
+                      }}
+                    >
+                      <RefreshCw size={14} className={cn(appleReminders.isSyncing && "animate-spin")} />
+                      {appleReminders.isSyncing ? 'Syncing…' : 'Sync Now'}
+                    </Button>
+                    {appleReminders.status.lastSyncedAt && (
+                      <p className="text-[11px] text-gray-400 px-1">
+                        Last synced {new Date(appleReminders.status.lastSyncedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Disconnect */}
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Connection</p>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start gap-2 text-red-500 hover:text-red-600 hover:border-red-300 dark:hover:border-red-800"
+                    onClick={() => {
+                      appleReminders.disconnect();
+                      setAppleSheetOpen(false);
+                    }}
+                  >
+                    <Unlink size={14} />
+                    Disconnect Apple Reminders
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </ModuleContainer>
   );
 };

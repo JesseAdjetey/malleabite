@@ -1,0 +1,39 @@
+appId: com.malleabite.app
+productName: Malleabite
+copyright: Copyright © 2025 Malleabite
+
+directories:
+  buildResources: build
+  output: dist-app
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+extraMetadata:
+  main: dist-electron/main.js
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: Malleabite
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

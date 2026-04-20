@@ -29,7 +29,8 @@ import {
 } from '@/types/calendar';
 import { useCalendarSync } from '@/hooks/use-calendar-sync';
 import { cancelGoogleAuth } from '@/lib/google-calendar';
-import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft, AlertTriangle, LayoutTemplate } from 'lucide-react';
+import { isAppleDataAvailable } from '@/lib/native-apple';
+import { Loader2, Check, Calendar, Mail, ArrowRight, ArrowLeft, AlertTriangle, LayoutTemplate, Smartphone } from 'lucide-react';
 
 interface AddCalendarFlowProps {
   open: boolean;
@@ -59,7 +60,7 @@ type AddFlowOption = {
   badge?: string;
 };
 
-const SOURCE_OPTIONS: AddFlowOption[] = [
+const BASE_SOURCE_OPTIONS: AddFlowOption[] = [
   {
     id: 'google',
     label: 'Google Calendar',
@@ -83,6 +84,14 @@ const SOURCE_OPTIONS: AddFlowOption[] = [
   },
 ];
 
+const APPLE_OPTION: AddFlowOption = {
+  id: 'apple',
+  label: 'Apple Calendar',
+  description: 'Sync your on-device Apple Calendar',
+  color: '#ff6b35',
+  icon: Smartphone,
+};
+
 const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
   open,
   onOpenChange,
@@ -101,6 +110,10 @@ const AddCalendarFlow: React.FC<AddCalendarFlowProps> = ({
     discoverCalendars,
     resetSyncState,
   } = useCalendarSync();
+
+  const SOURCE_OPTIONS: AddFlowOption[] = isAppleDataAvailable()
+    ? [...BASE_SOURCE_OPTIONS, APPLE_OPTION]
+    : BASE_SOURCE_OPTIONS;
 
   const [step, setStep] = useState<AddCalendarStep['step']>('select-source');
   const [selectedSource, setSelectedSource] = useState<CalendarSource | null>(null);

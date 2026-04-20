@@ -55,3 +55,8 @@ android/local.properties
 # Picovoice Porcupine — acoustic model binary (~1.9 MB)
 # Downloaded once via `npm run setup:porcupine`, not committed
 public/porcupine-params.pv
+
+# Electron build output — large binaries, never commit
+build/
+dist-app/
+dist-electron/

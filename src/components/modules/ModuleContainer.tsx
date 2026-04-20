@@ -59,6 +59,11 @@ interface ModuleContainerProps {
   googleTasksLinked?: boolean;
   googleTasksSyncing?: boolean;
   onSyncGoogleTasks?: () => void;
+  // Reminder sync integrations (Apple Reminders)
+  onConnectAppleReminders?: () => void;
+  appleRemindersLinked?: boolean;
+  appleRemindersSyncing?: boolean;
+  onSyncAppleReminders?: () => void;
 }
 
 const ModuleContainer: React.FC<ModuleContainerProps> = ({
@@ -84,6 +89,10 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
   googleTasksLinked = false,
   googleTasksSyncing = false,
   onSyncGoogleTasks,
+  onConnectAppleReminders,
+  appleRemindersLinked = false,
+  appleRemindersSyncing = false,
+  onSyncAppleReminders,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
@@ -230,6 +239,18 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                 />
               </span>
             )}
+            {appleRemindersLinked && (
+              <span
+                title={appleRemindersSyncing ? 'Syncing with Apple Reminders…' : 'Synced with Apple Reminders'}
+                className="flex-shrink-0"
+              >
+                <Zap
+                  size={11}
+                  className={appleRemindersSyncing ? 'animate-pulse' : ''}
+                  style={{ color: '#ff6b35' }}
+                />
+              </span>
+            )}
           </div>
         )}
 
@@ -353,6 +374,33 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
                     )}
                   </>
                 )}
+                {onConnectAppleReminders && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => setTimeout(() => onConnectAppleReminders(), 0)}
+                      className="gap-2 justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Zap
+                          size={13}
+                          style={{ color: appleRemindersLinked ? '#ff6b35' : undefined }}
+                          className={!appleRemindersLinked ? 'text-muted-foreground' : ''}
+                        />
+                        {appleRemindersLinked ? 'Apple Reminders settings' : 'Sync reminders'}
+                      </span>
+                      {!appleRemindersLinked && (
+                        <ChevronRight size={13} className="text-muted-foreground" />
+                      )}
+                    </DropdownMenuItem>
+                    {appleRemindersLinked && onSyncAppleReminders && (
+                      <DropdownMenuItem onSelect={onSyncAppleReminders} className="gap-2" disabled={appleRemindersSyncing}>
+                        <Zap size={13} className="text-muted-foreground" />
+                        {appleRemindersSyncing ? 'Syncing…' : 'Sync now'}
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 {onRemove && (
                   <DropdownMenuItem
@@ -387,7 +435,7 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="bg-background border-border">
+        <AlertDialogContent className="bg-background border-border z-[9999]">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Module</AlertDialogTitle>
             <AlertDialogDescription>

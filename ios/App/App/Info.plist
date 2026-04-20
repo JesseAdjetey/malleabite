@@ -2,7 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CAPACITOR_DEBUG</key>
+    <key>NSRemindersUsageDescription</key>
+	<string>Malleabite uses your Reminders to sync tasks and reminders between the app and the Apple Reminders app.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Malleabite uses your Calendar to display and sync events between the app and Apple Calendar.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Malleabite needs full calendar access to create, edit, and delete events in Apple Calendar.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Malleabite needs full reminders access to create, edit, and complete reminders in the Apple Reminders app.</string>
+	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>

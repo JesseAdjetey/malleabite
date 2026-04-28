@@ -33,6 +33,35 @@ const resolveDate = (date: any): Date => {
   return new Date(date);
 };
 
+// For recurring reminders whose stored time is in the past, compute the next future occurrence.
+const getEffectiveTime = (reminder: Reminder, now: dayjs.Dayjs): dayjs.Dayjs => {
+  const base = dayjs(resolveDate(reminder.reminderTime));
+  if (!reminder.recurrence || reminder.recurrence === 'none' || !base.isBefore(now, 'minute')) {
+    return base;
+  }
+  let next = base;
+  let safety = 0;
+  while (next.isBefore(now, 'minute') && safety < 400) {
+    if (reminder.recurrence === 'daily') {
+      next = next.add(1, 'day');
+    } else if (reminder.recurrence === 'weekly') {
+      next = next.add(7, 'days');
+    } else if (reminder.recurrence === 'weekdays') {
+      next = next.add(1, 'day');
+      let inner = 0;
+      while ((next.day() === 0 || next.day() === 6) && inner < 7) { next = next.add(1, 'day'); inner++; }
+    } else if (reminder.recurrence === 'custom' && reminder.customDays?.length) {
+      next = next.add(1, 'day');
+      let inner = 0;
+      while (!reminder.customDays.includes(next.day()) && inner < 7) { next = next.add(1, 'day'); inner++; }
+    } else {
+      break;
+    }
+    safety++;
+  }
+  return next;
+};
+
 const reminderFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
@@ -365,7 +394,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   const groupedReminders = useMemo(() => {
     const overdue: Reminder[] = [], today: Reminder[] = [], tomorrow: Reminder[] = [], upcoming: Reminder[] = [];
     activeReminders.forEach(r => {
-      const t = dayjs(resolveDate(r.reminderTime));
+      const t = getEffectiveTime(r, now);
       if (t.isBefore(now, 'minute')) overdue.push(r);
       else if (t.isSame(now, 'day')) today.push(r);
       else if (t.isSame(now.add(1, 'day'), 'day')) tomorrow.push(r);
@@ -613,8 +642,9 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   // ── Render reminder rows ─────────────────────────────────────────────────
 
   const renderReminderRow = (item: Reminder) => {
-    const t = resolveDate(item.reminderTime);
-    const isOverdue = dayjs(t).isBefore(now, 'minute');
+    const effectiveTime = getEffectiveTime(item, now);
+    const t = effectiveTime.toDate();
+    const isOverdue = effectiveTime.isBefore(now, 'minute');
     const isHighlighted = highlightedItemId === item.id && highlightedItemType === 'reminder';
     const isDeleting = deletingId === item.id;
     return (

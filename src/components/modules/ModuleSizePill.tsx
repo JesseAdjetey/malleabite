@@ -44,6 +44,8 @@ const LevelIcon: React.FC<{ level: SizeLevel; isActive: boolean; isHovered: bool
 
 // Rough rendered height of pill + arrow + gap above button
 const PILL_TOTAL_HEIGHT = 60;
+// Approximate pill width: px-3*2 + 4×w-7 + gap-1.5×3 = 24+112+18 = 154
+const PILL_WIDTH = 158;
 
 const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
   currentLevel,
@@ -52,14 +54,19 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
 }) => {
   const [hoveredLevel, setHoveredLevel] = useState<SizeLevel | null>(null);
   // Lazy initializer — calculates position synchronously on first render (no null→value flash)
-  const [pillPos] = useState<{ x: number; top: number } | null>(() => {
+  const [pillPos] = useState<{ left: number; top: number; arrowOffset: number } | null>(() => {
     const el = buttonRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
-    // Clamp so the pill never goes above 8px from top of viewport
     const idealTop = rect.top - PILL_TOTAL_HEIGHT;
     const safeTop = Math.max(8, idealTop);
-    return { x: rect.left + rect.width / 2, top: safeTop };
+    const btnCenterX = rect.left + rect.width / 2;
+    // Clamp pill so it stays within viewport horizontally
+    const idealLeft = btnCenterX - PILL_WIDTH / 2;
+    const safeLeft = Math.min(Math.max(8, idealLeft), window.innerWidth - PILL_WIDTH - 8);
+    // Arrow should point at button center regardless of pill position
+    const arrowOffset = btnCenterX - safeLeft;
+    return { left: safeLeft, top: safeTop, arrowOffset };
   });
   const sidebarBounds = useSidebarBounds();
 
@@ -81,9 +88,8 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
         className="fixed z-[99999] pointer-events-auto"
         onMouseDown={(e) => e.stopPropagation()}
         style={{
-          left: pillPos.x,
+          left: pillPos.left,
           top: pillPos.top,
-          transform: 'translateX(-50%)',
         }}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -137,10 +143,13 @@ const ModuleSizePill: React.FC<ModuleSizePillProps> = ({
         </div>
 
         {/* Arrow pointing down to the button */}
-        <div className="flex justify-center mt-0.5">
+        <div className="relative mt-0.5 h-1.5">
           <div
-            className="w-2 h-1.5 bg-black/75"
-            style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }}
+            className="absolute w-2 h-1.5 bg-black/75"
+            style={{
+              clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
+              left: pillPos.arrowOffset - 4,
+            }}
           />
         </div>
       </motion.div>

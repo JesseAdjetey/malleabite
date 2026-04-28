@@ -11,7 +11,7 @@ import ModuleGrid from './ModuleGrid';
 import ManagePageAccessSheet from './sharing/ManagePageAccessSheet';
 import ModuleExpandedOverlay from '../modules/ModuleExpandedOverlay';
 import ModuleRenderer from './ModuleRenderer';
-import { Plus, PanelLeft, Maximize2, CalendarDays, Minimize2 } from 'lucide-react';
+import { Plus, PanelLeft, Maximize2, CalendarDays, Minimize2, Trash2, ArrowRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SidebarBoundsProvider } from '@/contexts/SidebarBoundsContext';
 
@@ -39,8 +39,59 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
     reorderModules,
     setModuleSizeLevel,
     setModulesSizeLevels,
+    removeModuleById,
+    moveModuleById,
     loading
   } = useSidebarPages();
+
+  // ── Bulk module selection ──────────────────────────────────────────────────
+  const [isModuleSelectMode, setIsModuleSelectMode] = useState(false);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<string>>(new Set());
+  const [isMoveOpen, setIsMoveOpen] = useState(false);
+  const movePopoverRef = useRef<HTMLDivElement>(null);
+
+  const exitModuleSelectMode = () => {
+    setIsModuleSelectMode(false);
+    setSelectedModuleIds(new Set());
+    setIsMoveOpen(false);
+  };
+
+  const toggleModuleSelect = (id: string) =>
+    setSelectedModuleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const startSelectWith = (id: string) => {
+    setIsModuleSelectMode(true);
+    setSelectedModuleIds(new Set([id]));
+  };
+
+  const handleBulkDeleteModules = () => {
+    if (selectedModuleIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedModuleIds.size} module(s)?`)) return;
+    // Use ID-based removal — stable regardless of order
+    for (const id of selectedModuleIds) removeModuleById(id);
+    exitModuleSelectMode();
+  };
+
+  const handleBulkMoveModules = (targetPageId: string) => {
+    for (const id of selectedModuleIds) moveModuleById(id, targetPageId);
+    exitModuleSelectMode();
+  };
+
+  // Close move popover on outside click
+  useEffect(() => {
+    if (!isMoveOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (movePopoverRef.current && !movePopoverRef.current.contains(e.target as Node)) {
+        setIsMoveOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isMoveOpen]);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
@@ -83,6 +134,31 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
   const expandedModuleLevel = expandedModule ? ((expandedModule.sizeLevel ?? 1) as 2 | 3) : null;
 
   const currentPageIndex = pages.findIndex(p => p.id === activePageId);
+
+  // Keyboard shortcuts for sidebar bulk select (mirrors calendar bulk edit shortcuts)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isModuleSelectMode) { exitModuleSelectMode(); return; }
+      if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        setIsModuleSelectMode(true);
+        setSelectedModuleIds(new Set(normalModules.map(m => m.id)));
+        return;
+      }
+      if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && isModuleSelectMode) {
+        e.preventDefault();
+        setSelectedModuleIds(new Set(normalModules.map(m => m.id)));
+        return;
+      }
+      if (e.key === 'Delete' && isModuleSelectMode && selectedModuleIds.size > 0) {
+        if (!window.confirm(`Delete ${selectedModuleIds.size} module(s)?`)) return;
+        for (const id of selectedModuleIds) removeModuleById(id);
+        exitModuleSelectMode();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isModuleSelectMode, normalModules, selectedModuleIds]);
 
   // Measure sidebar bounds for ghost preview
   useEffect(() => {
@@ -396,6 +472,11 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                         pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
                         isReadOnly={isStructureReadOnly}
                         contentReadOnly={isContentReadOnly}
+                        isSelectMode={isModuleSelectMode}
+                        selectedModuleIds={selectedModuleIds}
+                        onToggleSelectMode={() => isModuleSelectMode ? exitModuleSelectMode() : setIsModuleSelectMode(true)}
+                        onToggleModuleSelect={toggleModuleSelect}
+                        onStartSelectWith={startSelectWith}
                       />
                     </div>
                   </div>
@@ -439,12 +520,94 @@ const SideBar: React.FC<SideBarProps> = ({ layoutMode = 'normal', onSetLayoutMod
                     pageIndex={currentPageIndex >= 0 ? currentPageIndex : 0}
                     isReadOnly={isStructureReadOnly}
                     contentReadOnly={isContentReadOnly}
+                    isSelectMode={isModuleSelectMode}
+                    selectedModuleIds={selectedModuleIds}
+                    onToggleSelectMode={() => isModuleSelectMode ? exitModuleSelectMode() : setIsModuleSelectMode(true)}
+                    onToggleModuleSelect={toggleModuleSelect}
+                    onStartSelectWith={startSelectWith}
                   />
                 </div>
               </motion.div>
             </AnimatePresence>
           )}
         </div>
+
+        {/* ── Bulk module action bar — floats above page footer ── */}
+        <AnimatePresence>
+          {isModuleSelectMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="px-3 pb-2"
+            >
+              <div className="flex items-center gap-2 px-3 py-2 bg-background/95 backdrop-blur-md rounded-xl border border-border shadow-lg">
+                <span className="text-xs font-medium text-primary flex-1">
+                  {selectedModuleIds.size > 0 ? `${selectedModuleIds.size} selected` : 'Tap to select'}
+                </span>
+
+                {selectedModuleIds.size > 0 && selectedModuleIds.size < normalModules.length && (
+                  <button
+                    onClick={() => setSelectedModuleIds(new Set(normalModules.map(m => m.id)))}
+                    className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-accent transition-colors"
+                  >
+                    All
+                  </button>
+                )}
+
+                {selectedModuleIds.size > 0 && pages.filter(p => p.id !== activePageId).length > 0 && (
+                  <div ref={movePopoverRef} className="relative">
+                    <button
+                      onClick={() => setIsMoveOpen(v => !v)}
+                      className={cn(
+                        "flex items-center gap-1 text-[10px] px-2 py-1 rounded-md transition-colors font-medium",
+                        isMoveOpen ? "bg-primary/20 text-primary" : "bg-muted hover:bg-accent"
+                      )}
+                    >
+                      <ArrowRight size={10} /> Move
+                    </button>
+                    <AnimatePresence>
+                      {isMoveOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                          transition={{ duration: 0.1 }}
+                          className="absolute bottom-full mb-1.5 right-0 flex flex-col bg-popover border border-border rounded-xl shadow-xl overflow-hidden min-w-[140px] z-50"
+                        >
+                          <p className="text-[10px] text-muted-foreground px-3 pt-2 pb-1 font-medium uppercase tracking-wide">Move to page</p>
+                          {pages.filter(p => p.id !== activePageId).map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => handleBulkMoveModules(p.id)}
+                              className="text-xs px-3 py-2 text-left hover:bg-accent transition-colors"
+                            >
+                              {p.title}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {selectedModuleIds.size > 0 && (
+                  <button
+                    onClick={handleBulkDeleteModules}
+                    className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30 transition-colors font-medium"
+                  >
+                    <Trash2 size={10} /> Delete
+                  </button>
+                )}
+
+                <button onClick={exitModuleSelectMode} className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
+                  <X size={12} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Minimal Page Navigation Footer */}
         <div className="p-4 flex items-center justify-center gap-3">

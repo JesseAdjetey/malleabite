@@ -17,6 +17,8 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import ManageAccessSheet from '../modules/sharing/ManageAccessSheet';
+import { CheckSquare, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ModuleMoveTarget {
   id: string;
@@ -35,6 +37,12 @@ interface ModuleGridProps {
   pageIndex: number;
   isReadOnly?: boolean;
   contentReadOnly?: boolean;
+  // Controlled bulk select (state lives in sideBar)
+  isSelectMode?: boolean;
+  selectedModuleIds?: Set<string>;
+  onToggleSelectMode?: () => void;
+  onToggleModuleSelect?: (id: string) => void;
+  onStartSelectWith?: (id: string) => void;
 }
 
 const ModuleGrid: React.FC<ModuleGridProps> = ({
@@ -49,6 +57,11 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   pageIndex,
   isReadOnly = false,
   contentReadOnly = false,
+  isSelectMode = false,
+  selectedModuleIds = new Set(),
+  onToggleSelectMode,
+  onToggleModuleSelect,
+  onStartSelectWith,
 }) => {
   const MODULE_WIDTH = 280;
   const { isTwoColumn, containerRef } = useSidebarLayout({
@@ -58,9 +71,6 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  // Share sheet state — keep module data stable while the Sheet animates out,
-  // then fully unmount after the animation. This prevents Firestore SDK internal
-  // state errors that occur when onSnapshot listeners are destroyed mid-flight.
   const [shareSheet, setShareSheet] = useState<{ module: ModuleInstance; open: boolean } | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -70,7 +80,6 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
   };
 
   const closeShareSheet = () => {
-    // Animate out first (open → false), then unmount after animation (~300ms)
     setShareSheet(prev => prev ? { ...prev, open: false } : null);
     closeTimerRef.current = setTimeout(() => setShareSheet(null), 350);
   };
@@ -138,15 +147,34 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
     toggleModuleMinimized(pageIndex, index);
   };
 
-
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-2">
+      {/* Select mode toggle */}
+      {!isReadOnly && modules.length > 1 && onToggleSelectMode && (
+        <div className="flex justify-end px-1">
+          <button
+            onClick={onToggleSelectMode}
+            className={cn(
+              "text-[10px] px-2 py-0.5 rounded-full transition-colors font-medium flex items-center gap-1",
+              isSelectMode
+                ? "bg-primary/20 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            )}
+          >
+            {isSelectMode ? <X size={10} /> : <CheckSquare size={10} />}
+            {isSelectMode ? "Done" : "Select"}
+          </button>
+        </div>
+      )}
+
       <div
         ref={containerRef}
         className={`${isTwoColumn ? 'grid grid-cols-2 gap-3' : 'flex flex-col items-center'}`}
       >
         <AnimatePresence mode="popLayout">
-        {modules.map((module, index) => (
+        {modules.map((module, index) => {
+          const isSelected = selectedModuleIds.has(module.id);
+          return (
           <motion.div
             key={module.id}
             layout
@@ -154,15 +182,16 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
             animate={{ opacity: draggedIndex === index ? 0.5 : 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, y: -10, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
             transition={{ type: "spring", damping: 22, stiffness: 200, delay: index * 0.05 }}
-            draggable={!isReadOnly}
-            onDragStart={() => !isReadOnly && handleDragStart(index)}
-            onDragOver={(e) => !isReadOnly && handleDragOver(e, index)}
-            onDrop={() => !isReadOnly && handleDrop(index)}
+            draggable={!isReadOnly && !isSelectMode}
+            onDragStart={() => !isReadOnly && !isSelectMode && handleDragStart(index)}
+            onDragOver={(e) => !isReadOnly && !isSelectMode && handleDragOver(e, index)}
+            onDrop={() => !isReadOnly && !isSelectMode && handleDrop(index)}
             onDragEnd={handleDragEnd}
+            className="relative"
           >
           <ContextMenu>
             <ContextMenuTrigger asChild>
-              <div className={`${dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50 rounded-2xl' : ''}`}>
+              <div className={cn(dragOverIndex === index ? 'ring-2 ring-primary ring-opacity-50 rounded-2xl' : '', 'relative')}>
                 <ModuleRenderer
                   module={module}
                   index={index}
@@ -179,6 +208,33 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                   isReadOnly={isReadOnly}
                   contentReadOnly={contentReadOnly}
                 />
+
+                {/* Selection overlay */}
+                {isSelectMode && (
+                  <div
+                    className={cn(
+                      "absolute inset-0 rounded-2xl cursor-pointer transition-all duration-150 z-10",
+                      isSelected ? "ring-2 ring-primary bg-primary/[0.08]" : "hover:bg-foreground/5"
+                    )}
+                    onClick={() => onToggleModuleSelect?.(module.id)}
+                  >
+                    <div className={cn(
+                      "absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                      isSelected
+                        ? "bg-primary border-primary"
+                        : "bg-background/80 border-muted-foreground/40 backdrop-blur-sm"
+                    )}>
+                      {isSelected && (
+                        <motion.svg
+                          initial={{ scale: 0 }} animate={{ scale: 1 }}
+                          width="10" height="10" viewBox="0 0 10 10" fill="none"
+                        >
+                          <path d="M2 5l2.5 2.5L8 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </motion.svg>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </ContextMenuTrigger>
 
@@ -211,6 +267,9 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
                     </ContextMenuSubContent>
                   </ContextMenuSub>
                 )}
+                <ContextMenuItem onSelect={() => onStartSelectWith?.(module.id)}>
+                  Select
+                </ContextMenuItem>
                 <ContextMenuItem onSelect={() => openShareSheet(module)}>
                   Share / Manage Access
                 </ContextMenuItem>
@@ -225,7 +284,8 @@ const ModuleGrid: React.FC<ModuleGridProps> = ({
             )}
           </ContextMenu>
           </motion.div>
-        ))}
+          );
+        })}
         </AnimatePresence>
       </div>
 

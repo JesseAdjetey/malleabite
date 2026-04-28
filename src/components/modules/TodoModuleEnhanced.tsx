@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { sounds } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import ModuleContainer from "./ModuleContainer";
@@ -14,18 +15,22 @@ import { cn } from "@/lib/utils";
 import {
   Calendar,
   Circle,
+  Check,
   CheckCircle,
   Loader2,
   List,
   LayoutGrid,
   Clock,
-  Plus,
+
   CalendarDays,
   Star,
   Pencil,
   X,
   CheckCircle2,
   Trash2,
+  AlignLeft,
+  Smile,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -138,6 +143,9 @@ interface TodoRowProps {
   spotlightRef?: (node: HTMLDivElement | null) => void;
   onDragStart?: (e: React.DragEvent, item: TodoItem) => void;
   onDragEnd?: (e: React.DragEvent) => void;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow({
@@ -153,6 +161,9 @@ const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow(
   spotlightRef,
   onDragStart,
   onDragEnd,
+  isSelectMode,
+  isSelected,
+  onSelect,
 }, forwardedRef) {
   const isHighlighted = highlightedItemId === item.id && highlightedItemType === "todo";
   const { sizeLevel } = useModuleSize();
@@ -202,15 +213,31 @@ const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow(
         isExpanded
           ? "rounded-sm hover:bg-foreground/[0.04]"
           : "bg-gray-100 dark:bg-white/5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10",
-        isHighlighted && "event-spotlight"
+        isHighlighted && "event-spotlight",
+        isSelectMode && isSelected && "ring-2 ring-primary/60 bg-primary/5"
       )}
-      draggable={!!onDragStart}
-      onDragStart={onDragStart ? ((e: any) => onDragStart(e, item)) as any : undefined}
-      onDragEnd={onDragEnd ? ((e: any) => onDragEnd(e)) as any : undefined}
+      draggable={isSelectMode ? false : !!onDragStart}
+      onDragStart={(!isSelectMode && onDragStart) ? ((e: any) => onDragStart(e, item)) as any : undefined}
+      onDragEnd={(!isSelectMode && onDragEnd) ? ((e: any) => onDragEnd(e)) as any : undefined}
     >
       {/* Main row */}
       <div className="flex items-center gap-2 p-2">
-        {/* Checkbox */}
+        {/* Bulk select checkbox */}
+        {isSelectMode && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex-shrink-0 cursor-pointer"
+            onClick={() => onSelect?.(item.id)}
+          >
+            <div className={cn("w-4 h-4 rounded border-2 transition-all flex items-center justify-center",
+              isSelected ? "bg-primary border-primary" : "border-gray-300 dark:border-gray-600 hover:border-primary"
+            )}>
+              {isSelected && <Check size={10} className="text-primary-foreground" />}
+            </div>
+          </motion.div>
+        )}
+        {/* Completion checkbox */}
         <motion.div
           className={cn("flex-shrink-0", !isViewOnly && "cursor-pointer")}
           onClick={isViewOnly ? undefined : () => onToggle(item)}
@@ -347,38 +374,141 @@ const TodoRow = React.forwardRef<HTMLDivElement, TodoRowProps>(function TodoRow(
 
 // ── Add Form ──────────────────────────────────────────────────────────────────
 
+const QUICK_EMOJIS = ['✅','📌','⭐','🔥','💡','📝','🎯','⚡','🛠️','📅','🚀','💬'];
+
 interface AddFormProps {
-  onAdd: (text: string, deadline?: string) => void;
+  onAdd: (text: string, deadline?: string, description?: string) => void;
   showDeadline?: boolean;
 }
 
 const AddForm: React.FC<AddFormProps> = ({ onAdd, showDeadline = false }) => {
   const [text, setText] = useState("");
+  const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
   const [showDate, setShowDate] = useState(false);
+  const [showDesc, setShowDesc] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [emojiPos, setEmojiPos] = useState<{ x: number; y: number } | null>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
 
   const submit = () => {
     if (!text.trim()) return;
-    onAdd(text.trim(), deadline || undefined);
+    onAdd(text.trim(), deadline || undefined, description.trim() || undefined);
     setText("");
+    setDescription("");
     setDeadline("");
     setShowDate(false);
+    setShowDesc(false);
+    setShowEmoji(false);
   };
+
+  const insertEmoji = (emoji: string) => {
+    const input = textInputRef.current;
+    if (!input) { setText(t => t + emoji); setShowEmoji(false); setEmojiPos(null); return; }
+    const start = input.selectionStart ?? text.length;
+    const end = input.selectionEnd ?? text.length;
+    setText(text.slice(0, start) + emoji + text.slice(end));
+    setShowEmoji(false);
+    setEmojiPos(null);
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
+
+  const toggleEmojiPicker = () => {
+    if (showEmoji) { setShowEmoji(false); setEmojiPos(null); return; }
+    const btn = emojiBtnRef.current;
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      // Position above the button, clamped within viewport
+      const POPUP_W = 196;
+      const POPUP_H = 90;
+      const left = Math.min(rect.left, window.innerWidth - POPUP_W - 8);
+      const top = rect.top - POPUP_H - 6;
+      setEmojiPos({ x: Math.max(8, left), y: Math.max(8, top) });
+    }
+    setShowEmoji(true);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!showEmoji) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiBtnRef.current && emojiBtnRef.current.contains(e.target as Node)) return;
+      setShowEmoji(false);
+      setEmojiPos(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmoji]);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
+        {/* Emoji quick-pick — portal so overflow:hidden on module doesn't clip it */}
+        <div className="flex-shrink-0">
+          <button
+            ref={emojiBtnRef}
+            type="button"
+            onClick={toggleEmojiPicker}
+            className={cn("p-2 rounded-lg transition-colors", showEmoji ? "bg-primary/20 text-primary" : "hover:bg-accent text-muted-foreground")}
+            title="Add emoji"
+          >
+            <Smile size={14} />
+          </button>
+          {showEmoji && emojiPos && createPortal(
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.92, y: 4 }}
+                transition={{ duration: 0.1 }}
+                style={{ position: 'fixed', left: emojiPos.x, top: emojiPos.y, zIndex: 99999 }}
+                className="grid grid-cols-6 gap-0.5 p-2 bg-popover border border-border rounded-xl shadow-xl"
+                onMouseDown={e => e.stopPropagation()}
+              >
+                {QUICK_EMOJIS.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => insertEmoji(e)}
+                    className="w-7 h-7 text-base flex items-center justify-center rounded-md hover:bg-accent transition-colors"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </motion.div>
+            </AnimatePresence>,
+            document.body
+          )}
+        </div>
+
         <input
+          ref={textInputRef}
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) submit(); }}
           className="glass-input w-full text-sm"
           placeholder="Add a task..."
         />
+
+        {/* Description toggle */}
+        <button
+          type="button"
+          onClick={() => setShowDesc(v => !v)}
+          className={cn("p-2 rounded-lg transition-colors flex-shrink-0", showDesc ? "bg-primary/20 text-primary" : "hover:bg-accent text-muted-foreground")}
+          title="Add description"
+        >
+          <AlignLeft size={14} />
+        </button>
+
         {showDeadline && (
           <button
-            onClick={() => setShowDate(!showDate)}
+            type="button"
+            onClick={() => setShowDate(v => !v)}
             className={cn("p-2 rounded-lg transition-colors flex-shrink-0", showDate ? "bg-primary/20 text-primary" : "hover:bg-accent text-muted-foreground")}
             title="Set deadline"
           >
@@ -386,6 +516,7 @@ const AddForm: React.FC<AddFormProps> = ({ onAdd, showDeadline = false }) => {
           </button>
         )}
         <motion.button
+          type="button"
           onClick={submit}
           whileTap={{ scale: 0.93 }}
           className="bg-primary px-3 py-1 rounded-md hover:bg-primary/80 transition-colors text-sm flex-shrink-0"
@@ -393,6 +524,23 @@ const AddForm: React.FC<AddFormProps> = ({ onAdd, showDeadline = false }) => {
           Add
         </motion.button>
       </div>
+
+      <AnimatePresence>
+        {showDesc && (
+          <motion.textarea
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey) submit(); }}
+            className="glass-input text-sm text-muted-foreground resize-none"
+            placeholder="Add a description… (⌘↵ to submit)"
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showDate && (
           <motion.input
@@ -418,11 +566,9 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   onTitleChange,
   isMinimized,
   onMinimize,
-  isDragging,
   listId: moduleListId,
   moduleId,
   sharedFromInstanceId,
-  sharedRole,
   moveTargets,
   onMoveToPage,
   onShare,
@@ -470,6 +616,8 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
   const [dragOverColumn, setDragOverColumn] = useState<"todo" | "done" | null>(null);
   const [filter, setFilter] = useState<"active" | "done">("active");
   const [kanbanMode, setKanbanMode] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedTodoIds, setSelectedTodoIds] = useState<Set<string>>(new Set());
 
   const { getTodosForList, lists, loading, error, addTodo, updateTodo, deleteTodo, updateList, moveTodo } = useTodoLists();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
@@ -507,7 +655,7 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleAdd = async (text: string, deadline?: string) => {
+  const handleAdd = async (text: string, deadline?: string, description?: string) => {
     if (!moduleListId) return;
     sounds.play("lightClick");
     console.log('[TODOIST-PUSH] isLinked:', todoist.isLinked, '| connected:', todoist.status.connected, '| projectId:', todoistProjectId, '| listId:', moduleListId);
@@ -516,22 +664,22 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       console.log('[TODOIST-PUSH] result:', todoistId);
       if (!todoistId) {
         toast.error("Couldn't reach Todoist — task saved locally");
-        await addTodo(text, moduleListId, { deadline });
+        await addTodo(text, moduleListId, { deadline, description });
       }
     } else if (ms.isLinked) {
       const msTaskId = await ms.pushCreate({ text, deadline });
       if (!msTaskId) {
         toast.error("Couldn't reach Microsoft Tasks — task saved locally");
-        await addTodo(text, moduleListId, { deadline });
+        await addTodo(text, moduleListId, { deadline, description });
       }
     } else if (googleTasks.isLinked) {
       const googleTaskId = await googleTasks.pushCreate({ text, deadline });
       if (!googleTaskId) {
         toast.error("Couldn't reach Google Tasks — task saved locally");
-        await addTodo(text, moduleListId, { deadline });
+        await addTodo(text, moduleListId, { deadline, description });
       }
     } else {
-      await addTodo(text, moduleListId, { deadline });
+      await addTodo(text, moduleListId, { deadline, description });
     }
   };
 
@@ -687,6 +835,53 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     } catch { toast.error("Failed to process drop"); }
   };
 
+  // ── Bulk selection ───────────────────────────────────────────────────────────
+
+  const toggleSelectMode = () => {
+    setIsSelectMode(v => !v);
+    setSelectedTodoIds(new Set());
+  };
+
+  const toggleTodoSelection = (id: string) => {
+    setSelectedTodoIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkComplete = async () => {
+    for (const id of selectedTodoIds) {
+      const item = rawTodos.find(t => t.id === id);
+      if (item && !(item.completed || item.status === 'done')) await handleToggleWithSync(item);
+    }
+    setSelectedTodoIds(new Set());
+    setIsSelectMode(false);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedTodoIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedTodoIds.size} task(s)?`)) return;
+    for (const id of selectedTodoIds) handleDelete(id);
+    setSelectedTodoIds(new Set());
+    setIsSelectMode(false);
+  };
+
+  // Keyboard shortcuts while in select mode
+  useEffect(() => {
+    if (!isSelectMode) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setIsSelectMode(false); setSelectedTodoIds(new Set()); }
+      if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSelectedTodoIds(new Set(allTodos.map(t => t.id)));
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') handleBulkDelete();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isSelectMode, allTodos, selectedTodoIds]);
+
   // ── Container + row props ────────────────────────────────────────────────────
 
   const containerProps = {
@@ -726,8 +921,10 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
     highlightedItemId,
     highlightedItemType,
     spotlightRef,
-    onDragStart: handleDragStart,
-    onDragEnd: handleDragEnd,
+    onDragStart: isSelectMode ? undefined : handleDragStart,
+    onDragEnd: isSelectMode ? undefined : handleDragEnd,
+    isSelectMode,
+    onSelect: toggleTodoSelection,
   };
 
   // ── Loading / Auth guards ────────────────────────────────────────────────────
@@ -845,6 +1042,20 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
           onDragOver={isViewOnly ? undefined : (e) => { e.preventDefault(); if (e.dataTransfer.types.includes("application/json")) { e.dataTransfer.dropEffect = "move"; setIsDragOver(true); } }}
           onDragLeave={(e) => { const t = e.relatedTarget as HTMLElement; if (!t || !e.currentTarget.contains(t)) setIsDragOver(false); }}
         >
+          {/* Select mode toggle */}
+          {!isViewOnly && allTodos.length > 0 && (
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={toggleSelectMode}
+                className={cn("text-[10px] px-2 py-0.5 rounded-full transition-colors font-medium flex items-center gap-1",
+                  isSelectMode ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                <CheckSquare size={10} />
+                {isSelectMode ? "Done" : "Select"}
+              </button>
+            </div>
+          )}
           <div className="max-h-52 overflow-y-auto mb-3 scrollbar-thin">
             {loading ? (
               <div className="flex justify-center items-center p-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span className="ml-2 text-sm">Loading...</span></div>
@@ -855,12 +1066,27 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             ) : (
               <AnimatePresence mode="popLayout" initial={false}>
                 {allTodos.map((item) => (
-                  <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                  <TodoRow key={item.id} item={item} {...rowProps} isSelected={selectedTodoIds.has(item.id)} showDeadline />
                 ))}
               </AnimatePresence>
             )}
           </div>
-          {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
+          {/* Bulk action bar */}
+          <AnimatePresence>
+            {isSelectMode && selectedTodoIds.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="flex items-center gap-2 mb-2 p-2 bg-primary/10 rounded-lg border border-primary/20"
+              >
+                <span className="text-xs font-medium text-primary flex-1">{selectedTodoIds.size} selected</span>
+                <button onClick={handleBulkComplete} className="text-xs px-2 py-0.5 rounded-md bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30 transition-colors font-medium">Complete</button>
+                <button onClick={handleBulkDelete} className="text-xs px-2 py-0.5 rounded-md bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30 transition-colors font-medium">Delete</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {!isSelectMode && !isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
         </div>
       </ModuleContainer>
       {todoistSheet}
@@ -889,15 +1115,26 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
       <>
       <ModuleContainer {...containerProps}>
         <div className="flex flex-col gap-3 h-full overflow-hidden">
-          {/* Stats */}
+          {/* Stats + select toggle */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">{activeTodoCount} active</span>
             <span>·</span>
             <span>{doneTodoCount} done</span>
             {isSharedModule && (
-              <span className={cn("ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium", isViewOnly ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary")}>
+              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", isViewOnly ? "bg-muted text-muted-foreground" : "bg-primary/15 text-primary")}>
                 {isViewOnly ? "View only" : "Shared"}
               </span>
+            )}
+            {!isViewOnly && filteredTodos.length > 0 && (
+              <button
+                onClick={toggleSelectMode}
+                className={cn("ml-auto text-[10px] px-2 py-0.5 rounded-full transition-colors font-medium flex items-center gap-1",
+                  isSelectMode ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                <CheckSquare size={10} />
+                {isSelectMode ? "Done" : "Select"}
+              </button>
             )}
           </div>
 
@@ -914,8 +1151,13 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             ))}
           </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          {/* List — also a cross-list drop target in L2 */}
+          <div
+            className={cn("flex-1 overflow-y-auto min-h-0 rounded-lg transition-all duration-150", isDragOver && !isViewOnly && "ring-2 ring-primary/50 bg-primary/10")}
+            onDrop={isViewOnly ? undefined : handleDrop}
+            onDragOver={isViewOnly ? undefined : (e) => { e.preventDefault(); if (e.dataTransfer.types.includes("application/json")) { e.dataTransfer.dropEffect = "move"; setIsDragOver(true); } }}
+            onDragLeave={(e) => { const t = e.relatedTarget as HTMLElement; if (!t || !e.currentTarget.contains(t)) setIsDragOver(false); }}
+          >
             {loading ? (
               <div className="flex justify-center items-center p-4"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
             ) : filteredTodos.length === 0 ? (
@@ -925,13 +1167,30 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
             ) : (
               <AnimatePresence mode="popLayout" initial={false}>
                 {filteredTodos.map((item) => (
-                  <TodoRow key={item.id} item={item} {...rowProps} showDeadline />
+                  <TodoRow key={item.id} item={item} {...rowProps} isSelected={selectedTodoIds.has(item.id)} showDeadline />
                 ))}
               </AnimatePresence>
             )}
           </div>
 
-          {!isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
+          {/* Bulk action bar — L2 */}
+          <AnimatePresence>
+            {isSelectMode && selectedTodoIds.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg border border-primary/20"
+              >
+                <span className="text-xs font-medium text-primary flex-1">{selectedTodoIds.size} selected</span>
+                <button onClick={() => setSelectedTodoIds(new Set(filteredTodos.map(t => t.id)))} className="text-xs px-2 py-0.5 rounded-md hover:bg-accent text-muted-foreground transition-colors">All</button>
+                <button onClick={handleBulkComplete} className="text-xs px-2 py-0.5 rounded-md bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30 transition-colors font-medium">Complete</button>
+                <button onClick={handleBulkDelete} className="text-xs px-2 py-0.5 rounded-md bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30 transition-colors font-medium">Delete</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {!isSelectMode && !isViewOnly && <AddForm onAdd={handleAdd} showDeadline />}
         </div>
       </ModuleContainer>
       {todoistSheet}

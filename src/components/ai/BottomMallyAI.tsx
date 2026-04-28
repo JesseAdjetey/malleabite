@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { FirebaseFunctions } from "@/integrations/firebase/functions";
@@ -145,6 +145,8 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
   const isDark = resolvedTheme === "dark";
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Persisted x-offset for the minimized floating pill — survives minimize/expand cycles
+  const mallyBtnX = useMotionValue(parseFloat(localStorage.getItem('mally-button-x') || '0'));
   const [messages, setMessages] = useState<Message[]>([]);
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1450,7 +1452,10 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
             whileDrag={isMobile ? undefined : { scale: 1.08 }}
             whileTap={{ scale: 0.92 }}
             onDragStart={() => { (window as any).__mallyDragged = true; }}
-            onDragEnd={() => { setTimeout(() => { (window as any).__mallyDragged = false; }, 100); }}
+            onDragEnd={() => {
+              localStorage.setItem('mally-button-x', String(mallyBtnX.get()));
+              setTimeout(() => { (window as any).__mallyDragged = false; }, 100);
+            }}
             onClick={() => { if (!(window as any).__mallyDragged) { sounds.play("mallyChoir"); setIsMinimized(false); } }}
             className={cn(
               isMobile
@@ -1458,6 +1463,7 @@ export const BottomMallyAI: React.FC<BottomMallyAIProps> = () => {
                 : "fixed left-1/2 -translate-x-1/2 z-50 px-5 py-1.5 rounded-2xl cursor-grab active:cursor-grabbing backdrop-blur-2xl border bg-purple-500/25 border-purple-400/40 dark:bg-white/10 dark:border-white/20 hover:bg-purple-500/35 dark:hover:bg-white/20 transition-colors flex items-center justify-center overflow-hidden mally-pill-glow",
             )}
             style={{
+              x: mallyBtnX,
               bottom: isMobile ? 'calc(56px + env(safe-area-inset-bottom, 0px))' : '1.5rem',
               boxShadow: isMobile
                 ? '0 4px 16px rgba(139, 92, 246, 0.25), inset 0 1px 1px rgba(255,255,255,0.2)'

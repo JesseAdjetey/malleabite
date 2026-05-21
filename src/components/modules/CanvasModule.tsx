@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   BookOpen,
   RefreshCw,
@@ -10,10 +10,21 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Unlink,
   Plus,
+  FileText,
+  MessageSquare,
+  Pencil,
+  Upload,
+  HelpCircle,
+  GraduationCap,
+  Megaphone,
+  CalendarDays,
+  EyeOff,
+  Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -22,9 +33,6 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import {
@@ -57,7 +65,19 @@ import dayjs from 'dayjs';
 import EventForm from '@/components/calendar/EventForm';
 import { nanoid } from 'nanoid';
 
-// ─── Due date badge ────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+type AssignmentTypeIcon = typeof FileText;
+
+function iconForSubmissionTypes(types: string[]): { Icon: AssignmentTypeIcon; label: string } {
+  if (!types || types.length === 0) return { Icon: FileText, label: 'Assignment' };
+  if (types.includes('online_quiz')) return { Icon: HelpCircle, label: 'Quiz' };
+  if (types.includes('discussion_topic')) return { Icon: MessageSquare, label: 'Discussion' };
+  if (types.includes('online_upload') || types.includes('media_recording')) return { Icon: Upload, label: 'File upload' };
+  if (types.includes('online_text_entry')) return { Icon: Pencil, label: 'Text entry' };
+  if (types.includes('external_tool')) return { Icon: ExternalLink, label: 'External tool' };
+  return { Icon: FileText, label: 'Assignment' };
+}
 
 function DueBadge({ dueAt }: { dueAt: string | null }) {
   if (!dueAt) {
@@ -70,22 +90,25 @@ function DueBadge({ dueAt }: { dueAt: string | null }) {
 
   const due = dayjs(dueAt);
   const now = dayjs();
-  const diff = due.diff(now, 'day');
+  const diffMin = due.diff(now, 'minute');
+  const diffDay = due.diff(now, 'day');
 
   let label = due.format('MMM D');
   let cls = 'bg-muted text-muted-foreground';
 
-  if (diff < 0) {
-    label = 'Overdue';
+  if (diffMin < 0) {
+    // Overdue
+    const overdueDays = Math.abs(diffDay);
+    label = overdueDays === 0 ? 'Overdue' : `${overdueDays}d late`;
     cls = 'bg-red-500/20 text-red-400';
-  } else if (diff === 0) {
-    label = 'Today';
+  } else if (diffDay === 0) {
+    label = `Today ${due.format('h:mm A')}`;
     cls = 'bg-amber-500/20 text-amber-400';
-  } else if (diff === 1) {
-    label = 'Tomorrow';
+  } else if (diffDay === 1) {
+    label = `Tomorrow ${due.format('h:mm A')}`;
     cls = 'bg-amber-500/20 text-amber-400';
-  } else if (diff < 7) {
-    label = `${diff}d`;
+  } else if (diffDay < 7) {
+    label = `${diffDay}d`;
     cls = 'bg-amber-500/10 text-amber-400';
   }
 
@@ -97,15 +120,36 @@ function DueBadge({ dueAt }: { dueAt: string | null }) {
   );
 }
 
+function GradeBadge({ score, pointsPossible }: { score: number; pointsPossible: number | null }) {
+  if (!pointsPossible) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium shrink-0">
+        {score}
+      </span>
+    );
+  }
+  const pct = (score / pointsPossible) * 100;
+  let cls = 'bg-emerald-500/20 text-emerald-400';
+  if (pct < 60) cls = 'bg-red-500/20 text-red-400';
+  else if (pct < 80) cls = 'bg-amber-500/20 text-amber-400';
+  return (
+    <span className={cn('inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0', cls)}>
+      {score}/{pointsPossible}
+    </span>
+  );
+}
+
 // ─── Create Todo Item Dialog ───────────────────────────────────────────────────
 
-interface CreateTodoItemDialogProps {
+function CreateTodoItemDialog({
+  open,
+  onClose,
+  assignment,
+}: {
   open: boolean;
   onClose: () => void;
   assignment: CanvasAssignment | null;
-}
-
-function CreateTodoItemDialog({ open, onClose, assignment }: CreateTodoItemDialogProps) {
+}) {
   const { user } = useAuth();
   const { lists } = useTodoLists();
   const [selectedListId, setSelectedListId] = useState<string>('');
@@ -181,20 +225,21 @@ function CreateTodoItemDialog({ open, onClose, assignment }: CreateTodoItemDialo
 
 // ─── Create Todo List Dialog ───────────────────────────────────────────────────
 
-interface CreateTodoListDialogProps {
+function CreateTodoListDialog({
+  open,
+  onClose,
+  assignment,
+}: {
   open: boolean;
   onClose: () => void;
   assignment: CanvasAssignment | null;
-}
-
-function CreateTodoListDialog({ open, onClose, assignment }: CreateTodoListDialogProps) {
+}) {
   const { user } = useAuth();
   const { createList } = useTodoLists();
   const { pages, currentPageIndex, addSharedModule } = useSidebarStore();
   const [listName, setListName] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Pre-fill name from assignment
   React.useEffect(() => {
     if (open && assignment) {
       setListName(assignment.title.length > 40 ? assignment.title.slice(0, 40) : assignment.title);
@@ -205,11 +250,9 @@ function CreateTodoListDialog({ open, onClose, assignment }: CreateTodoListDialo
     if (!user?.uid || !assignment || !listName.trim()) return;
     setSaving(true);
     try {
-      // 1. Create the todo list
       const result = await createList(listName.trim(), assignment.courseColor);
       if (!result.success || !result.listId) throw new Error('List creation failed');
 
-      // 2. Add a todo item for the assignment itself
       await addDoc(collection(db, 'todo_items'), {
         text: assignment.title,
         completed: false,
@@ -220,7 +263,6 @@ function CreateTodoListDialog({ open, onClose, assignment }: CreateTodoListDialo
         createdAt: serverTimestamp(),
       });
 
-      // 3. Add a new Todo module to the current sidebar page linked to this list
       const newModule = {
         id: generateModuleId(),
         type: 'todo' as const,
@@ -280,16 +322,27 @@ function CreateTodoListDialog({ open, onClose, assignment }: CreateTodoListDialo
   );
 }
 
-// ─── Assignment Row ────────────────────────────────────────────────────────────
+// ─── Assignment Row (with click-to-expand) ─────────────────────────────────────
 
 interface AssignmentRowProps {
   assignment: CanvasAssignment;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onAddToCalendar: (a: CanvasAssignment) => void;
   onCreateTodoItem: (a: CanvasAssignment) => void;
   onCreateTodoList: (a: CanvasAssignment) => void;
 }
 
-function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreateTodoList }: AssignmentRowProps) {
+function AssignmentRow({
+  assignment,
+  expanded,
+  onToggleExpand,
+  onAddToCalendar,
+  onCreateTodoItem,
+  onCreateTodoList,
+}: AssignmentRowProps) {
+  const { Icon, label: typeLabel } = iconForSubmissionTypes(assignment.submissionTypes);
+
   const copyDueDate = () => {
     if (!assignment.dueAt) return;
     navigator.clipboard.writeText(dayjs(assignment.dueAt).format('MMM D, YYYY h:mm A'));
@@ -299,10 +352,71 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/5 cursor-pointer group">
-          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: assignment.courseColor }} />
-          <span className="flex-1 text-xs text-foreground/90 truncate">{assignment.title}</span>
-          <DueBadge dueAt={assignment.dueAt} />
+        <div className="rounded-md hover:bg-white/5 group">
+          <button
+            onClick={onToggleExpand}
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-left"
+            aria-expanded={expanded}
+          >
+            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: assignment.courseColor }} />
+            <Icon size={11} className="text-muted-foreground/70 shrink-0" aria-label={typeLabel} />
+            <span className="flex-1 text-xs text-foreground/90 truncate">{assignment.title}</span>
+            {assignment.score !== null && assignment.pointsPossible !== null && (
+              <GradeBadge score={assignment.score} pointsPossible={assignment.pointsPossible} />
+            )}
+            <DueBadge dueAt={assignment.dueAt} />
+          </button>
+
+          {expanded && (
+            <div className="px-3 pb-2 pt-1 space-y-2 border-l-2 ml-2" style={{ borderColor: assignment.courseColor }}>
+              {assignment.description ? (
+                <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-6">
+                  {assignment.description}
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground/60 italic">No description provided</p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Icon size={10} />
+                  {typeLabel}
+                </span>
+                {assignment.pointsPossible !== null && (
+                  <span>· {assignment.pointsPossible} pts</span>
+                )}
+                {assignment.dueAt && (
+                  <span>· Due {dayjs(assignment.dueAt).format('MMM D, h:mm A')}</span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {assignment.htmlUrl && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); window.open(assignment.htmlUrl!, '_blank'); }}
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    <ExternalLink size={10} />
+                    Open in Canvas
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddToCalendar(assignment); }}
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition-colors"
+                >
+                  <Calendar size={10} />
+                  Add to Calendar
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onCreateTodoItem(assignment); }}
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 transition-colors"
+                >
+                  <ListTodo size={10} />
+                  Add Todo
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
@@ -313,9 +427,7 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
           <Calendar size={13} className="text-blue-400" />
           Add to Calendar
         </ContextMenuItem>
-
         <ContextMenuSeparator />
-
         <ContextMenuItem
           className="flex items-center gap-2 text-xs cursor-pointer"
           onClick={() => onCreateTodoItem(assignment)}
@@ -323,7 +435,6 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
           <ListTodo size={13} className="text-purple-400" />
           Create Todo Item
         </ContextMenuItem>
-
         <ContextMenuItem
           className="flex items-center gap-2 text-xs cursor-pointer"
           onClick={() => onCreateTodoList(assignment)}
@@ -331,9 +442,7 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
           <ListPlus size={13} className="text-purple-400" />
           Create Todo List
         </ContextMenuItem>
-
         <ContextMenuSeparator />
-
         {assignment.htmlUrl && (
           <ContextMenuItem
             className="flex items-center gap-2 text-xs cursor-pointer"
@@ -343,7 +452,6 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
             Open in Canvas
           </ContextMenuItem>
         )}
-
         {assignment.dueAt && (
           <ContextMenuItem
             className="flex items-center gap-2 text-xs cursor-pointer"
@@ -363,18 +471,28 @@ function AssignmentRow({ assignment, onAddToCalendar, onCreateTodoItem, onCreate
 interface CourseSectionProps {
   course: { id: string; name: string; color: string };
   assignments: CanvasAssignment[];
+  expandedId: string | null;
+  onExpand: (id: string | null) => void;
   onAddToCalendar: (a: CanvasAssignment) => void;
   onCreateTodoItem: (a: CanvasAssignment) => void;
   onCreateTodoList: (a: CanvasAssignment) => void;
 }
 
-function CourseSection({ course, assignments, onAddToCalendar, onCreateTodoItem, onCreateTodoList }: CourseSectionProps) {
-  const [expanded, setExpanded] = useState(true);
+function CourseSection({
+  course,
+  assignments,
+  expandedId,
+  onExpand,
+  onAddToCalendar,
+  onCreateTodoItem,
+  onCreateTodoList,
+}: CourseSectionProps) {
+  const [open, setOpen] = useState(true);
 
   return (
     <div className="mb-1">
       <button
-        onClick={() => setExpanded(v => !v)}
+        onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-white/5 rounded-md transition-colors"
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: course.color }} />
@@ -382,15 +500,17 @@ function CourseSection({ course, assignments, onAddToCalendar, onCreateTodoItem,
           {course.name}
         </span>
         <span className="text-[10px] text-muted-foreground/60">{assignments.length}</span>
-        {expanded ? <ChevronDown size={11} className="text-muted-foreground/60" /> : <ChevronRight size={11} className="text-muted-foreground/60" />}
+        {open ? <ChevronDown size={11} className="text-muted-foreground/60" /> : <ChevronRight size={11} className="text-muted-foreground/60" />}
       </button>
 
-      {expanded && (
+      {open && (
         <div className="pl-1">
           {assignments.map(a => (
             <AssignmentRow
               key={a.id}
               assignment={a}
+              expanded={expandedId === a.id}
+              onToggleExpand={() => onExpand(expandedId === a.id ? null : a.id)}
               onAddToCalendar={onAddToCalendar}
               onCreateTodoItem={onCreateTodoItem}
               onCreateTodoList={onCreateTodoList}
@@ -398,6 +518,44 @@ function CourseSection({ course, assignments, onAddToCalendar, onCreateTodoItem,
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Tabs ──────────────────────────────────────────────────────────────────────
+
+type TabKey = 'assignments' | 'grades' | 'announcements' | 'calendar';
+
+const TABS: { key: TabKey; label: string; Icon: typeof BookOpen }[] = [
+  { key: 'assignments', label: 'Assignments', Icon: BookOpen },
+  { key: 'grades', label: 'Grades', Icon: GraduationCap },
+  { key: 'announcements', label: 'Announcements', Icon: Megaphone },
+  { key: 'calendar', label: 'Calendar', Icon: CalendarDays },
+];
+
+function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 px-1 pt-1 border-b border-white/5 overflow-x-auto">
+      {TABS.map(({ key, label, Icon }) => {
+        const isActive = key === active;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded-t-md text-[10px] whitespace-nowrap transition-colors',
+              isActive
+                ? 'bg-white/5 text-foreground'
+                : 'text-muted-foreground/60 hover:text-foreground hover:bg-white/5'
+            )}
+            aria-selected={isActive}
+            role="tab"
+          >
+            <Icon size={11} />
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -421,8 +579,11 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
   const {
     status,
     statusLoading,
-    assignmentsByCourse,
-    upcomingCount,
+    activeAssignmentsByCourse,
+    allAssignmentsByCourse,
+    gradedAssignments,
+    activeCount,
+    noDueDateCount,
     dataLoading,
     syncing,
     connecting,
@@ -431,6 +592,10 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
     disconnect,
   } = useCanvasIntegration();
 
+  const [tab, setTab] = useState<TabKey>('assignments');
+  const [showNoDueDate, setShowNoDueDate] = useState(false);
+  const [expandedAssignmentId, setExpandedAssignmentId] = useState<string | null>(null);
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [eventFormOpen, setEventFormOpen] = useState(false);
   const [eventFormData, setEventFormData] = useState<{ date: Date; startTime: string; title: string } | null>(null);
@@ -438,53 +603,52 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
   const [todoListDialogOpen, setTodoListDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<CanvasAssignment | null>(null);
 
-  // ── Add to Calendar ──────────────────────────────────────────────────────────
   const handleAddToCalendar = useCallback((assignment: CanvasAssignment) => {
     let date: Date;
     let startTime: string;
-
     if (assignment.dueAt) {
       const due = new Date(assignment.dueAt);
       date = due;
-      // Start event 1 hour before due
       const startDate = new Date(due.getTime() - 60 * 60 * 1000);
       startTime = `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}`;
     } else {
       date = new Date();
       startTime = '09:00';
     }
-
     setEventFormData({ date, startTime, title: assignment.title });
     setEventFormOpen(true);
   }, []);
 
-  // ── Todo Item ────────────────────────────────────────────────────────────────
   const handleCreateTodoItem = useCallback((assignment: CanvasAssignment) => {
     setSelectedAssignment(assignment);
     setTodoItemDialogOpen(true);
   }, []);
 
-  // ── Todo List ────────────────────────────────────────────────────────────────
   const handleCreateTodoList = useCallback((assignment: CanvasAssignment) => {
     setSelectedAssignment(assignment);
     setTodoListDialogOpen(true);
   }, []);
 
-  // ── Sync on module open if stale ─────────────────────────────────────────────
+  // Auto-resync on open if data is older than 30 minutes
   React.useEffect(() => {
     if (!status.connected || !status.lastSyncAt) return;
     const age = Date.now() - new Date(status.lastSyncAt).getTime();
-    if (age > 30 * 60 * 1000) sync(); // auto-sync if >30min old
-  }, [status.connected, status.lastSyncAt]);
+    if (age > 30 * 60 * 1000 && !syncing) sync();
+  }, [status.connected, status.lastSyncAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const lastSyncLabel = status.lastSyncAt
-    ? (() => {
-        const mins = Math.floor((Date.now() - new Date(status.lastSyncAt).getTime()) / 60000);
-        if (mins < 1) return 'just now';
-        if (mins < 60) return `${mins}m ago`;
-        return dayjs(status.lastSyncAt).format('h:mm A');
-      })()
-    : null;
+  const lastSyncLabel = useMemo(() => {
+    if (!status.lastSyncAt) return null;
+    const mins = Math.floor((Date.now() - new Date(status.lastSyncAt).getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    return dayjs(status.lastSyncAt).format('h:mm A');
+  }, [status.lastSyncAt]);
+
+  // Groups for the current view (Assignments tab)
+  const groupsToRender = showNoDueDate ? allAssignmentsByCourse : activeAssignmentsByCourse;
+  const headlineCount = showNoDueDate
+    ? allAssignmentsByCourse.reduce((n, g) => n + g.assignments.length, 0)
+    : activeCount;
 
   return (
     <>
@@ -505,7 +669,7 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
             <RefreshCw size={16} className="animate-spin text-muted-foreground" />
           </div>
         ) : !status.connected ? (
-          /* ── Not connected ── */
+          // ── Not connected ──
           <div className="flex flex-col items-center justify-center gap-3 py-8 px-4 text-center">
             <div className="w-10 h-10 rounded-full bg-[#E66000]/10 flex items-center justify-center">
               <BookOpen size={18} className="text-[#E66000]" />
@@ -525,71 +689,66 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
               Connect Canvas
             </Button>
           </div>
-        ) : dataLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <RefreshCw size={16} className="animate-spin text-muted-foreground" />
-          </div>
-        ) : assignmentsByCourse.length === 0 ? (
-          /* ── Connected but no upcoming assignments ── */
-          <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <CheckCircle2 size={24} className="text-green-400" />
-            <p className="text-sm font-medium">All caught up!</p>
-            <p className="text-xs text-muted-foreground">No upcoming assignments</p>
-            {lastSyncLabel && (
-              <p className="text-[10px] text-muted-foreground/60 mt-1">Synced {lastSyncLabel}</p>
-            )}
-          </div>
         ) : (
-          /* ── Assignment list ── */
-          <div className="px-1 pt-1 pb-2">
-            {/* Summary row */}
-            <div className="flex items-center justify-between px-2 mb-2">
-              <span className="text-[10px] text-muted-foreground">
-                {upcomingCount} upcoming
-              </span>
-              <div className="flex items-center gap-2">
-                {lastSyncLabel && (
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {lastSyncLabel}
-                  </span>
-                )}
+          // ── Connected: tabbed view ──
+          <div className="flex flex-col">
+            <TabBar active={tab} onChange={setTab} />
+
+            {/* Sync error pill, shown across all tabs */}
+            {(status.lastSyncError || (status.lastSyncFailedCourseCount ?? 0) > 0) && (
+              <div className="mx-2 mt-2 px-2 py-1.5 rounded-md bg-red-500/10 border border-red-500/20 flex items-start gap-1.5">
+                <AlertTriangle size={11} className="text-red-400 mt-0.5 shrink-0" />
+                <div className="text-[10px] text-red-300 flex-1 min-w-0">
+                  {status.lastSyncError ? (
+                    <>Sync failed: <span className="text-red-200">{status.lastSyncError}</span></>
+                  ) : (
+                    <>Couldn't sync {status.lastSyncFailedCourseCount} course{(status.lastSyncFailedCourseCount ?? 0) === 1 ? '' : 's'}. Some assignments may be missing.</>
+                  )}
+                </div>
                 <button
                   onClick={sync}
                   disabled={syncing}
-                  className="p-0.5 rounded hover:bg-white/10 text-muted-foreground/60 hover:text-foreground transition-colors"
-                  title="Sync Canvas"
+                  className="text-[10px] text-red-300 hover:text-red-200 underline shrink-0"
                 >
-                  <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+                  Retry
                 </button>
               </div>
-            </div>
+            )}
 
-            {assignmentsByCourse.map(({ course, assignments }) => (
-              <CourseSection
-                key={course.id}
-                course={course}
-                assignments={assignments}
+            {/* Body */}
+            {tab === 'assignments' && (
+              <AssignmentsTab
+                dataLoading={dataLoading}
+                groups={groupsToRender}
+                headlineCount={headlineCount}
+                showNoDueDate={showNoDueDate}
+                noDueDateCount={noDueDateCount}
+                onToggleShowNoDueDate={() => setShowNoDueDate(v => !v)}
+                lastSyncLabel={lastSyncLabel}
+                syncing={syncing}
+                onSync={sync}
+                expandedAssignmentId={expandedAssignmentId}
+                onExpand={setExpandedAssignmentId}
                 onAddToCalendar={handleAddToCalendar}
                 onCreateTodoItem={handleCreateTodoItem}
                 onCreateTodoList={handleCreateTodoList}
+                onDisconnect={disconnect}
               />
-            ))}
+            )}
 
-            {/* Disconnect option */}
-            <div className="mt-3 px-2 pt-2 border-t border-white/5">
-              <button
-                onClick={disconnect}
-                className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
-              >
-                <Unlink size={11} />
-                Disconnect Canvas
-              </button>
-            </div>
+            {tab === 'grades' && (
+              <GradesTab
+                dataLoading={dataLoading}
+                assignments={gradedAssignments}
+              />
+            )}
+
+            {tab === 'announcements' && <ComingSoonTab Icon={Megaphone} label="Announcements" />}
+            {tab === 'calendar' && <ComingSoonTab Icon={CalendarDays} label="Canvas Calendar" />}
           </div>
         )}
       </ModuleContainer>
 
-      {/* Connect sheet */}
       <CanvasConnectSheet
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
@@ -597,7 +756,6 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
         connecting={connecting}
       />
 
-      {/* Event form (add to calendar) */}
       {eventFormData && (
         <EventForm
           open={eventFormOpen}
@@ -610,14 +768,12 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
         />
       )}
 
-      {/* Create todo item dialog */}
       <CreateTodoItemDialog
         open={todoItemDialogOpen}
         onClose={() => setTodoItemDialogOpen(false)}
         assignment={selectedAssignment}
       />
 
-      {/* Create todo list dialog */}
       <CreateTodoListDialog
         open={todoListDialogOpen}
         onClose={() => setTodoListDialogOpen(false)}
@@ -626,5 +782,220 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
     </>
   );
 };
+
+// ─── Assignments tab body ──────────────────────────────────────────────────────
+
+interface AssignmentsTabProps {
+  dataLoading: boolean;
+  groups: { course: { id: string; name: string; color: string }; assignments: CanvasAssignment[] }[];
+  headlineCount: number;
+  showNoDueDate: boolean;
+  noDueDateCount: number;
+  onToggleShowNoDueDate: () => void;
+  lastSyncLabel: string | null;
+  syncing: boolean;
+  onSync: () => void;
+  expandedAssignmentId: string | null;
+  onExpand: (id: string | null) => void;
+  onAddToCalendar: (a: CanvasAssignment) => void;
+  onCreateTodoItem: (a: CanvasAssignment) => void;
+  onCreateTodoList: (a: CanvasAssignment) => void;
+  onDisconnect: () => void;
+}
+
+function AssignmentsTab({
+  dataLoading,
+  groups,
+  headlineCount,
+  showNoDueDate,
+  noDueDateCount,
+  onToggleShowNoDueDate,
+  lastSyncLabel,
+  syncing,
+  onSync,
+  expandedAssignmentId,
+  onExpand,
+  onAddToCalendar,
+  onCreateTodoItem,
+  onCreateTodoList,
+  onDisconnect,
+}: AssignmentsTabProps) {
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <RefreshCw size={16} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8 text-center">
+        <CheckCircle2 size={24} className="text-green-400" />
+        <p className="text-sm font-medium">All caught up!</p>
+        <p className="text-xs text-muted-foreground">No upcoming or overdue assignments</p>
+
+        {noDueDateCount > 0 && !showNoDueDate && (
+          <button
+            onClick={onToggleShowNoDueDate}
+            className="mt-2 text-[10px] text-muted-foreground/80 hover:text-foreground underline"
+          >
+            Show {noDueDateCount} assignment{noDueDateCount === 1 ? '' : 's'} with no due date
+          </button>
+        )}
+
+        {lastSyncLabel && (
+          <p className="text-[10px] text-muted-foreground/60 mt-1">Synced {lastSyncLabel}</p>
+        )}
+
+        <div className="mt-3 pt-2 border-t border-white/5 w-full flex justify-center">
+          <button
+            onClick={onDisconnect}
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
+          >
+            <Unlink size={11} />
+            Disconnect Canvas
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-1 pt-1 pb-2">
+      {/* Summary row */}
+      <div className="flex items-center justify-between px-2 mb-2 gap-2">
+        <span className="text-[10px] text-muted-foreground">
+          {headlineCount} {headlineCount === 1 ? 'assignment' : 'assignments'}
+        </span>
+        <div className="flex items-center gap-2">
+          {noDueDateCount > 0 && (
+            <button
+              onClick={onToggleShowNoDueDate}
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
+              title={showNoDueDate ? 'Hide no-due-date assignments' : 'Show no-due-date assignments'}
+            >
+              {showNoDueDate ? <EyeOff size={10} /> : <Eye size={10} />}
+              {showNoDueDate ? 'Hide' : `+${noDueDateCount} no-date`}
+            </button>
+          )}
+          {lastSyncLabel && (
+            <span className="text-[10px] text-muted-foreground/60">{lastSyncLabel}</span>
+          )}
+          <button
+            onClick={onSync}
+            disabled={syncing}
+            className="p-0.5 rounded hover:bg-white/10 text-muted-foreground/60 hover:text-foreground transition-colors"
+            title="Sync Canvas"
+          >
+            <RefreshCw size={11} className={syncing ? 'animate-spin' : ''} />
+          </button>
+        </div>
+      </div>
+
+      {groups.map(({ course, assignments }) => (
+        <CourseSection
+          key={course.id}
+          course={course}
+          assignments={assignments}
+          expandedId={expandedAssignmentId}
+          onExpand={onExpand}
+          onAddToCalendar={onAddToCalendar}
+          onCreateTodoItem={onCreateTodoItem}
+          onCreateTodoList={onCreateTodoList}
+        />
+      ))}
+
+      <div className="mt-3 px-2 pt-2 border-t border-white/5">
+        <button
+          onClick={onDisconnect}
+          className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
+        >
+          <Unlink size={11} />
+          Disconnect Canvas
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Grades tab body ───────────────────────────────────────────────────────────
+
+function GradesTab({ dataLoading, assignments }: { dataLoading: boolean; assignments: CanvasAssignment[] }) {
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <RefreshCw size={16} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (assignments.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8 text-center">
+        <GraduationCap size={24} className="text-muted-foreground" />
+        <p className="text-sm font-medium">No grades yet</p>
+        <p className="text-xs text-muted-foreground">Graded assignments will appear here</p>
+      </div>
+    );
+  }
+
+  // Group by course for visual scanning
+  const byCourse = new Map<string, { courseName: string; color: string; items: CanvasAssignment[] }>();
+  for (const a of assignments) {
+    if (!byCourse.has(a.courseId)) {
+      byCourse.set(a.courseId, { courseName: a.courseName, color: a.courseColor, items: [] });
+    }
+    byCourse.get(a.courseId)!.items.push(a);
+  }
+
+  return (
+    <div className="px-1 pt-2 pb-2">
+      {Array.from(byCourse.entries()).map(([courseId, { courseName, color, items }]) => {
+        const totalScore = items.reduce((s, a) => s + (a.score ?? 0), 0);
+        const totalPoints = items.reduce((s, a) => s + (a.pointsPossible ?? 0), 0);
+        const pct = totalPoints > 0 ? (totalScore / totalPoints) * 100 : null;
+
+        return (
+          <div key={courseId} className="mb-2">
+            <div className="flex items-center gap-1.5 px-2 py-1">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              <span className="flex-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                {courseName}
+              </span>
+              {pct !== null && (
+                <span className="text-[10px] text-muted-foreground/80 tabular-nums">
+                  {pct.toFixed(1)}%
+                </span>
+              )}
+            </div>
+            <div className="pl-1">
+              {items.map(a => (
+                <div key={a.id} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-white/5">
+                  <span className="flex-1 text-xs text-foreground/90 truncate">{a.title}</span>
+                  <GradeBadge score={a.score!} pointsPossible={a.pointsPossible} />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Coming-soon stub tab ──────────────────────────────────────────────────────
+
+function ComingSoonTab({ Icon, label }: { Icon: typeof BookOpen; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-10 text-center">
+      <Icon size={22} className="text-muted-foreground/60" />
+      <p className="text-sm font-medium">{label}</p>
+      <p className="text-[11px] text-muted-foreground max-w-[220px]">
+        Coming soon. Assignments and grades are live now.
+      </p>
+    </div>
+  );
+}
 
 export default CanvasModule;

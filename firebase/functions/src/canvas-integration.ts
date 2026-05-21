@@ -93,37 +93,74 @@ async function canvasFetch(baseUrl: string, token: string, path: string): Promis
 
 // ─── Sync logic (shared between connect and periodic sync) ────────────────────
 
-async function performSync(uid: string, baseUrl: string, token: string): Promise<{ courseCount: number; assignmentCount: number }> {
+async function performSync(uid: string, baseUrl: string, token: string): Promise<{
+  courseCount: number;
+  assignmentCount: number;
+  failedCourseCount: number;
+}> {
   const db = getDb();
   const now = new Date().toISOString();
+  const nowMs = Date.now();
 
-  // 1. Fetch active courses
+  // 1. Fetch enrollments tagged "active" by Canvas, then filter further locally.
+  //    Canvas keeps non-academic shells (graduation-clearance, advising, etc.)
+  //    in "active" indefinitely, so we drop anything whose term has ended.
   const rawCourses = await canvasFetch(baseUrl, token, '/courses?enrollment_state=active&include[]=term');
-  const courses = rawCourses.filter((c: any) => !c.access_restricted_by_date && c.workflow_state !== 'completed');
+  const courses = rawCourses.filter((c: any) => {
+    if (c.access_restricted_by_date) return false;
+    if (c.workflow_state === 'completed' || c.workflow_state === 'deleted') return false;
+    const termEnd = c.term?.end_at ? Date.parse(c.term.end_at) : NaN;
+    // Keep if no term end (open-ended) or term hasn't ended yet.
+    if (!Number.isNaN(termEnd) && termEnd < nowMs) return false;
+    return true;
+  });
 
-  // 2. Upsert courses
+  // 2. Upsert courses (preserving stable colors by hashing course id)
+  const COURSE_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#06B6D4', '#F97316'];
+  const colorFor = (id: string) => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return COURSE_COLORS[h % COURSE_COLORS.length];
+  };
+
   const coursesBatch = db.batch();
   const courseColorMap: Record<string, string> = {};
-  const COURSE_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#06B6D4', '#F97316'];
+  const keptCourseIds = new Set<string>();
 
-  for (let i = 0; i < courses.length; i++) {
-    const c = courses[i];
-    const color = COURSE_COLORS[i % COURSE_COLORS.length];
-    courseColorMap[String(c.id)] = color;
-    const ref = coursesCol(uid).doc(String(c.id));
-    coursesBatch.set(ref, {
-      id: String(c.id),
+  for (const c of courses) {
+    const id = String(c.id);
+    keptCourseIds.add(id);
+    const color = colorFor(id);
+    courseColorMap[id] = color;
+    coursesBatch.set(coursesCol(uid).doc(id), {
+      id,
       name: c.name || c.course_code || 'Unnamed Course',
       courseCode: c.course_code || '',
       color,
       term: c.term?.name || null,
+      termEndAt: c.term?.end_at || null,
       syncedAt: now,
     }, { merge: true });
   }
   await coursesBatch.commit();
 
-  // 3. Fetch assignments for each course
+  // 2b. Delete any locally cached courses that no longer pass the filter.
+  const existingCoursesSnap = await coursesCol(uid).get();
+  const removedCourseIds: string[] = [];
+  const deleteCoursesBatch = db.batch();
+  existingCoursesSnap.forEach(doc => {
+    if (!keptCourseIds.has(doc.id)) {
+      removedCourseIds.push(doc.id);
+      deleteCoursesBatch.delete(doc.ref);
+    }
+  });
+  if (removedCourseIds.length > 0) await deleteCoursesBatch.commit();
+
+  // 3. Fetch assignments per course (skip unpublished server-side)
   let totalAssignments = 0;
+  let failedCourseCount = 0;
+  const keptAssignmentIds = new Set<string>();
+
   for (const course of courses) {
     const courseId = String(course.id);
     const courseName = course.name || course.course_code || 'Unnamed Course';
@@ -131,18 +168,36 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
 
     let rawAssignments: any[] = [];
     try {
-      rawAssignments = await canvasFetch(baseUrl, token, `/courses/${courseId}/assignments?order_by=due_at&include[]=submission`);
-    } catch {
-      // Skip courses where assignment fetch fails (e.g. restricted)
+      rawAssignments = await canvasFetch(
+        baseUrl,
+        token,
+        `/courses/${courseId}/assignments?order_by=due_at&include[]=submission&bucket=ungraded`
+      );
+      // Also fetch graded/past assignments so grade history is visible.
+      const graded = await canvasFetch(
+        baseUrl,
+        token,
+        `/courses/${courseId}/assignments?order_by=due_at&include[]=submission&bucket=past`
+      );
+      // Dedupe by id (buckets can overlap)
+      const seen = new Set(rawAssignments.map(a => String(a.id)));
+      for (const a of graded) if (!seen.has(String(a.id))) rawAssignments.push(a);
+    } catch (err) {
+      console.warn(`[canvas] assignment fetch failed for course ${courseId}:`, err);
+      failedCourseCount++;
       continue;
     }
 
     const assignmentsBatch = db.batch();
     for (const a of rawAssignments) {
-      const ref = assignmentsCol(uid).doc(String(a.id));
+      // Skip drafts / deleted entirely
+      if (a.workflow_state && a.workflow_state !== 'published') continue;
+
+      const id = String(a.id);
+      keptAssignmentIds.add(id);
       const submission = a.submission;
-      assignmentsBatch.set(ref, {
-        id: String(a.id),
+      assignmentsBatch.set(assignmentsCol(uid).doc(id), {
+        id,
         courseId,
         courseName,
         courseColor,
@@ -162,7 +217,21 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
     await assignmentsBatch.commit();
   }
 
-  return { courseCount: courses.length, assignmentCount: totalAssignments };
+  // 3b. Delete assignments that no longer exist on Canvas OR belong to a removed course.
+  const existingAssignmentsSnap = await assignmentsCol(uid).get();
+  const deleteAssignmentsBatch = db.batch();
+  let assignmentDeletes = 0;
+  existingAssignmentsSnap.forEach(doc => {
+    const data = doc.data() as { courseId?: string };
+    const courseGone = data.courseId ? !keptCourseIds.has(data.courseId) : true;
+    if (courseGone || !keptAssignmentIds.has(doc.id)) {
+      deleteAssignmentsBatch.delete(doc.ref);
+      assignmentDeletes++;
+    }
+  });
+  if (assignmentDeletes > 0) await deleteAssignmentsBatch.commit();
+
+  return { courseCount: courses.length, assignmentCount: totalAssignments, failedCourseCount };
 }
 
 function stripHtml(html: string): string {
@@ -208,12 +277,34 @@ export const canvasConnect = onCall(
     });
 
     // Initial sync
-    const { courseCount, assignmentCount } = await performSync(uid, cleanUrl, token.trim());
+    let courseCount = 0;
+    let assignmentCount = 0;
+    let failedCourseCount = 0;
+    let lastSyncError: string | null = null;
+    try {
+      const result = await performSync(uid, cleanUrl, token.trim());
+      courseCount = result.courseCount;
+      assignmentCount = result.assignmentCount;
+      failedCourseCount = result.failedCourseCount;
+    } catch (err: any) {
+      lastSyncError = err?.message || 'Sync failed';
+      console.error('[canvas] initial sync failed:', err);
+    }
 
-    // Mark lastSyncAt
-    await integrationDoc(uid).update({ lastSyncAt: new Date().toISOString() });
+    await integrationDoc(uid).update({
+      lastSyncAt: new Date().toISOString(),
+      lastSyncError,
+      lastSyncFailedCourseCount: failedCourseCount,
+    });
 
-    return { success: true, courseCount, assignmentCount, displayName: profile.display_name || profile.name };
+    return {
+      success: true,
+      courseCount,
+      assignmentCount,
+      failedCourseCount,
+      lastSyncError,
+      displayName: profile.display_name || profile.name,
+    };
   }
 );
 
@@ -230,11 +321,28 @@ export const canvasSync = onCall(
 
     const data = snap.data()!;
     const token = decryptString(data.encryptedToken);
-    const { courseCount, assignmentCount } = await performSync(uid, data.baseUrl, token);
 
-    await integrationDoc(uid).update({ lastSyncAt: new Date().toISOString() });
+    let courseCount = 0;
+    let assignmentCount = 0;
+    let failedCourseCount = 0;
+    let lastSyncError: string | null = null;
+    try {
+      const result = await performSync(uid, data.baseUrl, token);
+      courseCount = result.courseCount;
+      assignmentCount = result.assignmentCount;
+      failedCourseCount = result.failedCourseCount;
+    } catch (err: any) {
+      lastSyncError = err?.message || 'Sync failed';
+      console.error('[canvas] manual sync failed:', err);
+    }
 
-    return { success: true, courseCount, assignmentCount };
+    await integrationDoc(uid).update({
+      lastSyncAt: new Date().toISOString(),
+      lastSyncError,
+      lastSyncFailedCourseCount: failedCourseCount,
+    });
+
+    return { success: !lastSyncError, courseCount, assignmentCount, failedCourseCount, lastSyncError };
   }
 );
 
@@ -249,8 +357,16 @@ export const canvasGetStatus = onCall(
     const snap = await integrationDoc(uid).get();
     if (!snap.exists) return { connected: false };
 
-    const { baseUrl, displayName, connectedAt, lastSyncAt } = snap.data()!;
-    return { connected: true, baseUrl, displayName, connectedAt, lastSyncAt };
+    const { baseUrl, displayName, connectedAt, lastSyncAt, lastSyncError, lastSyncFailedCourseCount } = snap.data()!;
+    return {
+      connected: true,
+      baseUrl,
+      displayName,
+      connectedAt,
+      lastSyncAt,
+      lastSyncError: lastSyncError ?? null,
+      lastSyncFailedCourseCount: lastSyncFailedCourseCount ?? 0,
+    };
   }
 );
 
@@ -297,17 +413,25 @@ export const canvasSyncScheduled = onSchedule(
       .get();
 
     const promises = integrations.docs.map(async (snap) => {
-      try {
-        const uid = snap.ref.parent.parent!.id;
-        const data = snap.data();
-        if (!data.encryptedToken || !data.baseUrl) return;
+      const uid = snap.ref.parent.parent!.id;
+      const data = snap.data();
+      if (!data.encryptedToken || !data.baseUrl) return;
 
+      let failedCourseCount = 0;
+      let lastSyncError: string | null = null;
+      try {
         const token = decryptString(data.encryptedToken);
-        await performSync(uid, data.baseUrl, token);
-        await snap.ref.update({ lastSyncAt: new Date().toISOString() });
-      } catch (err) {
-        console.error('Canvas scheduled sync error for doc', snap.ref.path, err);
+        const result = await performSync(uid, data.baseUrl, token);
+        failedCourseCount = result.failedCourseCount;
+      } catch (err: any) {
+        lastSyncError = err?.message || 'Sync failed';
+        console.error('Canvas scheduled sync error for', snap.ref.path, err);
       }
+      await snap.ref.update({
+        lastSyncAt: new Date().toISOString(),
+        lastSyncError,
+        lastSyncFailedCourseCount: failedCourseCount,
+      });
     });
 
     await Promise.allSettled(promises);

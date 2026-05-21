@@ -28,6 +28,7 @@ export interface CanvasCourse {
   courseCode: string;
   color: string;
   term: string | null;
+  termEndAt?: string | null;
   syncedAt: string;
 }
 
@@ -54,7 +55,11 @@ export interface CanvasStatus {
   displayName?: string;
   connectedAt?: string;
   lastSyncAt?: string | null;
+  lastSyncError?: string | null;
+  lastSyncFailedCourseCount?: number;
 }
+
+export type AssignmentFilter = 'active' | 'all';
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -95,6 +100,8 @@ export function useCanvasIntegration() {
             displayName: d.displayName,
             connectedAt: d.connectedAt,
             lastSyncAt: d.lastSyncAt ?? null,
+            lastSyncError: d.lastSyncError ?? null,
+            lastSyncFailedCourseCount: d.lastSyncFailedCourseCount ?? 0,
           });
         }
         setStatusLoading(false);
@@ -197,29 +204,61 @@ export function useCanvasIntegration() {
     }
   }, [user?.uid, functions]);
 
-  // ── Derived: assignments grouped by course ──────────────────────────────────
-  const assignmentsByCourse = courses.map(course => ({
-    course,
-    assignments: assignments
-      .filter(a => a.courseId === course.id && !a.submitted && a.workflowState === 'published')
-      .sort((a, b) => {
-        // null dueAt goes to end
-        if (!a.dueAt && !b.dueAt) return 0;
-        if (!a.dueAt) return 1;
-        if (!b.dueAt) return -1;
-        return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
-      }),
-  })).filter(g => g.assignments.length > 0);
+  // ── Derived ─────────────────────────────────────────────────────────────────
+  // Sort by dueAt with overdue first (since they're past now), then today/upcoming.
+  // null dueAt goes to the very end so the actionable items lead.
+  const sortByDue = (a: CanvasAssignment, b: CanvasAssignment) => {
+    if (!a.dueAt && !b.dueAt) return 0;
+    if (!a.dueAt) return 1;
+    if (!b.dueAt) return -1;
+    return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+  };
 
-  const upcomingCount = assignments.filter(a => !a.submitted && a.dueAt && new Date(a.dueAt) >= new Date()).length;
+  // "Active" = unsubmitted, published, and either upcoming/today or overdue.
+  // Excludes no-due-date assignments by default (they're usually legacy).
+  const isActive = (a: CanvasAssignment) =>
+    !a.submitted && a.workflowState === 'published' && !!a.dueAt;
+
+  // "All unsubmitted" — used when the user toggles "Show no-due-date".
+  const isAnyUnsubmitted = (a: CanvasAssignment) =>
+    !a.submitted && a.workflowState === 'published';
+
+  const groupByCourse = (predicate: (a: CanvasAssignment) => boolean) =>
+    courses
+      .map(course => ({
+        course,
+        assignments: assignments.filter(a => a.courseId === course.id && predicate(a)).sort(sortByDue),
+      }))
+      .filter(g => g.assignments.length > 0);
+
+  const activeAssignmentsByCourse = groupByCourse(isActive);
+  const allAssignmentsByCourse = groupByCourse(isAnyUnsubmitted);
+
+  // Headline count must match what's rendered: active list above.
+  const activeCount = activeAssignmentsByCourse.reduce((n, g) => n + g.assignments.length, 0);
+
+  // How many extra "no due date" assignments would show if the user toggled.
+  const noDueDateCount = allAssignmentsByCourse.reduce((n, g) => n + g.assignments.length, 0) - activeCount;
+
+  // Grades: anything with a numeric score. Most recent first.
+  const gradedAssignments = assignments
+    .filter(a => a.score !== null && a.pointsPossible !== null)
+    .sort((a, b) => {
+      const at = a.dueAt ? new Date(a.dueAt).getTime() : 0;
+      const bt = b.dueAt ? new Date(b.dueAt).getTime() : 0;
+      return bt - at;
+    });
 
   return {
     status,
     statusLoading,
     courses,
     assignments,
-    assignmentsByCourse,
-    upcomingCount,
+    activeAssignmentsByCourse,
+    allAssignmentsByCourse,
+    gradedAssignments,
+    activeCount,
+    noDueDateCount,
     dataLoading,
     syncing,
     connecting,

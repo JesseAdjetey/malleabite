@@ -275,6 +275,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
   const [quickTitle, setQuickTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // When true, the isDialogOpen effect skips its reset (used when opening via browse/event-form)
   const skipDialogResetRef = useRef(false);
@@ -549,6 +550,11 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
           }
         }
       }
+      // Clear any in-flight pick state so stale triggers don't re-open the dialog
+      clearPickedEvent();
+      setPendingEventForReminder(null);
+      setLinkedEventId('');
+      skipDialogResetRef.current = false;
       setIsDialogOpen(false);
     } catch {
       toast.error('Failed to save reminder');
@@ -1013,6 +1019,47 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
     );
   };
 
+  // ── Drag-to-reminder ─────────────────────────────────────────────────────
+
+  const handleEventDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/json')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleEventDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleEventDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (!data.id || !data.title || data.source === 'todo-module' || data.source === 'eisenhower') return;
+      setIsEditing(false);
+      setSelectedReminder(null);
+      setWhenMode('event');
+      setLinkedEventId(data.id);
+      setOffsetBefore(15);
+      setOffsetAfter(null);
+      form.reset({
+        title: data.title,
+        description: '',
+        soundId: 'default',
+        recurrence: 'none',
+        customDays: [],
+      } as any);
+      setSoundEnabled(true);
+      skipDialogResetRef.current = true;
+      setIsDialogOpen(true);
+    } catch {
+      // not a valid drag payload
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1026,7 +1073,12 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
       appleRemindersLinked={appleReminders.isLinked}
       appleRemindersSyncing={appleReminders.isSyncing}
       onSyncAppleReminders={() => appleReminders.pullSync(false)}>
-      <div className={cn("space-y-2", sizeLevel >= 2 && "flex flex-col h-full min-h-0")}>
+      <div
+        className={cn("space-y-2", sizeLevel >= 2 && "flex flex-col h-full min-h-0", isDragOver && "ring-2 ring-primary/40 ring-inset rounded-lg bg-primary/5")}
+        onDragOver={handleEventDragOver}
+        onDragLeave={handleEventDragLeave}
+        onDrop={handleEventDrop}
+      >
         <div className="flex items-center gap-1.5">
           <input value={quickTitle} onChange={e => setQuickTitle(e.target.value)} onKeyDown={handleQuickAdd}
             placeholder="Add reminder… (press Enter)"

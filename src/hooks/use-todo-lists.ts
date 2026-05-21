@@ -308,7 +308,7 @@ export function useTodoLists() {
   // Update arbitrary fields on a todo item
   const updateTodo = async (
     todoId: string,
-    updates: Partial<Pick<TodoItem, 'text' | 'completed' | 'completedAt' | 'deadline' | 'status' | 'description' | 'pinned'>>
+    updates: Partial<Pick<TodoItem, 'text' | 'completed' | 'completedAt' | 'deadline' | 'status' | 'description' | 'pinned' | 'isCalendarEvent' | 'eventId'>>
   ): Promise<{ success: boolean }> => {
     if (!user?.uid) return { success: false };
     try {

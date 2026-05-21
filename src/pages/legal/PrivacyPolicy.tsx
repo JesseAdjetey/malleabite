@@ -35,7 +35,7 @@ export default function PrivacyPolicy() {
           <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-900 to-purple-600 dark:from-white dark:to-purple-300">
             Privacy Policy
           </h1>
-          <p className="text-sm text-muted-foreground mt-2">Last Updated: March 13, 2026</p>
+          <p className="text-sm text-muted-foreground mt-2">Last Updated: May 20, 2026</p>
         </div>
 
         {/* Quick Summary Card */}
@@ -80,6 +80,9 @@ export default function PrivacyPolicy() {
               <li><strong>Account Information:</strong> Email address, name, password (encrypted)</li>
               <li><strong>Calendar Data:</strong> Events, todos, reminders, alarms, recurring events</li>
               <li><strong>Productivity Data:</strong> Eisenhower matrix items, Pomodoro sessions, time tracking</li>
+              <li><strong>Task Data:</strong> Task lists and tasks synced from Google Tasks or Apple Reminders</li>
+              <li><strong>Education Data:</strong> Canvas LMS course names, assignment titles, due dates, and submission statuses</li>
+              <li><strong>Collaboration Data:</strong> Collaborator email addresses, module sharing roles, and invite records</li>
               <li><strong>AI Interactions:</strong> Your conversations with Mally AI assistant</li>
               <li><strong>Payment Information:</strong> Processed securely through Stripe (we never store full credit card details)</li>
             </ul>
@@ -97,9 +100,12 @@ export default function PrivacyPolicy() {
             <ul>
               <li>Provide, operate, and maintain our services</li>
               <li>Process your calendar events and productivity workflows</li>
-              <li>Power Mally AI to provide intelligent scheduling assistance</li>
+              <li>Sync tasks and reminders with connected third-party services (Google Tasks, Apple Reminders)</li>
+              <li>Display Canvas LMS assignments in your sidebar and allow you to add them to your calendar or todo lists</li>
+              <li>Enable module collaboration — sharing modules with other users and managing access roles</li>
+              <li>Power Mally AI to provide intelligent scheduling and task-planning assistance</li>
               <li>Process subscription payments and manage billing</li>
-              <li>Send you service updates and important notifications</li>
+              <li>Send you service updates, collaboration invites, and important notifications</li>
               <li>Improve our services through analytics and user feedback</li>
               <li>Detect and prevent fraud or abuse</li>
               <li>Comply with legal obligations</li>
@@ -176,7 +182,157 @@ export default function PrivacyPolicy() {
               </p>
             </div>
 
-            <h4 className="font-semibold text-sm mt-4 mb-2">5.3 We Never Sell Your Data</h4>
+            {/* Google Tasks API Disclosure */}
+            <div className="mt-6 p-4 rounded-xl bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 dark:bg-blue-500/10">
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <RefreshCw className="h-3.5 w-3.5 text-blue-500" />
+                5.3 Google Tasks Integration
+              </h4>
+              <p className="text-sm mb-3">
+                When you connect Google Tasks, Malleabite accesses and processes the following data through the Google Tasks API:
+              </p>
+              <ul className="text-sm">
+                <li><strong>Task lists:</strong> Names and identifiers of your Google Task lists</li>
+                <li><strong>Tasks:</strong> Task titles, notes, due dates, completion status</li>
+                <li><strong>Account information:</strong> Your Google account email address</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we use this data:</p>
+              <ul className="text-sm">
+                <li>Display your Google Tasks within the Malleabite todo module</li>
+                <li>Create, update, complete, and delete tasks in Google Tasks when you make changes in Malleabite</li>
+                <li>Keep tasks synchronized in both directions between Malleabite and Google Tasks</li>
+                <li>Allow Mally AI to reference your tasks when planning your schedule</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we store and protect this data:</p>
+              <ul className="text-sm">
+                <li>Google OAuth tokens are encrypted using AES-256-GCM and stored in Firebase Cloud Firestore</li>
+                <li>Access tokens are short-lived (1 hour) and refresh tokens are stored server-side only</li>
+                <li>Task data displayed in Malleabite is synced periodically and cached securely</li>
+                <li>We do not share your Google Tasks data with any third parties beyond what is described in this policy</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">Revoking access:</p>
+              <ul className="text-sm">
+                <li>You can disconnect Google Tasks at any time in Settings → Integrations</li>
+                <li>You can also revoke access from your <a href="https://myaccount.google.com/permissions" className="text-blue-600 dark:text-blue-400 hover:underline">Google Account permissions page</a></li>
+                <li>Upon disconnection, all stored Google tokens and synced task data are deleted from our servers</li>
+              </ul>
+
+              <p className="text-xs text-muted-foreground mt-3">
+                Malleabite's use and transfer of information received from Google APIs adheres to the{' '}
+                <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-blue-600 dark:text-blue-400 hover:underline">
+                  Google API Services User Data Policy
+                </a>, including the Limited Use requirements.
+              </p>
+            </div>
+
+            {/* Canvas LMS Disclosure */}
+            <div className="mt-6 p-4 rounded-xl bg-amber-500/5 border border-amber-200/50 dark:border-amber-500/20 dark:bg-amber-500/10">
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <Database className="h-3.5 w-3.5 text-amber-500" />
+                5.4 Canvas LMS Integration
+              </h4>
+              <p className="text-sm mb-3">
+                When you connect your institution's Canvas LMS account, you provide your Canvas instance URL and a personal API token. Malleabite accesses and processes:
+              </p>
+              <ul className="text-sm">
+                <li><strong>Course data:</strong> Course names, codes, and enrollment status</li>
+                <li><strong>Assignment data:</strong> Assignment titles, due dates, point values, and submission statuses</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we use this data:</p>
+              <ul className="text-sm">
+                <li>Display your Canvas courses and assignments in the Malleabite Canvas module</li>
+                <li>Allow you to add assignments to your calendar or todo lists via right-click actions</li>
+                <li>Provide Mally AI context about upcoming academic deadlines</li>
+                <li>Automatically sync assignment data every 30 minutes while connected</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we store and protect this data:</p>
+              <ul className="text-sm">
+                <li>Your Canvas API token is encrypted using AES-256-GCM and stored in Firebase Cloud Firestore</li>
+                <li>Course and assignment data is stored per-user in a private Firestore collection</li>
+                <li>We do not store assignment submission content — only metadata (title, due date, status)</li>
+                <li>Your token is never exposed to the client application</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">Revoking access:</p>
+              <ul className="text-sm">
+                <li>You can disconnect Canvas at any time in Settings → Integrations</li>
+                <li>Upon disconnection, your encrypted token and all synced Canvas data are permanently deleted</li>
+                <li>You can also revoke the token directly in your Canvas account settings</li>
+              </ul>
+            </div>
+
+            {/* Apple EventKit Disclosure */}
+            <div className="mt-6 p-4 rounded-xl bg-gray-500/5 border border-gray-200/50 dark:border-gray-500/20 dark:bg-gray-500/10">
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <Shield className="h-3.5 w-3.5 text-gray-500" />
+                5.5 Apple Reminders &amp; Calendar (iOS)
+              </h4>
+              <p className="text-sm mb-3">
+                On iOS devices, Malleabite can request permission to access Apple Reminders and Apple Calendar via the native EventKit framework. When granted, we access:
+              </p>
+              <ul className="text-sm">
+                <li><strong>Apple Reminders:</strong> Reminder lists, reminder titles, due dates, completion status, and notes</li>
+                <li><strong>Apple Calendar:</strong> Calendar names, event titles, times, locations, and recurrence rules</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we use this data:</p>
+              <ul className="text-sm">
+                <li>Display your Apple Reminders inside the Malleabite reminders module</li>
+                <li>Create and complete reminders in Apple Reminders when you do so in Malleabite</li>
+                <li>Show Apple Calendar events alongside other calendars in your Malleabite view</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we store and protect this data:</p>
+              <ul className="text-sm">
+                <li>EventKit data is accessed on-device only; we store only the minimal metadata needed to display and sync reminders</li>
+                <li>Synced reminder metadata is stored in your private Firestore collection and is not shared with third parties</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">Revoking access:</p>
+              <ul className="text-sm">
+                <li>You can revoke Reminders or Calendar access at any time in iOS Settings → Privacy &amp; Security → Reminders / Calendars</li>
+                <li>You can also disconnect the integration in Malleabite Settings → Integrations</li>
+              </ul>
+            </div>
+
+            {/* Collaboration / Module Sharing Disclosure */}
+            <div className="mt-6 p-4 rounded-xl bg-purple-500/5 border border-purple-200/50 dark:border-purple-500/20 dark:bg-purple-500/10">
+              <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <UserCheck className="h-3.5 w-3.5 text-purple-500" />
+                5.6 Module Collaboration &amp; Sharing
+              </h4>
+              <p className="text-sm mb-3">
+                When you share a module (e.g. a Todo list) with another user, the following data is used:
+              </p>
+              <ul className="text-sm">
+                <li><strong>Collaborator email addresses:</strong> Used to look up and invite users by email</li>
+                <li><strong>Sharing roles:</strong> Whether each collaborator has View-only or Editor access</li>
+                <li><strong>Invite records:</strong> Pending invitations stored until accepted or revoked</li>
+                <li><strong>In-app notifications:</strong> Notifications sent to invited users to inform them of pending module invites</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">How we use this data:</p>
+              <ul className="text-sm">
+                <li>Grant collaborators access to shared module data according to their role</li>
+                <li>Send in-app notifications when a module invite is sent or accepted</li>
+                <li>Display the shared module in the collaborator's sidebar after they accept</li>
+              </ul>
+
+              <p className="text-sm font-medium mt-3 mb-2">Data visibility and control:</p>
+              <ul className="text-sm">
+                <li>Only you (the module owner) can add or remove collaborators</li>
+                <li>Collaborators with View-only access cannot modify data</li>
+                <li>You can revoke all sharing at any time — collaborators will immediately lose access</li>
+                <li>Collaborator email addresses are not displayed to other collaborators</li>
+              </ul>
+            </div>
+
+            <h4 className="font-semibold text-sm mt-6 mb-2">5.7 We Never Sell Your Data</h4>
             <p>
               We do not sell, rent, or trade your personal information to third parties for marketing purposes.
             </p>

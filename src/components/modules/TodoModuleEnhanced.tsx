@@ -43,10 +43,8 @@ import {
 import { useAuth } from "@/contexts/AuthContext.firebase";
 import { useModuleShare } from "@/hooks/use-module-sharing";
 import { useEisenhower } from "@/hooks/use-eisenhower";
-import { useTodoCalendarIntegration } from "@/hooks/use-todo-calendar-integration";
 import { useMirrorSync } from "@/hooks/use-mirror-sync";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
-import { CalendarEventType } from "@/lib/stores/types";
 import { useModuleSize } from "@/contexts/ModuleSizeContext";
 
 // ── Deadline helpers ──────────────────────────────────────────────────────────
@@ -621,7 +619,6 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
 
   const { getTodosForList, lists, loading, error, addTodo, updateTodo, deleteTodo, updateList, moveTodo } = useTodoLists();
   const { removeItem: removeEisenhowerItem } = useEisenhower();
-  const { handleCreateTodoFromEvent } = useTodoCalendarIntegration();
   const { syncTodoCompletion } = useMirrorSync();
 
   const highlightedItemId = useEventHighlightStore((s) => s.highlightedItemId);
@@ -828,9 +825,16 @@ const TodoModuleEnhanced: React.FC<TodoModuleEnhancedProps> = ({
         else toast.error("Failed to add item to todo list");
         return;
       }
-      if (data.id && data.title) {
-        const eventData: CalendarEventType = { id: data.id, title: data.title, description: data.description || "", startsAt: data.startsAt || new Date().toISOString(), endsAt: data.endsAt || new Date().toISOString(), isTodo: data.isTodo, color: data.color, calendarId: data.calendarId };
-        await handleCreateTodoFromEvent(eventData);
+      if (data.id && data.title && data.source !== 'todo-module' && data.source !== 'eisenhower') {
+        if (!moduleListId) { toast.error("No list selected"); return; }
+        const response = await addTodo(data.title, moduleListId);
+        if (response.success && response.todoId) {
+          await updateTodo(response.todoId, { isCalendarEvent: true, eventId: data.id });
+          toast.success(`"${data.title}" added to todo list`);
+        } else {
+          toast.error("Failed to add to todo list");
+        }
+        return;
       }
     } catch { toast.error("Failed to process drop"); }
   };

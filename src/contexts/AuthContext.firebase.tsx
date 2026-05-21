@@ -29,25 +29,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Sign out after 30 minutes of inactivity
-const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
-const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const;
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const inactivityTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const resetInactivityTimer = React.useCallback(() => {
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(() => {
-      signOutUser().catch(() => {});
-    }, INACTIVITY_TIMEOUT_MS);
-  }, []);
 
   useEffect(() => {
-    // Set up Firebase auth state listener
+    // Set up Firebase auth state listener. Session persistence is handled by
+    // Firebase (indexedDB / browserLocal) — users stay signed in until they
+    // explicitly sign out, matching how comparable productivity apps behave.
     const unsubscribe = onAuthStateChange((firebaseUser) => {
       logger.auth('Auth state changed', { signedIn: !!firebaseUser });
       setUser(firebaseUser);
@@ -59,15 +49,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           email: firebaseUser.email ?? undefined,
           name: firebaseUser.displayName ?? undefined,
         });
-        // Start inactivity timer when user signs in
-        resetInactivityTimer();
-        ACTIVITY_EVENTS.forEach(e => window.addEventListener(e, resetInactivityTimer, { passive: true }));
       } else {
         // Reset PostHog on sign out
         posthog.reset();
-        // Clear timer on sign out
-        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, resetInactivityTimer));
       }
     });
 
@@ -86,10 +70,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       unsubscribe();
       clearTimeout(timeout);
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-      ACTIVITY_EVENTS.forEach(e => window.removeEventListener(e, resetInactivityTimer));
     };
-  }, [resetInactivityTimer]);
+  }, []);
 
   const clearError = () => setError(null);
 

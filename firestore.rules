@@ -103,6 +103,17 @@ service cloud.firestore {
       match /integrations/{integrationId} {
         allow read, write: if isOwner(userId);
       }
+
+      // Canvas LMS — courses + assignments synced by Cloud Functions.
+      // Client reads its own; writes are server-side via admin SDK.
+      match /canvas_courses/{courseId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
+      match /canvas_assignments/{assignmentId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
+      }
     }
 
     // Calendar Events

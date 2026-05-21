@@ -82,21 +82,29 @@ export function useCanvasIntegration() {
 
     const integrationRef = doc(db, 'users', user.uid, 'integrations', 'canvas');
 
-    const unsub = onSnapshot(integrationRef, (snap) => {
-      if (!snap.exists()) {
+    const unsub = onSnapshot(
+      integrationRef,
+      (snap) => {
+        if (!snap.exists()) {
+          setStatus({ connected: false });
+        } else {
+          const d = snap.data();
+          setStatus({
+            connected: true,
+            baseUrl: d.baseUrl,
+            displayName: d.displayName,
+            connectedAt: d.connectedAt,
+            lastSyncAt: d.lastSyncAt ?? null,
+          });
+        }
+        setStatusLoading(false);
+      },
+      (err) => {
+        console.error('[Canvas] integration status listener failed:', err);
         setStatus({ connected: false });
-      } else {
-        const d = snap.data();
-        setStatus({
-          connected: true,
-          baseUrl: d.baseUrl,
-          displayName: d.displayName,
-          connectedAt: d.connectedAt,
-          lastSyncAt: d.lastSyncAt ?? null,
-        });
+        setStatusLoading(false);
       }
-      setStatusLoading(false);
-    });
+    );
 
     return () => unsub();
   }, [user?.uid]);
@@ -116,6 +124,11 @@ export function useCanvasIntegration() {
       query(collection(db, 'users', user.uid, 'canvas_courses'), orderBy('name')),
       (snap) => {
         setCourses(snap.docs.map(d => d.data() as CanvasCourse));
+      },
+      (err) => {
+        console.error('[Canvas] courses listener failed:', err);
+        setCourses([]);
+        setDataLoading(false);
       }
     );
 
@@ -123,6 +136,11 @@ export function useCanvasIntegration() {
       query(collection(db, 'users', user.uid, 'canvas_assignments'), orderBy('dueAt')),
       (snap) => {
         setAssignments(snap.docs.map(d => d.data() as CanvasAssignment));
+        setDataLoading(false);
+      },
+      (err) => {
+        console.error('[Canvas] assignments listener failed:', err);
+        setAssignments([]);
         setDataLoading(false);
       }
     );

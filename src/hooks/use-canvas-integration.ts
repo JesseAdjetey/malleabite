@@ -51,6 +51,22 @@ export interface CanvasAssignment {
   syncedAt: string;
 }
 
+export interface CanvasCalendarEvent {
+  id: string;
+  courseId: string;
+  courseName: string;
+  courseColor: string;
+  title: string;
+  description: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  startAt: string | null;       // ISO
+  endAt: string | null;         // ISO
+  allDay: boolean;
+  htmlUrl: string | null;
+  syncedAt: string;
+}
+
 export interface CanvasAnnouncement {
   id: string;
   courseId: string;
@@ -89,6 +105,7 @@ export function useCanvasIntegration() {
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
   const [announcements, setAnnouncements] = useState<CanvasAnnouncement[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CanvasCalendarEvent[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const [syncing, setSyncing] = useState(false);
@@ -139,6 +156,7 @@ export function useCanvasIntegration() {
       setCourses([]);
       setAssignments([]);
       setAnnouncements([]);
+      setCalendarEvents([]);
       setDataLoading(false);
       return;
     }
@@ -181,10 +199,22 @@ export function useCanvasIntegration() {
       }
     );
 
+    const calendarEventsUnsub = onSnapshot(
+      query(collection(db, 'users', user.uid, 'canvas_calendar_events'), orderBy('startAt')),
+      (snap) => {
+        setCalendarEvents(snap.docs.map(d => d.data() as CanvasCalendarEvent));
+      },
+      (err) => {
+        console.error('[Canvas] calendar events listener failed:', err);
+        setCalendarEvents([]);
+      }
+    );
+
     return () => {
       coursesUnsub();
       assignmentsUnsub();
       announcementsUnsub();
+      calendarEventsUnsub();
     };
   }, [user?.uid, status.connected]);
 
@@ -310,12 +340,31 @@ export function useCanvasIntegration() {
   // Announcements derived data — sorted newest first by the listener already.
   const unreadAnnouncementCount = announcements.filter(a => !a.read).length;
 
+  // Calendar events — listener already sorts ascending by startAt.
+  // Split into upcoming (now → future) and past (today's earlier events count as upcoming).
+  const nowMs = Date.now();
+  const upcomingCalendarEvents = calendarEvents.filter(e => {
+    if (!e.startAt) return false;
+    const end = e.endAt ? new Date(e.endAt).getTime() : new Date(e.startAt).getTime();
+    return end >= nowMs;
+  });
+  const pastCalendarEvents = calendarEvents
+    .filter(e => {
+      if (!e.startAt) return false;
+      const end = e.endAt ? new Date(e.endAt).getTime() : new Date(e.startAt).getTime();
+      return end < nowMs;
+    })
+    .reverse(); // most recent past first
+
   return {
     status,
     statusLoading,
     courses,
     assignments,
     announcements,
+    calendarEvents,
+    upcomingCalendarEvents,
+    pastCalendarEvents,
     activeAssignmentsByCourse,
     allAssignmentsByCourse,
     gradedAssignments,

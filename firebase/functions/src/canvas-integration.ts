@@ -64,6 +64,10 @@ function announcementsCol(uid: string) {
   return getDb().collection('users').doc(uid).collection('canvas_announcements');
 }
 
+function calendarEventsCol(uid: string) {
+  return getDb().collection('users').doc(uid).collection('canvas_calendar_events');
+}
+
 // ─── Canvas API fetch helper ──────────────────────────────────────────────────
 
 async function canvasFetch(baseUrl: string, token: string, path: string): Promise<any[]> {
@@ -101,6 +105,7 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
   courseCount: number;
   assignmentCount: number;
   announcementCount: number;
+  calendarEventCount: number;
   failedCourseCount: number;
 }> {
   const db = getDb();
@@ -306,10 +311,75 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
     if (annDeletes > 0) await deleteAnnBatch.commit();
   }
 
+  // 5. Fetch Canvas-native calendar events (lectures, office hours, exam
+  //    logistics, etc.) — NOT assignment events, which would duplicate the
+  //    Assignments tab. Window: 30 days back through 60 days forward, so
+  //    you can see the recent past for context and plan ahead.
+  let calendarEventCount = 0;
+  const keptCalendarEventIds = new Set<string>();
+
+  if (courses.length > 0) {
+    const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const end = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const contextCodes = courses.map(c => `context_codes[]=course_${c.id}`).join('&');
+    try {
+      const rawEvents = await canvasFetch(
+        baseUrl,
+        token,
+        `/calendar_events?type=event&${contextCodes}&start_date=${start}&end_date=${end}`
+      );
+
+      const evBatch = db.batch();
+      for (const e of rawEvents) {
+        const id = String(e.id);
+        keptCalendarEventIds.add(id);
+
+        const courseId = (e.context_code || '').replace(/^course_/, '');
+        const color = courseColorMap[courseId] || '#8B5CF6';
+        const courseName = courses.find(c => String(c.id) === courseId)?.name || 'Course';
+
+        evBatch.set(calendarEventsCol(uid).doc(id), {
+          id,
+          courseId,
+          courseName,
+          courseColor: color,
+          title: e.title || 'Untitled Event',
+          description: e.description ? stripHtml(e.description) : null,
+          locationName: e.location_name || null,
+          locationAddress: e.location_address || null,
+          startAt: e.start_at || null,
+          endAt: e.end_at || null,
+          allDay: e.all_day === true,
+          htmlUrl: e.html_url || null,
+          syncedAt: now,
+        }, { merge: true });
+        calendarEventCount++;
+      }
+      if (calendarEventCount > 0) await evBatch.commit();
+    } catch (err) {
+      console.warn('[canvas] calendar events fetch failed:', err);
+    }
+
+    // 5b. Purge stale calendar events
+    const evSnap = await calendarEventsCol(uid).get();
+    const deleteEvBatch = db.batch();
+    let evDeletes = 0;
+    evSnap.forEach(doc => {
+      const data = doc.data() as { courseId?: string };
+      const courseGone = data.courseId ? !keptCourseIds.has(data.courseId) : true;
+      if (courseGone || !keptCalendarEventIds.has(doc.id)) {
+        deleteEvBatch.delete(doc.ref);
+        evDeletes++;
+      }
+    });
+    if (evDeletes > 0) await deleteEvBatch.commit();
+  }
+
   return {
     courseCount: courses.length,
     assignmentCount: totalAssignments,
     announcementCount,
+    calendarEventCount,
     failedCourseCount,
   };
 }
@@ -360,6 +430,7 @@ export const canvasConnect = onCall(
     let courseCount = 0;
     let assignmentCount = 0;
     let announcementCount = 0;
+    let calendarEventCount = 0;
     let failedCourseCount = 0;
     let lastSyncError: string | null = null;
     try {
@@ -367,6 +438,7 @@ export const canvasConnect = onCall(
       courseCount = result.courseCount;
       assignmentCount = result.assignmentCount;
       announcementCount = result.announcementCount;
+      calendarEventCount = result.calendarEventCount;
       failedCourseCount = result.failedCourseCount;
     } catch (err: any) {
       lastSyncError = err?.message || 'Sync failed';
@@ -384,6 +456,7 @@ export const canvasConnect = onCall(
       courseCount,
       assignmentCount,
       announcementCount,
+      calendarEventCount,
       failedCourseCount,
       lastSyncError,
       displayName: profile.display_name || profile.name,
@@ -408,6 +481,7 @@ export const canvasSync = onCall(
     let courseCount = 0;
     let assignmentCount = 0;
     let announcementCount = 0;
+    let calendarEventCount = 0;
     let failedCourseCount = 0;
     let lastSyncError: string | null = null;
     try {
@@ -415,6 +489,7 @@ export const canvasSync = onCall(
       courseCount = result.courseCount;
       assignmentCount = result.assignmentCount;
       announcementCount = result.announcementCount;
+      calendarEventCount = result.calendarEventCount;
       failedCourseCount = result.failedCourseCount;
     } catch (err: any) {
       lastSyncError = err?.message || 'Sync failed';
@@ -432,6 +507,7 @@ export const canvasSync = onCall(
       courseCount,
       assignmentCount,
       announcementCount,
+      calendarEventCount,
       failedCourseCount,
       lastSyncError,
     };
@@ -492,6 +568,12 @@ export const canvasDisconnect = onCall(
     const nBatch = db.batch();
     announcements.forEach(ref => nBatch.delete(ref));
     if (announcements.length > 0) await nBatch.commit();
+
+    // Delete all calendar events
+    const events = await calendarEventsCol(uid).listDocuments();
+    const eBatch = db.batch();
+    events.forEach(ref => eBatch.delete(ref));
+    if (events.length > 0) await eBatch.commit();
 
     return { success: true };
   }

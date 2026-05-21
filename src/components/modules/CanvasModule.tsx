@@ -25,6 +25,7 @@ import {
   CalendarDays,
   EyeOff,
   Eye,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -54,7 +55,7 @@ import {
 } from '@/components/ui/select';
 import ModuleContainer from './ModuleContainer';
 import CanvasConnectSheet from './canvas/CanvasConnectSheet';
-import { useCanvasIntegration, CanvasAssignment, CanvasAnnouncement } from '@/hooks/use-canvas-integration';
+import { useCanvasIntegration, CanvasAssignment, CanvasAnnouncement, CanvasCalendarEvent } from '@/hooks/use-canvas-integration';
 import { useTodoLists } from '@/hooks/use-todo-lists';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
@@ -597,6 +598,8 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
     allAssignmentsByCourse,
     gradedAssignments,
     announcements,
+    upcomingCalendarEvents,
+    pastCalendarEvents,
     activeCount,
     noDueDateCount,
     unreadAnnouncementCount,
@@ -774,7 +777,21 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
                 unreadCount={unreadAnnouncementCount}
               />
             )}
-            {tab === 'calendar' && <ComingSoonTab Icon={CalendarDays} label="Canvas Calendar" />}
+            {tab === 'calendar' && (
+              <CalendarTab
+                dataLoading={dataLoading}
+                upcoming={upcomingCalendarEvents}
+                past={pastCalendarEvents}
+                onAddToCalendar={(event) => {
+                  // Mirror this Canvas event into the local calendar via EventForm,
+                  // reusing the same flow Assignments use.
+                  const start = event.startAt ? new Date(event.startAt) : new Date();
+                  const startTime = `${start.getHours().toString().padStart(2, '0')}:${start.getMinutes().toString().padStart(2, '0')}`;
+                  setEventFormData({ date: start, startTime, title: event.title });
+                  setEventFormOpen(true);
+                }}
+              />
+            )}
           </div>
         )}
       </ModuleContainer>
@@ -1195,16 +1212,170 @@ function AnnouncementsTab({
   );
 }
 
-// ─── Coming-soon stub tab ──────────────────────────────────────────────────────
+// ─── Calendar tab body ─────────────────────────────────────────────────────────
 
-function ComingSoonTab({ Icon, label }: { Icon: typeof BookOpen; label: string }) {
+interface CalendarTabProps {
+  dataLoading: boolean;
+  upcoming: CanvasCalendarEvent[];
+  past: CanvasCalendarEvent[];
+  onAddToCalendar: (event: CanvasCalendarEvent) => void;
+}
+
+function CalendarTab({ dataLoading, upcoming, past, onAddToCalendar }: CalendarTabProps) {
+  const [showPast, setShowPast] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <RefreshCw size={16} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (upcoming.length === 0 && past.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8 text-center">
+        <CalendarDays size={24} className="text-muted-foreground" />
+        <p className="text-sm font-medium">No Canvas events</p>
+        <p className="text-xs text-muted-foreground max-w-[220px]">
+          Canvas-native events (lectures, office hours, exam logistics) will appear here when your school posts them.
+        </p>
+      </div>
+    );
+  }
+
+  const items = showPast ? past : upcoming;
+
+  // Group by day so the feed reads like a calendar.
+  const byDay = new Map<string, CanvasCalendarEvent[]>();
+  for (const e of items) {
+    if (!e.startAt) continue;
+    const dayKey = dayjs(e.startAt).format('YYYY-MM-DD');
+    if (!byDay.has(dayKey)) byDay.set(dayKey, []);
+    byDay.get(dayKey)!.push(e);
+  }
+
+  const formatRange = (e: CanvasCalendarEvent): string => {
+    if (e.allDay) return 'All day';
+    if (!e.startAt) return '';
+    const start = dayjs(e.startAt);
+    const end = e.endAt ? dayjs(e.endAt) : null;
+    if (end && end.diff(start, 'minute') > 0) {
+      return `${start.format('h:mm A')} – ${end.format('h:mm A')}`;
+    }
+    return start.format('h:mm A');
+  };
+
   return (
-    <div className="flex flex-col items-center gap-2 py-10 text-center">
-      <Icon size={22} className="text-muted-foreground/60" />
-      <p className="text-sm font-medium">{label}</p>
-      <p className="text-[11px] text-muted-foreground max-w-[220px]">
-        Coming soon. Assignments and grades are live now.
-      </p>
+    <div className="px-1 pt-2 pb-2">
+      {/* Mode row */}
+      <div className="flex items-center justify-between px-2 mb-2 gap-2">
+        <span className="text-[10px] text-muted-foreground">
+          {items.length} {items.length === 1 ? 'event' : 'events'}{showPast ? ' (past)' : ''}
+        </span>
+        {past.length > 0 && (
+          <button
+            onClick={() => setShowPast(v => !v)}
+            className="text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            {showPast ? 'Show upcoming' : `Show past (${past.length})`}
+          </button>
+        )}
+      </div>
+
+      {byDay.size === 0 ? (
+        <div className="flex flex-col items-center gap-1 py-6 text-center">
+          <p className="text-xs text-muted-foreground">
+            {showPast ? 'No past events in range' : 'No upcoming events'}
+          </p>
+        </div>
+      ) : (
+        Array.from(byDay.entries()).map(([day, events]) => {
+          const d = dayjs(day);
+          const isToday = d.isSame(dayjs(), 'day');
+          const isTomorrow = d.isSame(dayjs().add(1, 'day'), 'day');
+          const dayLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : d.format('ddd, MMM D');
+
+          return (
+            <div key={day} className="mb-2">
+              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                {dayLabel}
+              </div>
+              <div className="pl-1">
+                {events.map(e => {
+                  const expanded = expandedId === e.id;
+                  return (
+                    <div key={e.id} className="rounded-md hover:bg-white/5">
+                      <button
+                        onClick={() => setExpandedId(expanded ? null : e.id)}
+                        className="w-full flex items-start gap-2 px-2 py-1.5 text-left"
+                        aria-expanded={expanded}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: e.courseColor }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-foreground/90 truncate">{e.title}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70 mt-0.5">
+                            <Clock size={9} />
+                            <span>{formatRange(e)}</span>
+                            <span className="truncate">· {e.courseName}</span>
+                            {e.locationName && (
+                              <>
+                                <MapPin size={9} />
+                                <span className="truncate">{e.locationName}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+
+                      {expanded && (
+                        <div className="px-3 pb-2 pt-0 ml-3 border-l-2 space-y-2" style={{ borderColor: e.courseColor }}>
+                          {e.description ? (
+                            <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-8 pl-2">
+                              {e.description}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground/60 italic pl-2">No description</p>
+                          )}
+
+                          {e.locationAddress && e.locationAddress !== e.locationName && (
+                            <p className="text-[10px] text-muted-foreground/70 pl-2">
+                              <MapPin size={9} className="inline mr-1" />
+                              {e.locationAddress}
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap gap-1.5 pt-1 pl-2">
+                            <button
+                              onClick={(ev) => { ev.stopPropagation(); onAddToCalendar(e); }}
+                              className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition-colors"
+                            >
+                              <Calendar size={10} />
+                              Add to my calendar
+                            </button>
+                            {e.htmlUrl && (
+                              <button
+                                onClick={(ev) => { ev.stopPropagation(); window.open(e.htmlUrl!, '_blank'); }}
+                                className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                              >
+                                <ExternalLink size={10} />
+                                Open in Canvas
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

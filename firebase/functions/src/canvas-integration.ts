@@ -60,6 +60,10 @@ function assignmentsCol(uid: string) {
   return getDb().collection('users').doc(uid).collection('canvas_assignments');
 }
 
+function announcementsCol(uid: string) {
+  return getDb().collection('users').doc(uid).collection('canvas_announcements');
+}
+
 // ─── Canvas API fetch helper ──────────────────────────────────────────────────
 
 async function canvasFetch(baseUrl: string, token: string, path: string): Promise<any[]> {
@@ -96,6 +100,7 @@ async function canvasFetch(baseUrl: string, token: string, path: string): Promis
 async function performSync(uid: string, baseUrl: string, token: string): Promise<{
   courseCount: number;
   assignmentCount: number;
+  announcementCount: number;
   failedCourseCount: number;
 }> {
   const db = getDb();
@@ -231,7 +236,82 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
   });
   if (assignmentDeletes > 0) await deleteAssignmentsBatch.commit();
 
-  return { courseCount: courses.length, assignmentCount: totalAssignments, failedCourseCount };
+  // 4. Fetch announcements across all current courses (one batched API call).
+  //    Canvas's /announcements endpoint accepts multiple context_codes; we pull
+  //    everything posted in the last 60 days. Existing `read` flags are
+  //    preserved so a sync doesn't mark items unread again.
+  let announcementCount = 0;
+  const keptAnnouncementIds = new Set<string>();
+
+  if (courses.length > 0) {
+    const start = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const contextCodes = courses.map(c => `context_codes[]=course_${c.id}`).join('&');
+    try {
+      const rawAnnouncements = await canvasFetch(
+        baseUrl,
+        token,
+        `/announcements?${contextCodes}&start_date=${encodeURIComponent(start)}`
+      );
+
+      // Fetch existing `read` flags so we don't overwrite them.
+      const existingReadMap = new Map<string, boolean>();
+      const existingAnnSnap = await announcementsCol(uid).get();
+      existingAnnSnap.forEach(doc => {
+        existingReadMap.set(doc.id, (doc.data() as { read?: boolean }).read === true);
+      });
+
+      const annBatch = db.batch();
+      for (const a of rawAnnouncements) {
+        const id = String(a.id);
+        keptAnnouncementIds.add(id);
+
+        // Canvas returns context_code like "course_12345"; map back to our color.
+        const courseId = (a.context_code || '').replace(/^course_/, '');
+        const color = courseColorMap[courseId] || '#8B5CF6';
+        const courseName = courses.find(c => String(c.id) === courseId)?.name || 'Course';
+
+        annBatch.set(announcementsCol(uid).doc(id), {
+          id,
+          courseId,
+          courseName,
+          courseColor: color,
+          title: a.title || 'Untitled Announcement',
+          message: a.message ? stripHtml(a.message) : '',
+          htmlUrl: a.html_url || null,
+          author: a.user_name || a.author?.display_name || null,
+          postedAt: a.posted_at || a.created_at || null,
+          read: existingReadMap.get(id) ?? false,
+          syncedAt: now,
+        }, { merge: true });
+        announcementCount++;
+      }
+      if (announcementCount > 0) await annBatch.commit();
+    } catch (err) {
+      // Announcements failing should not fail the whole sync; log and move on.
+      console.warn('[canvas] announcements fetch failed:', err);
+    }
+
+    // 4b. Delete cached announcements no longer returned OR for removed courses.
+    const annSnap = await announcementsCol(uid).get();
+    const deleteAnnBatch = db.batch();
+    let annDeletes = 0;
+    annSnap.forEach(doc => {
+      const data = doc.data() as { courseId?: string };
+      const courseGone = data.courseId ? !keptCourseIds.has(data.courseId) : true;
+      if (courseGone || !keptAnnouncementIds.has(doc.id)) {
+        deleteAnnBatch.delete(doc.ref);
+        annDeletes++;
+      }
+    });
+    if (annDeletes > 0) await deleteAnnBatch.commit();
+  }
+
+  return {
+    courseCount: courses.length,
+    assignmentCount: totalAssignments,
+    announcementCount,
+    failedCourseCount,
+  };
 }
 
 function stripHtml(html: string): string {
@@ -279,12 +359,14 @@ export const canvasConnect = onCall(
     // Initial sync
     let courseCount = 0;
     let assignmentCount = 0;
+    let announcementCount = 0;
     let failedCourseCount = 0;
     let lastSyncError: string | null = null;
     try {
       const result = await performSync(uid, cleanUrl, token.trim());
       courseCount = result.courseCount;
       assignmentCount = result.assignmentCount;
+      announcementCount = result.announcementCount;
       failedCourseCount = result.failedCourseCount;
     } catch (err: any) {
       lastSyncError = err?.message || 'Sync failed';
@@ -301,6 +383,7 @@ export const canvasConnect = onCall(
       success: true,
       courseCount,
       assignmentCount,
+      announcementCount,
       failedCourseCount,
       lastSyncError,
       displayName: profile.display_name || profile.name,
@@ -324,12 +407,14 @@ export const canvasSync = onCall(
 
     let courseCount = 0;
     let assignmentCount = 0;
+    let announcementCount = 0;
     let failedCourseCount = 0;
     let lastSyncError: string | null = null;
     try {
       const result = await performSync(uid, data.baseUrl, token);
       courseCount = result.courseCount;
       assignmentCount = result.assignmentCount;
+      announcementCount = result.announcementCount;
       failedCourseCount = result.failedCourseCount;
     } catch (err: any) {
       lastSyncError = err?.message || 'Sync failed';
@@ -342,7 +427,14 @@ export const canvasSync = onCall(
       lastSyncFailedCourseCount: failedCourseCount,
     });
 
-    return { success: !lastSyncError, courseCount, assignmentCount, failedCourseCount, lastSyncError };
+    return {
+      success: !lastSyncError,
+      courseCount,
+      assignmentCount,
+      announcementCount,
+      failedCourseCount,
+      lastSyncError,
+    };
   }
 );
 
@@ -394,6 +486,12 @@ export const canvasDisconnect = onCall(
     const aBatch = db.batch();
     assignments.forEach(ref => aBatch.delete(ref));
     await aBatch.commit();
+
+    // Delete all announcements
+    const announcements = await announcementsCol(uid).listDocuments();
+    const nBatch = db.batch();
+    announcements.forEach(ref => nBatch.delete(ref));
+    if (announcements.length > 0) await nBatch.commit();
 
     return { success: true };
   }

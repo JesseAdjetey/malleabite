@@ -54,7 +54,7 @@ import {
 } from '@/components/ui/select';
 import ModuleContainer from './ModuleContainer';
 import CanvasConnectSheet from './canvas/CanvasConnectSheet';
-import { useCanvasIntegration, CanvasAssignment } from '@/hooks/use-canvas-integration';
+import { useCanvasIntegration, CanvasAssignment, CanvasAnnouncement } from '@/hooks/use-canvas-integration';
 import { useTodoLists } from '@/hooks/use-todo-lists';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { useSidebarStore } from '@/lib/stores/sidebar-store';
@@ -533,11 +533,20 @@ const TABS: { key: TabKey; label: string; Icon: typeof BookOpen }[] = [
   { key: 'calendar', label: 'Calendar', Icon: CalendarDays },
 ];
 
-function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {
+function TabBar({
+  active,
+  onChange,
+  badges,
+}: {
+  active: TabKey;
+  onChange: (k: TabKey) => void;
+  badges?: Partial<Record<TabKey, number>>;
+}) {
   return (
     <div className="flex items-center gap-0.5 px-1 pt-1 border-b border-white/5 overflow-x-auto">
       {TABS.map(({ key, label, Icon }) => {
         const isActive = key === active;
+        const badge = badges?.[key];
         return (
           <button
             key={key}
@@ -553,6 +562,11 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) =>
           >
             <Icon size={11} />
             {label}
+            {badge ? (
+              <span className="inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full bg-[#E66000] text-white text-[9px] font-semibold leading-none">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            ) : null}
           </button>
         );
       })}
@@ -582,14 +596,18 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
     activeAssignmentsByCourse,
     allAssignmentsByCourse,
     gradedAssignments,
+    announcements,
     activeCount,
     noDueDateCount,
+    unreadAnnouncementCount,
     dataLoading,
     syncing,
     connecting,
     connect,
     sync,
     disconnect,
+    markAnnouncementRead,
+    markAllAnnouncementsRead,
   } = useCanvasIntegration();
 
   const [tab, setTab] = useState<TabKey>('assignments');
@@ -692,7 +710,11 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
         ) : (
           // ── Connected: tabbed view ──
           <div className="flex flex-col">
-            <TabBar active={tab} onChange={setTab} />
+            <TabBar
+              active={tab}
+              onChange={setTab}
+              badges={{ announcements: unreadAnnouncementCount }}
+            />
 
             {/* Sync error pill, shown across all tabs */}
             {(status.lastSyncError || (status.lastSyncFailedCourseCount ?? 0) > 0) && (
@@ -743,7 +765,15 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
               />
             )}
 
-            {tab === 'announcements' && <ComingSoonTab Icon={Megaphone} label="Announcements" />}
+            {tab === 'announcements' && (
+              <AnnouncementsTab
+                dataLoading={dataLoading}
+                announcements={announcements}
+                onMarkRead={markAnnouncementRead}
+                onMarkAllRead={markAllAnnouncementsRead}
+                unreadCount={unreadAnnouncementCount}
+              />
+            )}
             {tab === 'calendar' && <ComingSoonTab Icon={CalendarDays} label="Canvas Calendar" />}
           </div>
         )}
@@ -980,6 +1010,187 @@ function GradesTab({ dataLoading, assignments }: { dataLoading: boolean; assignm
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Announcements tab body ────────────────────────────────────────────────────
+
+interface AnnouncementsTabProps {
+  dataLoading: boolean;
+  announcements: CanvasAnnouncement[];
+  unreadCount: number;
+  onMarkRead: (id: string) => void;
+  onMarkAllRead: () => void;
+}
+
+function AnnouncementsTab({
+  dataLoading,
+  announcements,
+  unreadCount,
+  onMarkRead,
+  onMarkAllRead,
+}: AnnouncementsTabProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [courseFilter, setCourseFilter] = useState<string | null>(null);
+
+  if (dataLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <RefreshCw size={16} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (announcements.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8 text-center">
+        <Megaphone size={24} className="text-muted-foreground" />
+        <p className="text-sm font-medium">No announcements</p>
+        <p className="text-xs text-muted-foreground">Posts from the last 60 days will appear here</p>
+      </div>
+    );
+  }
+
+  // Unique courses present in announcements, for the chip filter row.
+  const courseChips = Array.from(
+    new Map(announcements.map(a => [a.courseId, { id: a.courseId, name: a.courseName, color: a.courseColor }])).values()
+  );
+
+  const visible = courseFilter
+    ? announcements.filter(a => a.courseId === courseFilter)
+    : announcements;
+
+  const handleToggle = (a: CanvasAnnouncement) => {
+    const next = expandedId === a.id ? null : a.id;
+    setExpandedId(next);
+    if (next && !a.read) onMarkRead(a.id);
+  };
+
+  return (
+    <div className="px-1 pt-2 pb-2">
+      {/* Filter + actions row */}
+      <div className="flex items-center justify-between px-2 mb-2 gap-2">
+        <span className="text-[10px] text-muted-foreground">
+          {visible.length} {visible.length === 1 ? 'post' : 'posts'}
+          {unreadCount > 0 && (
+            <span className="text-[#E66000] ml-1">· {unreadCount} unread</span>
+          )}
+        </span>
+        {unreadCount > 0 && (
+          <button
+            onClick={onMarkAllRead}
+            className="text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
+          >
+            Mark all read
+          </button>
+        )}
+      </div>
+
+      {/* Course filter chips */}
+      {courseChips.length > 1 && (
+        <div className="flex items-center gap-1 px-2 mb-2 overflow-x-auto">
+          <button
+            onClick={() => setCourseFilter(null)}
+            className={cn(
+              'text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap transition-colors',
+              courseFilter === null
+                ? 'bg-white/10 text-foreground'
+                : 'bg-white/5 text-muted-foreground hover:bg-white/10'
+            )}
+          >
+            All
+          </button>
+          {courseChips.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setCourseFilter(courseFilter === c.id ? null : c.id)}
+              className={cn(
+                'inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap transition-colors max-w-[140px]',
+                courseFilter === c.id
+                  ? 'bg-white/10 text-foreground'
+                  : 'bg-white/5 text-muted-foreground hover:bg-white/10'
+              )}
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.color }} />
+              <span className="truncate">{c.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Feed */}
+      <div className="space-y-0.5">
+        {visible.map(a => {
+          const expanded = expandedId === a.id;
+          const when = a.postedAt ? dayjs(a.postedAt) : null;
+          const ago = when ? (() => {
+            const mins = dayjs().diff(when, 'minute');
+            if (mins < 1) return 'just now';
+            if (mins < 60) return `${mins}m ago`;
+            const hrs = dayjs().diff(when, 'hour');
+            if (hrs < 24) return `${hrs}h ago`;
+            const days = dayjs().diff(when, 'day');
+            if (days < 7) return `${days}d ago`;
+            return when.format('MMM D');
+          })() : null;
+
+          return (
+            <div key={a.id} className="rounded-md hover:bg-white/5">
+              <button
+                onClick={() => handleToggle(a)}
+                className="w-full flex items-start gap-2 px-2 py-1.5 text-left"
+                aria-expanded={expanded}
+              >
+                {/* Unread dot */}
+                <span
+                  className={cn(
+                    'mt-1 w-1.5 h-1.5 rounded-full shrink-0',
+                    a.read ? 'bg-transparent' : 'bg-[#E66000]'
+                  )}
+                  aria-label={a.read ? 'Read' : 'Unread'}
+                />
+                <span className="w-1.5 h-1.5 rounded-full mt-1 shrink-0" style={{ background: a.courseColor }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('text-xs truncate', a.read ? 'text-foreground/80' : 'text-foreground font-semibold')}>
+                      {a.title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70 mt-0.5">
+                    <span className="truncate max-w-[100px]">{a.courseName}</span>
+                    {a.author && <span>· {a.author}</span>}
+                    {ago && <span>· {ago}</span>}
+                  </div>
+                </div>
+              </button>
+
+              {expanded && (
+                <div className="px-3 pb-2 pt-0 ml-3 border-l-2 space-y-2" style={{ borderColor: a.courseColor }}>
+                  {a.message ? (
+                    <p className="text-[11px] text-muted-foreground whitespace-pre-wrap line-clamp-12 pl-2">
+                      {a.message}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground/60 italic pl-2">No body content</p>
+                  )}
+                  {a.htmlUrl && (
+                    <div className="pl-2 pt-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); window.open(a.htmlUrl!, '_blank'); }}
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                      >
+                        <ExternalLink size={10} />
+                        Open in Canvas
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

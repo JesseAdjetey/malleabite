@@ -14,6 +14,8 @@ import {
   orderBy,
   doc,
   getDoc,
+  updateDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { db } from '@/integrations/firebase/config';
@@ -49,6 +51,20 @@ export interface CanvasAssignment {
   syncedAt: string;
 }
 
+export interface CanvasAnnouncement {
+  id: string;
+  courseId: string;
+  courseName: string;
+  courseColor: string;
+  title: string;
+  message: string;            // already HTML-stripped server-side
+  htmlUrl: string | null;
+  author: string | null;
+  postedAt: string | null;    // ISO string
+  read: boolean;
+  syncedAt: string;
+}
+
 export interface CanvasStatus {
   connected: boolean;
   baseUrl?: string;
@@ -72,6 +88,7 @@ export function useCanvasIntegration() {
 
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
+  const [announcements, setAnnouncements] = useState<CanvasAnnouncement[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const [syncing, setSyncing] = useState(false);
@@ -121,6 +138,7 @@ export function useCanvasIntegration() {
     if (!user?.uid || !status.connected) {
       setCourses([]);
       setAssignments([]);
+      setAnnouncements([]);
       setDataLoading(false);
       return;
     }
@@ -152,9 +170,21 @@ export function useCanvasIntegration() {
       }
     );
 
+    const announcementsUnsub = onSnapshot(
+      query(collection(db, 'users', user.uid, 'canvas_announcements'), orderBy('postedAt', 'desc')),
+      (snap) => {
+        setAnnouncements(snap.docs.map(d => d.data() as CanvasAnnouncement));
+      },
+      (err) => {
+        console.error('[Canvas] announcements listener failed:', err);
+        setAnnouncements([]);
+      }
+    );
+
     return () => {
       coursesUnsub();
       assignmentsUnsub();
+      announcementsUnsub();
     };
   }, [user?.uid, status.connected]);
 
@@ -191,6 +221,34 @@ export function useCanvasIntegration() {
       setSyncing(false);
     }
   }, [user?.uid, syncing, functions]);
+
+  // ── Announcements: mark read ────────────────────────────────────────────────
+  const markAnnouncementRead = useCallback(async (announcementId: string) => {
+    if (!user?.uid) return;
+    try {
+      await updateDoc(
+        doc(db, 'users', user.uid, 'canvas_announcements', announcementId),
+        { read: true }
+      );
+    } catch (err) {
+      console.error('[Canvas] failed to mark announcement read:', err);
+    }
+  }, [user?.uid]);
+
+  const markAllAnnouncementsRead = useCallback(async () => {
+    if (!user?.uid) return;
+    const unread = announcements.filter(a => !a.read);
+    if (unread.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      for (const a of unread) {
+        batch.update(doc(db, 'users', user.uid!, 'canvas_announcements', a.id), { read: true });
+      }
+      await batch.commit();
+    } catch (err) {
+      console.error('[Canvas] failed to mark all announcements read:', err);
+    }
+  }, [user?.uid, announcements]);
 
   // ── Disconnect ──────────────────────────────────────────────────────────────
   const disconnect = useCallback(async () => {
@@ -249,21 +307,28 @@ export function useCanvasIntegration() {
       return bt - at;
     });
 
+  // Announcements derived data — sorted newest first by the listener already.
+  const unreadAnnouncementCount = announcements.filter(a => !a.read).length;
+
   return {
     status,
     statusLoading,
     courses,
     assignments,
+    announcements,
     activeAssignmentsByCourse,
     allAssignmentsByCourse,
     gradedAssignments,
     activeCount,
     noDueDateCount,
+    unreadAnnouncementCount,
     dataLoading,
     syncing,
     connecting,
     connect,
     sync,
     disconnect,
+    markAnnouncementRead,
+    markAllAnnouncementsRead,
   };
 }

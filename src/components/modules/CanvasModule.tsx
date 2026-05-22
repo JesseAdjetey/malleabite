@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/select';
 import ModuleContainer from './ModuleContainer';
 import CanvasConnectSheet from './canvas/CanvasConnectSheet';
+import SubmitAssignmentDialog from './canvas/SubmitAssignmentDialog';
 import { useCanvasIntegration, CanvasAssignment, CanvasAnnouncement, CanvasCalendarEvent } from '@/hooks/use-canvas-integration';
 import { useTodoLists } from '@/hooks/use-todo-lists';
 import { useAuth } from '@/contexts/AuthContext.firebase';
@@ -332,7 +333,10 @@ interface AssignmentRowProps {
   onAddToCalendar: (a: CanvasAssignment) => void;
   onCreateTodoItem: (a: CanvasAssignment) => void;
   onCreateTodoList: (a: CanvasAssignment) => void;
+  onSubmit: (a: CanvasAssignment) => void;
 }
+
+const SUBMITTABLE_TYPES = new Set(['online_text_entry', 'online_url', 'online_upload']);
 
 function AssignmentRow({
   assignment,
@@ -341,7 +345,11 @@ function AssignmentRow({
   onAddToCalendar,
   onCreateTodoItem,
   onCreateTodoList,
+  onSubmit,
 }: AssignmentRowProps) {
+  const canSubmit =
+    !assignment.submitted &&
+    assignment.submissionTypes.some(t => SUBMITTABLE_TYPES.has(t));
   const { Icon, label: typeLabel } = iconForSubmissionTypes(assignment.submissionTypes);
 
   const copyDueDate = () => {
@@ -392,6 +400,15 @@ function AssignmentRow({
               </div>
 
               <div className="flex flex-wrap gap-1.5 pt-1">
+                {canSubmit && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSubmit(assignment); }}
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-[#E66000] hover:bg-[#E66000]/90 text-white font-medium transition-colors"
+                  >
+                    <Upload size={10} />
+                    Submit
+                  </button>
+                )}
                 {assignment.htmlUrl && (
                   <button
                     onClick={(e) => { e.stopPropagation(); window.open(assignment.htmlUrl!, '_blank'); }}
@@ -421,6 +438,18 @@ function AssignmentRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
+        {canSubmit && (
+          <>
+            <ContextMenuItem
+              className="flex items-center gap-2 text-xs cursor-pointer text-[#E66000]"
+              onClick={() => onSubmit(assignment)}
+            >
+              <Upload size={13} />
+              Submit to Canvas
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem
           className="flex items-center gap-2 text-xs cursor-pointer"
           onClick={() => onAddToCalendar(assignment)}
@@ -477,6 +506,7 @@ interface CourseSectionProps {
   onAddToCalendar: (a: CanvasAssignment) => void;
   onCreateTodoItem: (a: CanvasAssignment) => void;
   onCreateTodoList: (a: CanvasAssignment) => void;
+  onSubmit: (a: CanvasAssignment) => void;
 }
 
 function CourseSection({
@@ -487,6 +517,7 @@ function CourseSection({
   onAddToCalendar,
   onCreateTodoItem,
   onCreateTodoList,
+  onSubmit,
 }: CourseSectionProps) {
   const [open, setOpen] = useState(true);
 
@@ -515,6 +546,7 @@ function CourseSection({
               onAddToCalendar={onAddToCalendar}
               onCreateTodoItem={onCreateTodoItem}
               onCreateTodoList={onCreateTodoList}
+              onSubmit={onSubmit}
             />
           ))}
         </div>
@@ -611,6 +643,7 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
     disconnect,
     markAnnouncementRead,
     markAllAnnouncementsRead,
+    submitAssignment,
   } = useCanvasIntegration();
 
   const [tab, setTab] = useState<TabKey>('assignments');
@@ -622,6 +655,7 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
   const [eventFormData, setEventFormData] = useState<{ date: Date; startTime: string; title: string } | null>(null);
   const [todoItemDialogOpen, setTodoItemDialogOpen] = useState(false);
   const [todoListDialogOpen, setTodoListDialogOpen] = useState(false);
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<CanvasAssignment | null>(null);
 
   const handleAddToCalendar = useCallback((assignment: CanvasAssignment) => {
@@ -648,6 +682,11 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
   const handleCreateTodoList = useCallback((assignment: CanvasAssignment) => {
     setSelectedAssignment(assignment);
     setTodoListDialogOpen(true);
+  }, []);
+
+  const handleOpenSubmit = useCallback((assignment: CanvasAssignment) => {
+    setSelectedAssignment(assignment);
+    setSubmitDialogOpen(true);
   }, []);
 
   // Auto-resync on open if data is older than 30 minutes
@@ -757,6 +796,7 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
                 onAddToCalendar={handleAddToCalendar}
                 onCreateTodoItem={handleCreateTodoItem}
                 onCreateTodoList={handleCreateTodoList}
+                onSubmit={handleOpenSubmit}
                 onDisconnect={disconnect}
               />
             )}
@@ -826,6 +866,13 @@ const CanvasModule: React.FC<CanvasModuleProps> = (props) => {
         onClose={() => setTodoListDialogOpen(false)}
         assignment={selectedAssignment}
       />
+
+      <SubmitAssignmentDialog
+        open={submitDialogOpen}
+        onClose={() => setSubmitDialogOpen(false)}
+        assignment={selectedAssignment}
+        onSubmit={submitAssignment}
+      />
     </>
   );
 };
@@ -847,6 +894,7 @@ interface AssignmentsTabProps {
   onAddToCalendar: (a: CanvasAssignment) => void;
   onCreateTodoItem: (a: CanvasAssignment) => void;
   onCreateTodoList: (a: CanvasAssignment) => void;
+  onSubmit: (a: CanvasAssignment) => void;
   onDisconnect: () => void;
 }
 
@@ -865,6 +913,7 @@ function AssignmentsTab({
   onAddToCalendar,
   onCreateTodoItem,
   onCreateTodoList,
+  onSubmit,
   onDisconnect,
 }: AssignmentsTabProps) {
   if (dataLoading) {
@@ -950,6 +999,7 @@ function AssignmentsTab({
           onAddToCalendar={onAddToCalendar}
           onCreateTodoItem={onCreateTodoItem}
           onCreateTodoList={onCreateTodoList}
+          onSubmit={onSubmit}
         />
       ))}
 

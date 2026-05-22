@@ -67,6 +67,8 @@ export {
   canvasSync,
   canvasGetStatus,
   canvasDisconnect,
+  canvasGetUploadUrl,
+  canvasSubmit,
   canvasSyncScheduled,
 } from './canvas-integration';
 

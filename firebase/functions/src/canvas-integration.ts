@@ -579,6 +579,159 @@ export const canvasDisconnect = onCall(
   }
 );
 
+// ─── canvasGetUploadUrl ────────────────────────────────────────────────────────
+// Step 1 of Canvas's file-upload protocol, executed server-side so we can use
+// the user's encrypted token without ever exposing it to the browser. Returns
+// a signed upload_url + upload_params; the client then POSTs the file bytes
+// directly to that URL (step 2), bypassing this Cloud Function entirely.
+
+export const canvasGetUploadUrl = onCall(
+  { secrets: [canvasEncryptionKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in');
+
+    const { assignmentId, name, size, contentType } = request.data as {
+      assignmentId: string;
+      name: string;
+      size: number;
+      contentType: string;
+    };
+    if (!assignmentId || !name || typeof size !== 'number') {
+      throw new HttpsError('invalid-argument', 'assignmentId, name, size required');
+    }
+    if (size <= 0 || size > 500 * 1024 * 1024) {
+      // 500MB is well above any sane assignment upload.
+      throw new HttpsError('invalid-argument', 'File size out of range');
+    }
+
+    const intSnap = await integrationDoc(uid).get();
+    if (!intSnap.exists) throw new HttpsError('failed-precondition', 'Canvas not connected');
+    const intData = intSnap.data()!;
+    const token = decryptString(intData.encryptedToken);
+    const baseUrl = intData.baseUrl as string;
+
+    // Look up courseId from the cached assignment doc.
+    const aSnap = await assignmentsCol(uid).doc(String(assignmentId)).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assignment not found');
+    const courseId = (aSnap.data() as { courseId?: string }).courseId;
+    if (!courseId) throw new HttpsError('failed-precondition', 'Assignment missing course');
+
+    const url = `${baseUrl}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self/files`;
+    const body = new URLSearchParams({
+      name,
+      size: String(size),
+      ...(contentType ? { content_type: contentType } : {}),
+    });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new HttpsError('internal', `Canvas upload URL request failed: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const data = await res.json() as { upload_url: string; upload_params: Record<string, string> };
+    if (!data.upload_url || !data.upload_params) {
+      throw new HttpsError('internal', 'Canvas did not return upload_url/upload_params');
+    }
+    return { uploadUrl: data.upload_url, uploadParams: data.upload_params };
+  }
+);
+
+// ─── canvasSubmit ──────────────────────────────────────────────────────────────
+// Performs the actual submission. For online_upload, the file IDs returned
+// by step 2 of the upload flow are passed in. After submitting, we re-fetch
+// the single assignment from Canvas so the UI's `submitted` flag flips
+// immediately without waiting for the next full sync.
+
+export const canvasSubmit = onCall(
+  { secrets: [canvasEncryptionKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in');
+
+    const { assignmentId, submissionType, body: textBody, url: submissionUrl, fileIds } = request.data as {
+      assignmentId: string;
+      submissionType: 'online_text_entry' | 'online_url' | 'online_upload';
+      body?: string;
+      url?: string;
+      fileIds?: string[];
+    };
+    if (!assignmentId || !submissionType) {
+      throw new HttpsError('invalid-argument', 'assignmentId and submissionType required');
+    }
+    if (submissionType === 'online_text_entry' && !textBody?.trim()) {
+      throw new HttpsError('invalid-argument', 'Text submission requires body');
+    }
+    if (submissionType === 'online_url' && !submissionUrl?.trim()) {
+      throw new HttpsError('invalid-argument', 'URL submission requires url');
+    }
+    if (submissionType === 'online_upload' && (!fileIds || fileIds.length === 0)) {
+      throw new HttpsError('invalid-argument', 'File submission requires at least one fileId');
+    }
+
+    const intSnap = await integrationDoc(uid).get();
+    if (!intSnap.exists) throw new HttpsError('failed-precondition', 'Canvas not connected');
+    const intData = intSnap.data()!;
+    const token = decryptString(intData.encryptedToken);
+    const baseUrl = intData.baseUrl as string;
+
+    const aSnap = await assignmentsCol(uid).doc(String(assignmentId)).get();
+    if (!aSnap.exists) throw new HttpsError('not-found', 'Assignment not found');
+    const aData = aSnap.data() as { courseId?: string };
+    if (!aData.courseId) throw new HttpsError('failed-precondition', 'Assignment missing course');
+
+    // Canvas accepts the submission via POST with submission[...] params.
+    const form = new URLSearchParams();
+    form.append('submission[submission_type]', submissionType);
+    if (submissionType === 'online_text_entry') {
+      form.append('submission[body]', textBody!.trim());
+    } else if (submissionType === 'online_url') {
+      form.append('submission[url]', submissionUrl!.trim());
+    } else {
+      for (const id of fileIds!) form.append('submission[file_ids][]', String(id));
+    }
+
+    const submitUrl = `${baseUrl}/api/v1/courses/${aData.courseId}/assignments/${assignmentId}/submissions`;
+    const res = await fetch(submitUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      // Surface Canvas's actual error message (locked, late not allowed, etc.).
+      throw new HttpsError('internal', `Canvas rejected submission: ${res.status} ${text.slice(0, 300)}`);
+    }
+
+    // Refresh just this assignment so `submitted` flips without a full resync.
+    try {
+      const refRes = await fetch(
+        `${baseUrl}/api/v1/courses/${aData.courseId}/assignments/${assignmentId}?include[]=submission`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+      );
+      if (refRes.ok) {
+        const fresh = await refRes.json() as any;
+        const submission = fresh.submission;
+        await assignmentsCol(uid).doc(String(assignmentId)).set({
+          submitted: submission ? ['submitted', 'graded'].includes(submission.workflow_state) : true,
+          score: submission?.score ?? null,
+          syncedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    } catch (err) {
+      // Refresh failure is not fatal — next scheduled sync will catch up.
+      console.warn('[canvas] post-submit refresh failed:', err);
+    }
+
+    return { success: true };
+  }
+);
+
 // ─── canvasSyncScheduled ──────────────────────────────────────────────────────
 // Runs every 30 minutes — syncs all connected users
 

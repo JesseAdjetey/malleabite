@@ -280,6 +280,31 @@ export function useCanvasIntegration() {
     }
   }, [user?.uid, announcements]);
 
+  // ── Submit assignment ───────────────────────────────────────────────────────
+  // File uploads are driven from the UI via uploadFileToCanvas (which goes
+  // direct to Canvas's storage); by the time this is called for a file
+  // submission, the fileIds are already in hand.
+  const submitAssignment = useCallback(async (input: {
+    assignmentId: string;
+    submissionType: 'online_text_entry' | 'online_url' | 'online_upload';
+    body?: string;
+    url?: string;
+    fileIds?: string[];
+  }): Promise<boolean> => {
+    if (!user?.uid) return false;
+    try {
+      const fn = httpsCallable(functions, 'canvasSubmit');
+      await fn(input);
+      toast.success('Submitted to Canvas');
+      return true;
+    } catch (err: any) {
+      // Canvas's own error text (locked, late not allowed, file too large,
+      // etc.) bubbles up through HttpsError.message.
+      toast.error(err?.message || 'Submission failed');
+      return false;
+    }
+  }, [user?.uid, functions]);
+
   // ── Disconnect ──────────────────────────────────────────────────────────────
   const disconnect = useCallback(async () => {
     if (!user?.uid) return;
@@ -379,5 +404,6 @@ export function useCanvasIntegration() {
     disconnect,
     markAnnouncementRead,
     markAllAnnouncementsRead,
+    submitAssignment,
   };
 }

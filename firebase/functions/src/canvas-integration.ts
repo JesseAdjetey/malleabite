@@ -70,9 +70,17 @@ function calendarEventsCol(uid: string) {
 
 // ─── Canvas API fetch helper ──────────────────────────────────────────────────
 
+class CanvasHttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = 'CanvasHttpError';
+  }
+}
+
 async function canvasFetch(baseUrl: string, token: string, path: string): Promise<any[]> {
   const results: any[] = [];
-  let url: string | null = `${baseUrl.replace(/\/$/, '')}/api/v1${path}?per_page=50`;
+  const sep = path.includes('?') ? '&' : '?';
+  let url: string | null = `${baseUrl.replace(/\/$/, '')}/api/v1${path}${sep}per_page=50`;
 
   while (url) {
     const fetchRes: Response = await fetch(url, {
@@ -84,7 +92,7 @@ async function canvasFetch(baseUrl: string, token: string, path: string): Promis
 
     if (!fetchRes.ok) {
       const text = await fetchRes.text();
-      throw new Error(`Canvas API error ${fetchRes.status}: ${text}`);
+      throw new CanvasHttpError(fetchRes.status, `Canvas API error ${fetchRes.status}: ${text}`);
     }
 
     const data: unknown = await fetchRes.json();
@@ -193,6 +201,13 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
       const seen = new Set(rawAssignments.map(a => String(a.id)));
       for (const a of graded) if (!seen.has(String(a.id))) rawAssignments.push(a);
     } catch (err) {
+      // 401/403/404 means the user has no assignment-read access for this course
+      // (observer enrollment, restricted permissions, or concluded shell that
+      // slipped past the term filter). Skip silently — these aren't real failures.
+      if (err instanceof CanvasHttpError && (err.status === 401 || err.status === 403 || err.status === 404)) {
+        console.info(`[canvas] no assignment access for course ${courseId} (${err.status}); skipping`);
+        continue;
+      }
       console.warn(`[canvas] assignment fetch failed for course ${courseId}:`, err);
       failedCourseCount++;
       continue;

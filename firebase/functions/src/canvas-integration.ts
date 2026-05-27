@@ -186,20 +186,13 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
 
     let rawAssignments: any[] = [];
     try {
+      // The `bucket` filter is only valid on /users/self/courses/:id/assignments;
+      // /courses/:id/assignments 400s on it. Fetch everything and filter locally.
       rawAssignments = await canvasFetch(
         baseUrl,
         token,
-        `/courses/${courseId}/assignments?order_by=due_at&include[]=submission&bucket=ungraded`
+        `/courses/${courseId}/assignments?order_by=due_at&include[]=submission`
       );
-      // Also fetch graded/past assignments so grade history is visible.
-      const graded = await canvasFetch(
-        baseUrl,
-        token,
-        `/courses/${courseId}/assignments?order_by=due_at&include[]=submission&bucket=past`
-      );
-      // Dedupe by id (buckets can overlap)
-      const seen = new Set(rawAssignments.map(a => String(a.id)));
-      for (const a of graded) if (!seen.has(String(a.id))) rawAssignments.push(a);
     } catch (err) {
       // 401/403/404 means the user has no assignment-read access for this course
       // (observer enrollment, restricted permissions, or concluded shell that
@@ -264,13 +257,14 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
   const keptAnnouncementIds = new Set<string>();
 
   if (courses.length > 0) {
-    const start = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    // Canvas's /announcements endpoint wants YYYY-MM-DD, not a full ISO datetime.
+    const start = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const contextCodes = courses.map(c => `context_codes[]=course_${c.id}`).join('&');
     try {
       const rawAnnouncements = await canvasFetch(
         baseUrl,
         token,
-        `/announcements?${contextCodes}&start_date=${encodeURIComponent(start)}`
+        `/announcements?${contextCodes}&start_date=${start}`
       );
 
       // Fetch existing `read` flags so we don't overwrite them.
@@ -334,14 +328,17 @@ async function performSync(uid: string, baseUrl: string, token: string): Promise
   const keptCalendarEventIds = new Set<string>();
 
   if (courses.length > 0) {
-    const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const end = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Canvas's /calendar_events endpoint requires full ISO 8601 datetimes when
+    // combined with type=event; bare YYYY-MM-DD is rejected with "Invalid date".
+    // The window is also capped at 90 days, so keep total span < 90.
+    const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const end = new Date(Date.now() + 59 * 24 * 60 * 60 * 1000).toISOString();
     const contextCodes = courses.map(c => `context_codes[]=course_${c.id}`).join('&');
     try {
       const rawEvents = await canvasFetch(
         baseUrl,
         token,
-        `/calendar_events?type=event&${contextCodes}&start_date=${start}&end_date=${end}`
+        `/calendar_events?type=event&${contextCodes}&start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`
       );
 
       const evBatch = db.batch();
@@ -755,14 +752,19 @@ export const canvasSyncScheduled = onSchedule(
   async () => {
     const db = getDb();
 
-    // Find all users with canvas integration
-    const integrations = await db.collectionGroup('integrations')
-      .where(admin.firestore.FieldPath.documentId(), '==', 'canvas')
-      .get();
+    // Iterate users and look up each one's canvas integration directly.
+    // We can't do a collection-group query filtered by document id ("canvas")
+    // because Firestore rejects FieldPath.documentId() on collection groups —
+    // document paths must have an even segment count and "canvas" is one.
+    const usersSnap = await db.collection('users').select().get();
+    const integrationSnaps = await Promise.all(
+      usersSnap.docs.map(u => u.ref.collection('integrations').doc('canvas').get())
+    );
+    const integrations = { docs: integrationSnaps.filter(s => s.exists) };
 
     const promises = integrations.docs.map(async (snap) => {
       const uid = snap.ref.parent.parent!.id;
-      const data = snap.data();
+      const data = snap.data()!;
       if (!data.encryptedToken || !data.baseUrl) return;
 
       let failedCourseCount = 0;

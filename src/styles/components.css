@@ -1,17 +1,35 @@
 
 @layer components {
-  /* Glass effects — iOS-inspired frosted materials */
+  /* Glass effects — iOS-inspired frosted materials.
+   *
+   * PERFORMANCE: backdrop-filter: blur() is the single most expensive paint in the
+   * app — the compositor must re-sample and re-blur everything behind the element on
+   * EVERY repaint. With glass on the header, sidebar, cards, dropdowns and AI bar
+   * (all large + stacked), one repaint cascaded into several full-screen blurs, which
+   * is what made dragging, clicking and theme-switching feel laggy.
+   *
+   * Base `.glass` now uses a near-opaque solid background and NO backdrop blur. The
+   * panels read the same (a frosted sheet) but paint as cheaply as a plain div. Where
+   * a live blur is genuinely wanted over content (small overlays only), use the
+   * opt-in `.glass-blur` modifier below. */
   .glass {
-    @apply backdrop-blur-xl;
+    /* intentionally no backdrop-filter — see note above */
   }
 
   :root:not(.dark) .glass,
   .light .glass {
-    @apply bg-white/75 border-gray-200 border shadow-sm;
+    @apply bg-white/90 border-gray-200 border shadow-sm;
   }
 
   .dark .glass {
-    @apply bg-gray-900/60 border-white/10 shadow-md;
+    @apply bg-gray-900/90 border-white/10 shadow-md;
+  }
+
+  /* Opt-in cheap blur for SMALL translucent overlays (popovers, mention menus) where
+   * the see-through frost is part of the effect. Uses a small radius (8px) instead of
+   * xl (24px) and should only be applied to small surfaces, never the sidebar/grid. */
+  .glass-blur {
+    @apply backdrop-blur-md;
   }
 
   .glass-sidebar {

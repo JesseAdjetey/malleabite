@@ -52,10 +52,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     haptics.light();
     const next: Record<Theme, Theme> = { light: 'dark', dark: 'system', system: 'light' };
     const nextTheme = next[theme];
-    if (nextTheme === 'dark') sounds.play("themeNight");
-    else if (nextTheme === 'light') sounds.play("themeDay");
-    else sounds.play("themeSystem");
+    // Apply the theme change FIRST (so the UI responds instantly), then play the sound
+    // off the critical path — synthesizing audio synchronously here added latency in
+    // front of the toggle and widened the theme-switch flash window.
     setTheme(nextTheme);
+    Promise.resolve().then(() => {
+      if (nextTheme === 'dark') sounds.play("themeNight");
+      else if (nextTheme === 'light') sounds.play("themeDay");
+      else sounds.play("themeSystem");
+    });
   };
 
   const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
@@ -267,4 +272,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   );
 };
 
-export default Header;
+// Memoized so Mainview's per-frame re-render during a sidebar drag (and App's re-render
+// on theme toggle) don't re-render the whole header + its calendar dropdown. Relies on
+// a stable onMenuClick (Mainview passes a useCallback'd handler).
+export default React.memo(Header);

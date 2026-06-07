@@ -371,4 +371,6 @@ const MonthView = () => {
   );
 };
 
-export default MonthView;
+// Memoized: takes no props (reads from stores), so a parent re-render (Mainview during
+// a sidebar drag, or App on theme toggle) won't re-render the whole month grid.
+export default React.memo(MonthView);

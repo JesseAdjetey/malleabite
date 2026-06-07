@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect } from 'react';
 import { useThemeStore, getSystemTheme } from '@/lib/stores/theme-store';
 import { useSettingsStore } from '@/lib/stores/settings-store';
 
@@ -11,19 +11,22 @@ const ThemeProvider: React.FC<ThemeProviderProps> = ({ children, isAuthPage = fa
   const { theme, setResolvedTheme } = useThemeStore();
   const { backgroundColor } = useSettingsStore();
   
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the .dark/.light class + body background are
+  // applied SYNCHRONOUSLY before the browser paints. With useEffect the class flipped
+  // AFTER paint, so the old theme was visible for one frame — the "flash" the user saw.
+  useLayoutEffect(() => {
     // Determine the resolved theme
     let resolvedTheme: 'light' | 'dark';
-    
+
     if (theme === 'system') {
       resolvedTheme = getSystemTheme();
     } else {
       resolvedTheme = theme;
     }
-    
+
     // Update the store with resolved theme
     setResolvedTheme(resolvedTheme);
-    
+
     // Apply the theme class to the document
     const root = document.documentElement;
     

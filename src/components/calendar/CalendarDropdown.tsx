@@ -524,7 +524,7 @@ const CalendarDropdown: React.FC = () => {
 
   return (
     <>
-      <Popover open={open} onOpenChange={(v) => { if (v) sounds.play("drawerOpen"); setOpen(v); }}>
+      <Popover open={open} onOpenChange={(v) => { setOpen(v); if (v) Promise.resolve().then(() => sounds.play("drawerOpen")); }}>
         <PopoverTrigger asChild>
           <motion.button
             whileHover={{ scale: 1.02 }}

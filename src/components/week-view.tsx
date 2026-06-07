@@ -1019,4 +1019,6 @@ const WeekView = () => {
   );
 };
 
-export default WeekView;
+// Memoized: takes no props (reads from stores), so a parent re-render (Mainview during
+// a sidebar drag, or App on theme toggle) won't re-render the whole week grid.
+export default React.memo(WeekView);

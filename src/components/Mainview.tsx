@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import MonthView from "@/components/month-view";
 import SideBar from "@/components/sidebar/sideBar";
@@ -48,7 +48,7 @@ const RoundIndicator = ({
         ...(side === 'right' ? { left: 'calc(100% + 12px)' } : { right: 'calc(100% + 12px)' }),
       }}
     >
-      <div className="bg-gray-950/95 text-white rounded-2xl px-3 py-2.5 shadow-2xl border border-white/10 backdrop-blur-xl flex flex-col items-center gap-1.5 min-w-[74px]">
+      <div className="bg-gray-950/95 text-white rounded-2xl px-3 py-2.5 shadow-2xl border border-white/10 flex flex-col items-center gap-1.5 min-w-[74px]">
         <div className="relative">
           <svg width="40" height="40" viewBox="0 0 40 40" style={{ transform: 'rotate(-90deg)' }}>
             <circle
@@ -84,6 +84,15 @@ const Mainview = () => {
   useCalendarFilterBridge();
 
   const { selectedView } = useViewStore();
+  // Memoize the active calendar view element so it's NOT re-created/re-rendered on
+  // every sidebar-resize frame (Mainview re-renders ~60×/sec during the drag because
+  // it owns sidebarWidth). Only rebuilds when the selected view actually changes.
+  const activeView = useMemo(() => {
+    if (selectedView === "Month") return <MonthView />;
+    if (selectedView === "Day") return <DayView />;
+    if (selectedView === "Week") return <WeekView />;
+    return null;
+  }, [selectedView]);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebar-width');
     return saved ? parseInt(saved, 10) : 350;
@@ -92,6 +101,9 @@ const Mainview = () => {
     return (localStorage.getItem('sidebar-layout-mode') as SidebarLayoutMode) ?? 'normal';
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Stable handler so the memoized <Header> doesn't re-render every Mainview render
+  // (e.g. on every sidebar-resize frame).
+  const handleMenuClick = useCallback(() => setIsSidebarOpen(o => !o), []);
   const [isResizing, setIsResizing] = useState(false);
   const [maxWidth, setMaxWidth] = useState(() => window.innerWidth / 2);
   const isDragging = useRef(false);
@@ -99,6 +111,16 @@ const Mainview = () => {
   const lastTickX = useRef(0);
   const rawDragXRef = useRef(0);
   const startDragXRef = useRef(0);
+  // Live-drag refs: during a resize we drive the sidebar width + resizer position by
+  // writing to the DOM directly (no React state / no framer per frame) so the pill
+  // tracks the cursor 1:1. State is committed only on release.
+  const sidebarOuterRef = useRef<HTMLDivElement>(null);
+  const sidebarInnerRef = useRef<HTMLDivElement>(null);
+  const resizerRef = useRef<HTMLDivElement>(null);
+  const liveWidthRef = useRef<number>(0);
+  const dragRafRef = useRef<number | null>(null);
+  const pendingXRef = useRef(0);
+  const wasEdgeRef = useRef(false);
   const layoutModeRef = useRef<SidebarLayoutMode>(sidebarLayoutMode);
   const prevModeRef = useRef<SidebarLayoutMode>(sidebarLayoutMode);
   const [rawDragX, setRawDragX] = useState(0);
@@ -182,49 +204,71 @@ const Mainview = () => {
     if (isMobile) setIsSidebarOpen(false);
   }, [isMobile]);
 
+  // Apply one drag frame by mutating the DOM directly — NO React state, NO framer.
+  // This is what keeps the pill glued to the cursor. setRawDragX is called only when
+  // a progress indicator needs to show (edge zones), so normal dragging never renders.
+  const applyDragFrame = (clientX: number) => {
+    rawDragXRef.current = clientX;
+
+    if (Math.abs(clientX - lastTickX.current) >= 20) {
+      sounds.play("dragTick");
+      lastTickX.current = clientX;
+    }
+
+    if (layoutModeRef.current === 'normal') {
+      const newWidth = Math.max(MIN_WIDTH, Math.min(clientX, maxWidth));
+      liveWidthRef.current = newWidth;
+      if (sidebarOuterRef.current) sidebarOuterRef.current.style.width = `${newWidth}px`;
+      if (sidebarInnerRef.current) sidebarInnerRef.current.style.width = `${Math.max(newWidth, MIN_WIDTH)}px`;
+      if (resizerRef.current) resizerRef.current.style.transform = `translateX(${newWidth - 12}px)`;
+
+      // In normal mode the resize is pure DOM — re-render ONLY when past an edge so the
+      // "go fullscreen / go full-calendar" progress hints can show. Inside the range we
+      // skip setState entirely, which is what keeps the pill glued to the cursor.
+      const inEdge = clientX > maxWidth || clientX < MIN_WIDTH;
+      if (inEdge || wasEdgeRef.current) {
+        setRawDragX(clientX);
+        wasEdgeRef.current = inEdge;
+      }
+    } else {
+      // fullscreen / hidden: width is fixed; the exit-progress indicators track the
+      // pointer, so we do update state here (cheap — calendar children are memoized).
+      setRawDragX(clientX);
+    }
+  };
+
+  const handleDrag = (e: MouseEvent) => {
+    if (!isDragging.current) return;
+    pendingXRef.current = e.clientX;
+    if (dragRafRef.current != null) return; // coalesce to one update per frame
+    dragRafRef.current = requestAnimationFrame(() => {
+      dragRafRef.current = null;
+      applyDragFrame(pendingXRef.current);
+    });
+  };
+
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
+    liveWidthRef.current = sidebarWidth;
+    wasEdgeRef.current = false;
     setIsResizing(true);
     startDragXRef.current = e.clientX;
     rawDragXRef.current = e.clientX;
     lastTickX.current = e.clientX;
-    setRawDragX(e.clientX);
     document.body.style.cursor = 'ew-resize';
     document.addEventListener("mousemove", handleDrag);
     document.addEventListener("mouseup", stopDrag);
   };
 
-  const handleDrag = (e: MouseEvent) => {
-    if (!isDragging.current) return;
-    rawDragXRef.current = e.clientX;
-    setRawDragX(e.clientX);
-
-    // Tactile tick in ALL modes based on raw travel
-    if (Math.abs(e.clientX - lastTickX.current) >= 20) {
-      sounds.play("dragTick");
-      lastTickX.current = e.clientX;
-    }
-
-    // Only update visual width in normal mode
-    if (layoutModeRef.current === 'normal') {
-      const newWidth = Math.max(MIN_WIDTH, Math.min(e.clientX, maxWidth));
-      setSidebarWidth(newWidth);
-    }
-  };
-
-  const stopDrag = () => {
-    isDragging.current = false;
-    setIsResizing(false);
-    document.body.style.cursor = 'default';
-    document.removeEventListener("mousemove", handleDrag);
-    document.removeEventListener("mouseup", stopDrag);
-
+  const finishDrag = () => {
     const currentMode = layoutModeRef.current;
     const startX = startDragXRef.current;
     const raw = rawDragXRef.current;
 
+    // Commit the live width to React state so framer/CSS takes the resting position.
     if (currentMode === 'normal') {
+      setSidebarWidth(liveWidthRef.current);
       const mx = window.innerWidth / 2;
       const overflowProg = Math.min(1, Math.max(0, (raw - mx) / TRIGGER_PX));
       const underflowProg = Math.min(1, Math.max(0, (MIN_WIDTH - raw) / TRIGGER_PX));
@@ -240,58 +284,51 @@ const Mainview = () => {
 
     startDragXRef.current = 0;
     rawDragXRef.current = 0;
+    wasEdgeRef.current = false;
     setRawDragX(0);
+  };
+
+  const stopDrag = () => {
+    isDragging.current = false;
+    if (dragRafRef.current != null) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    setIsResizing(false);
+    document.body.style.cursor = 'default';
+    document.removeEventListener("mousemove", handleDrag);
+    document.removeEventListener("mouseup", stopDrag);
+    finishDrag();
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     isDragging.current = true;
+    liveWidthRef.current = sidebarWidth;
+    wasEdgeRef.current = false;
     setIsResizing(true);
     const initialX = e.touches[0].clientX;
     startDragXRef.current = initialX;
     rawDragXRef.current = initialX;
     lastTickX.current = initialX;
-    setRawDragX(initialX);
 
     const handleTouchMove = (ev: TouchEvent) => {
       if (!isDragging.current) return;
-      const touch = ev.touches[0];
-      rawDragXRef.current = touch.clientX;
-      setRawDragX(touch.clientX);
-      if (Math.abs(touch.clientX - lastTickX.current) >= 20) {
-        sounds.play("dragTick");
-        lastTickX.current = touch.clientX;
-      }
-      if (layoutModeRef.current === 'normal') {
-        const newWidth = Math.max(MIN_WIDTH, Math.min(touch.clientX, maxWidth));
-        setSidebarWidth(newWidth);
-      }
+      pendingXRef.current = ev.touches[0].clientX;
+      if (dragRafRef.current != null) return;
+      dragRafRef.current = requestAnimationFrame(() => {
+        dragRafRef.current = null;
+        applyDragFrame(pendingXRef.current);
+      });
     };
 
     const handleTouchEnd = () => {
       isDragging.current = false;
-      setIsResizing(false);
-
-      const currentMode = layoutModeRef.current;
-      const startX = startDragXRef.current;
-      const raw = rawDragXRef.current;
-
-      if (currentMode === 'normal') {
-        const mx = window.innerWidth / 2;
-        const overflowProg = Math.min(1, Math.max(0, (raw - mx) / TRIGGER_PX));
-        const underflowProg = Math.min(1, Math.max(0, (MIN_WIDTH - raw) / TRIGGER_PX));
-        if (overflowProg >= 0.6) setSidebarLayoutMode('fullscreen');
-        else if (underflowProg >= 0.6) setSidebarLayoutMode('hidden');
-      } else if (currentMode === 'fullscreen') {
-        const exitProg = Math.min(1, Math.max(0, (startX - raw) / TRIGGER_PX));
-        if (exitProg >= 0.6) setSidebarLayoutMode('normal');
-      } else if (currentMode === 'hidden') {
-        const exitProg = Math.min(1, Math.max(0, (raw - startX) / TRIGGER_PX));
-        if (exitProg >= 0.6) setSidebarLayoutMode('normal');
+      if (dragRafRef.current != null) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = null;
       }
-
-      startDragXRef.current = 0;
-      rawDragXRef.current = 0;
-      setRawDragX(0);
+      setIsResizing(false);
+      finishDrag();
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
     };
@@ -323,8 +360,9 @@ const Mainview = () => {
         isResizing ? "h-48" : "h-16 group-hover:h-24"
       }`}
       style={{
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        // No backdrop-filter: this pill moves with the cursor during the resize drag,
+        // so a live blur would force a full-region re-blur every frame (drag lag). The
+        // gradient background already gives it a glassy look without the paint cost.
         boxShadow: isResizing
           ? '0 0 16px rgba(139,92,246,0.6), inset 0 1px 1px rgba(255,255,255,0.3)'
           : '0 2px 8px rgba(139,92,246,0.2), inset 0 1px 1px rgba(255,255,255,0.25)',
@@ -338,11 +376,15 @@ const Mainview = () => {
 
   // ── Resizer x position for smooth animated positioning ───────────────────
   // Fixed div has left:0; x-transform places its center at the right boundary.
+  // During an active resize, read the live width from the ref so a stray edge-zone
+  // re-render doesn't snap the elements back to the (stale) committed state width.
+  const effectiveWidth = isResizing ? liveWidthRef.current : sidebarWidth;
+
   // The 24px div's left edge = x, center = x + 12.
   const resizerX =
     sidebarLayoutMode === 'fullscreen' ? window.innerWidth - 24   // right edge
     : sidebarLayoutMode === 'hidden' ? 0                          // left edge
-    : sidebarWidth - 12;                                           // sidebar boundary
+    : effectiveWidth - 12;                                         // sidebar boundary
 
   return (
     <GridBackground>
@@ -353,19 +395,20 @@ const Mainview = () => {
         {/* ── Desktop Sidebar — always in DOM, animated width for smooth transitions ── */}
         {!isMobile && (
           <motion.div
+            ref={sidebarOuterRef}
             style={{ overflow: 'hidden', flexShrink: 0 }}
             animate={{
               width:
                 sidebarLayoutMode === 'hidden' ? 0
                 : sidebarLayoutMode === 'fullscreen' ? window.innerWidth
-                : sidebarWidth,
+                : effectiveWidth,
             }}
             initial={false}
             transition={{ duration: isResizing ? 0 : 0.4, ease: [0.32, 0.72, 0, 1] }}
           >
             {/* Inner wrapper keeps its true width so content isn't compressed */}
-            <div style={{
-              width: sidebarLayoutMode === 'fullscreen' ? window.innerWidth : Math.max(sidebarWidth, MIN_WIDTH),
+            <div ref={sidebarInnerRef} style={{
+              width: sidebarLayoutMode === 'fullscreen' ? window.innerWidth : Math.max(effectiveWidth, MIN_WIDTH),
               height: '100vh',
             }}>
               <SideBar layoutMode={sidebarLayoutMode} onSetLayoutMode={setSidebarLayoutMode} />
@@ -376,6 +419,7 @@ const Mainview = () => {
         {/* ── Animated Resizer — portaled to body so parent transforms/overflow don't clip it ── */}
         {!isMobile && createPortal(
           <motion.div
+            ref={resizerRef}
             className="fixed top-0 bottom-0 flex items-center justify-center w-6 cursor-ew-resize z-[60] group"
             style={{ left: 0 }}
             initial={false}
@@ -413,7 +457,7 @@ const Mainview = () => {
         {/* ── Main Content (calendar) — hidden when sidebar fullscreen ── */}
         {(isMobile || sidebarLayoutMode !== 'fullscreen') && (
           <div className="flex flex-col flex-1 h-screen w-full md:w-auto overflow-hidden">
-            <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
+            <Header onMenuClick={handleMenuClick} />
 
             {isMobile ? (
               <div className="relative flex-1 min-h-0 overflow-hidden">
@@ -427,9 +471,7 @@ const Mainview = () => {
                       transition={{ duration: 0.15 }}
                       className="h-full"
                     >
-                      {selectedView === "Month" && <MonthView />}
-                      {selectedView === "Day" && <DayView />}
-                      {selectedView === "Week" && <WeekView />}
+                      {activeView}
                     </motion.div>
                   </AnimatePresence>
                 </div>
@@ -447,9 +489,7 @@ const Mainview = () => {
                       transition={{ duration: 0.15 }}
                       className="h-full"
                     >
-                      {selectedView === "Month" && <MonthView />}
-                      {selectedView === "Day" && <DayView />}
-                      {selectedView === "Week" && <WeekView />}
+                      {activeView}
                     </motion.div>
                   </AnimatePresence>
                 </div>

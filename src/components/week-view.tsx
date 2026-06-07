@@ -44,13 +44,14 @@ import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 const WeekView = () => {
   const { userSelectedDate } = useDateStore();
   const { isPickingEvent, completePicking, cancelPicking } = useReminderEventPickerStore();
-  const {
-    openEventSummary,
-    toggleEventLock,
-    isEventSummaryOpen,
-    closeEventSummary,
-    events,
-  } = useEventStore();
+  // Field selectors instead of grabbing the whole store: a selectedEvent /
+  // isEventSummaryOpen write on click no longer re-renders WeekView via the events
+  // subscription. Actions are stable references, so they never trigger re-renders.
+  const openEventSummary = useEventStore(s => s.openEventSummary);
+  const toggleEventLock = useEventStore(s => s.toggleEventLock);
+  const isEventSummaryOpen = useEventStore(s => s.isEventSummaryOpen);
+  const closeEventSummary = useEventStore(s => s.closeEventSummary);
+  const events = useEventStore(s => s.events);
   const { updateEvent, addEvent, addRecurrenceException, removeEvent } = useEventCRUD();
   const { linkTodoToEvent, deleteTodo } = useTodos();
   const {

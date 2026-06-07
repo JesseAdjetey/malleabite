@@ -32,8 +32,12 @@ import { useReminderEventPickerStore } from "@/lib/stores/reminder-event-picker-
 const MonthView = () => {
   const { twoDMonthArray } = useDateStore();
   const { isPickingEvent, completePicking, cancelPicking } = useReminderEventPickerStore();
-  const { openEventSummary, isEventSummaryOpen, closeEventSummary, events } =
-    useEventStore();
+  // Field selectors so a click-to-open (selectedEvent write) doesn't re-render the
+  // whole month grid via the events subscription.
+  const openEventSummary = useEventStore(s => s.openEventSummary);
+  const isEventSummaryOpen = useEventStore(s => s.isEventSummaryOpen);
+  const closeEventSummary = useEventStore(s => s.closeEventSummary);
+  const events = useEventStore(s => s.events);
   const { updateEvent, addEvent } = useEventCRUD();
   const { selectedView, setView } = useViewStore();
   const isMobile = useIsMobile();

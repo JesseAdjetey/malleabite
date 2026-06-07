@@ -81,8 +81,14 @@ const AppRoutes = () => {
   const navigate = useNavigate();
   const { selectedView, setView } = useViewStore();
   const { userSelectedDate, setDate, selectedMonthIndex, setMonth } = useDateStore();
-  const { isBulkMode, enableBulkMode, disableBulkMode } = useBulkSelectionStore();
-  const { selectedEvent, isEventSummaryOpen, closeEventSummary } = useEventStore();
+  const isBulkMode = useBulkSelectionStore(s => s.isBulkMode);
+  const enableBulkMode = useBulkSelectionStore(s => s.enableBulkMode);
+  const disableBulkMode = useBulkSelectionStore(s => s.disableBulkMode);
+  // Field selectors at the app root — without these, every event click (which writes
+  // selectedEvent/isEventSummaryOpen) re-rendered the ENTIRE app tree.
+  const selectedEvent = useEventStore(s => s.selectedEvent);
+  const isEventSummaryOpen = useEventStore(s => s.isEventSummaryOpen);
+  const closeEventSummary = useEventStore(s => s.closeEventSummary);
   const { removeEvent } = useEventCRUD();
 
   // Track pageviews on route change

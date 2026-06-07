@@ -40,7 +40,11 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   onToggleSelection = () => { },
 }) => {
   const boxRef = useRef<HTMLDivElement>(null);
-  const { enableBulkMode, toggleSelection } = useBulkSelectionStore();
+  // Select the actions individually — subscribing to the whole store re-rendered
+  // every day box on any bulk-selection change (selectedIds, mode, etc.).
+  // Zustand action references are stable, so these selectors never trigger re-renders.
+  const enableBulkMode = useBulkSelectionStore(s => s.enableBulkMode);
+  const toggleSelection = useBulkSelectionStore(s => s.toggleSelection);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
@@ -313,4 +317,24 @@ const MonthViewBox: React.FC<MonthViewBoxProps> = ({
   );
 };
 
-export default MonthViewBox;
+// Memoized so a MonthView re-render (selection, dialogs, navigation of an unrelated
+// part) doesn't re-render all 35–42 day boxes and their pills. Callback props are
+// inline arrows recreated each render, so the comparator ignores their identity and
+// compares the data + flags that change a box's output. `day` is a fresh Dayjs each
+// render → compared by day string; empty-day `events` is a fresh [] → treated as equal.
+function monthBoxPropsEqual(prev: MonthViewBoxProps, next: MonthViewBoxProps): boolean {
+  const prevDay = prev.day ? prev.day.format('YYYY-MM-DD') : null;
+  const nextDay = next.day ? next.day.format('YYYY-MM-DD') : null;
+  if (prevDay !== nextDay) return false;
+  if (prev.rowIndex !== next.rowIndex) return false;
+  if (prev.isBulkMode !== next.isBulkMode) return false;
+  // events: same reference, or both empty
+  const pe = prev.events ?? [];
+  const ne = next.events ?? [];
+  if (pe !== ne && !(pe.length === 0 && ne.length === 0)) return false;
+  // While in bulk mode, selection can change per box — don't memo it away.
+  if (next.isBulkMode) return false;
+  return true;
+}
+
+export default React.memo(MonthViewBox, monthBoxPropsEqual);

@@ -156,4 +156,14 @@ const EventContextMenu: React.FC<EventContextMenuProps> = ({
   );
 };
 
-export default EventContextMenu;
+// Memoized so a DayColumn re-render (e.g. committing a resize/move, or a selection
+// change) doesn't reconcile every pill's full Radix context-menu tree. We compare by
+// `event` identity + `hasConflict`: the children (resize handles + CalendarEvent)
+// derive entirely from `event`, and the store replaces `event` with a new object on
+// any edit, so a real change always re-renders while sibling churn is skipped.
+// Callback identity is intentionally ignored (the handlers close over the same event).
+function ctxMenuEqual(prev: EventContextMenuProps, next: EventContextMenuProps): boolean {
+  return prev.event === next.event && prev.hasConflict === next.hasConflict;
+}
+
+export default React.memo(EventContextMenu, ctxMenuEqual);

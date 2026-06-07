@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, memo } from "react";
 import { getHours, isCurrentDay } from "@/lib/getTime";
 import { cn } from "@/lib/utils";
 import { CalendarEventType } from "@/lib/stores/types";
@@ -36,6 +36,51 @@ interface DayColumnProps {
   onColorChange?: (eventId: string, color: string) => void;
 }
 
+/**
+ * The hour cells behind the events. Extracted + memoized so the drag-over highlight
+ * (which fires continuously while dragging a pill across hours) re-renders ONLY these
+ * lightweight divs — not the sibling event-pill map (40–100 pills + their context
+ * menus). `dragOverHour` state lives here, isolated from the pills.
+ */
+interface HourGridProps {
+  currentDate: dayjs.Dayjs;
+  onTimeSlotClick: (day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
+}
+
+const HourGrid = memo(function HourGrid({ currentDate, onTimeSlotClick, onDragOver, onDrop }: HourGridProps) {
+  const [dragOverHour, setDragOverHour] = useState<number | null>(null);
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDragOverHour(null);
+    }
+  };
+
+  return (
+    <div onDragLeave={handleDragLeave}>
+      {getHours.map((hour, i) => (
+        <div
+          key={i}
+          className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${dragOverHour === i
+            ? 'bg-primary/30 dark:bg-white/20 ring-2 ring-inset ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.5)] scale-[1.02]'
+            : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
+            }`}
+          onClick={() => onTimeSlotClick(currentDate, hour)}
+          onDragOver={(e) => {
+            onDragOver(e);
+            setDragOverHour(i);
+          }}
+          onDragEnter={() => setDragOverHour(i)}
+          onDrop={(e) => { setDragOverHour(null); onDrop(e, currentDate, hour); }}
+        />
+      ))}
+    </div>
+  );
+}, (prev, next) => prev.currentDate.isSame(next.currentDate, 'day'));
+
 const DayColumn: React.FC<DayColumnProps> = ({
   currentDate,
   dayEvents,
@@ -55,7 +100,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
   onColorChange,
 }) => {
   const hourHeight = 80; // px per hour
-  const [dragOverHour, setDragOverHour] = useState<number | null>(null);
   // Track when context menu last closed to prevent spurious openEventSummary calls
   const ctxMenuClosedAtRef = useRef(0);
 
@@ -66,12 +110,11 @@ const DayColumn: React.FC<DayColumnProps> = ({
   // Reschedule sheet state
   const [rescheduleEvent, setRescheduleEvent] = useState<CalendarEventType | null>(null);
 
-  // Live resize preview: track the event being resized and its new times
-  const [liveResize, setLiveResize] = useState<{
-    eventId: string;
-    newStart: Date;
-    newEnd: Date;
-  } | null>(null);
+  // Live resize preview. During a drag we DO NOT call setState per pointermove —
+  // that would re-render the whole column (every pill) ~60×/sec and is the main
+  // source of resize lag. Instead we mutate ONLY the dragged pill's DOM node
+  // (top/height) directly via this ref, and commit to React state only on end.
+  const columnRef = useRef<HTMLDivElement>(null);
 
   // Calculate event positions for overlapping events
   const eventPositions = useMemo(() => calculateEventPositions(dayEvents), [dayEvents]);
@@ -80,11 +123,17 @@ const DayColumn: React.FC<DayColumnProps> = ({
     minutesPerPixel: 60 / hourHeight, // 0.75 min per pixel (80px = 1 hour = 60 min)
     snapInterval: 15,
     minDuration: 15,
-    onResize: (_eventId, newStart, newEnd) => {
-      setLiveResize({ eventId: _eventId, newStart, newEnd });
+    onResize: (eventId, newStart, newEnd) => {
+      // Direct DOM mutation — no React re-render during the drag.
+      const node = columnRef.current?.querySelector<HTMLElement>(`[data-event-id="${eventId}"]`);
+      if (node) {
+        const startStr = dayjs(newStart).format('HH:mm');
+        const endStr = dayjs(newEnd).format('HH:mm');
+        node.style.top = `${calculateEventPosition(startStr, hourHeight)}px`;
+        node.style.height = `${calculateEventHeight(startStr, endStr, hourHeight)}px`;
+      }
     },
     onResizeEnd: async (eventId, newStart, newEnd) => {
-      setLiveResize(null);
       const event = dayEvents.find(e => e.id === eventId);
       if (event && onResizeEvent) {
         onResizeEvent(event, newStart, newEnd);
@@ -92,64 +141,33 @@ const DayColumn: React.FC<DayColumnProps> = ({
       return true;
     },
     onResizeCancel: () => {
-      setLiveResize(null);
+      // Snap the pill back to its original position by clearing the inline overrides;
+      // React's last render already holds the correct top/height.
     },
   });
 
-  const handleDragEnter = (hourIndex: number) => {
-    setDragOverHour(hourIndex);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-      setDragOverHour(null);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => {
-    setDragOverHour(null);
-    onDrop(e, day, hour);
-  };
-
   return (
     <div
+      ref={columnRef}
       className="relative border-r border-gray-200 dark:border-white/10"
-      onDragLeave={handleDragLeave}
     >
-      {getHours.map((hour, i) => (
-        <div
-          key={i}
-          className={`relative flex h-20 cursor-pointer border-t border-gray-200 dark:border-white/10 transition-all duration-150 ${dragOverHour === i
-            ? 'bg-primary/30 dark:bg-white/20 ring-2 ring-inset ring-white/70 shadow-[inset_0_0_20px_rgba(255,255,255,0.5)] scale-[1.02]'
-            : 'hover:bg-gray-100/50 dark:hover:bg-white/5'
-            }`}
-          onClick={() => onTimeSlotClick(currentDate, hour)}
-          onDragOver={(e) => {
-            onDragOver(e);
-            handleDragEnter(i);
-          }}
-          onDragEnter={() => handleDragEnter(i)}
-          onDrop={(e) => handleDrop(e, currentDate, hour)}
-        />
-      ))}
+      {/* Hour cells + drag-over highlight live in their own memoized component so
+          dragging across hours doesn't re-render the event pills. */}
+      <HourGrid
+        currentDate={currentDate}
+        onTimeSlotClick={onTimeSlotClick}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+      />
 
       {/* Events displayed at their exact positions */}
       {dayEvents.map(event => {
         const timeInfo = getTimeInfo(event.description, event.startsAt, event.endsAt);
 
-        // Use live resize preview for the event currently being resized
-        let topPosition: number;
-        let eventHeight: number;
-        if (liveResize?.eventId === event.id) {
-          const liveStartStr = dayjs(liveResize.newStart).format('HH:mm');
-          const liveEndStr = dayjs(liveResize.newEnd).format('HH:mm');
-          topPosition = calculateEventPosition(liveStartStr, hourHeight);
-          eventHeight = calculateEventHeight(liveStartStr, liveEndStr, hourHeight);
-        } else {
-          topPosition = calculateEventPosition(timeInfo.start, hourHeight);
-          eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
-        }
+        // Resize preview is applied via direct DOM mutation during the drag (see
+        // onResize above), so render always uses the committed times.
+        const topPosition = calculateEventPosition(timeInfo.start, hourHeight);
+        const eventHeight = calculateEventHeight(timeInfo.start, timeInfo.end, hourHeight);
 
         // Get overlap position for side-by-side display
         const position = eventPositions.get(event.id);
@@ -169,16 +187,12 @@ const DayColumn: React.FC<DayColumnProps> = ({
               .minute(parseInt(timeInfo.end.split(':')[1]))
               .toDate();
 
-        const isBeingResized = liveResize?.eventId === event.id;
-
         return (
           <div
             key={event.id}
             data-event-id={event.id}
             className={cn(
-              "absolute z-10",
-              // Only apply opacity transition when NOT resizing (avoids lag during live resize)
-              !isBeingResized && "transition-opacity",
+              "absolute z-10 transition-opacity",
               draggingBulkEventId &&
                 isSelected(event.id) &&
                 event.id !== draggingBulkEventId &&
@@ -316,4 +330,21 @@ const DayColumn: React.FC<DayColumnProps> = ({
   );
 };
 
-export default DayColumn;
+// Memoized so a WeekView re-render (dialogs, hover, selection changes elsewhere)
+// doesn't re-render all 7 columns and every pill inside them. Callback props are
+// recreated each WeekView render, so the comparator ignores their identity and
+// compares the data + flags that actually change this column's output. currentDate
+// is a fresh Dayjs each render, so it's compared by its day string.
+function dayColumnPropsEqual(prev: DayColumnProps, next: DayColumnProps): boolean {
+  if (prev.dayEvents !== next.dayEvents) return false; // dayEvents arrays are memoized upstream
+  if (!prev.currentDate.isSame(next.currentDate, 'day')) return false;
+  if (prev.isBulkMode !== next.isBulkMode) return false;
+  if (prev.draggingBulkEventId !== next.draggingBulkEventId) return false;
+  if (prev.allEvents !== next.allEvents) return false;
+  // isSelected is a closure over bulk-selection state; when isBulkMode is active we
+  // can't reliably diff it, so re-render columns while in bulk mode.
+  if (next.isBulkMode) return false;
+  return true;
+}
+
+export default React.memo(DayColumn, dayColumnPropsEqual);

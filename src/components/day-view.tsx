@@ -23,7 +23,12 @@ import { DayAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySec
 
 const DayView = () => {
   const { userSelectedDate } = useDateStore();
-  const { events, isEventSummaryOpen, closeEventSummary, openEventSummary } = useEventStore();
+  // Field selectors so a click-to-open (selectedEvent write) doesn't re-render the
+  // whole day grid via the events subscription.
+  const events = useEventStore(s => s.events);
+  const isEventSummaryOpen = useEventStore(s => s.isEventSummaryOpen);
+  const closeEventSummary = useEventStore(s => s.closeEventSummary);
+  const openEventSummary = useEventStore(s => s.openEventSummary);
   const { addEvent } = useEventCRUD();
   const {
     isBulkMode,

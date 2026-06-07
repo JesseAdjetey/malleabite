@@ -79,6 +79,11 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Live pointer Y during a resize. Kept in a ref (NOT state) because it is only
+  // read at drag-end — writing it to state per pointermove re-rendered the owning
+  // DayColumn ~60×/sec (re-running its whole event map), which was the main resize lag.
+  const currentYRef = useRef(0);
+
   // Keep latest callbacks in refs so event listeners never go stale.
   // This means the effect only needs to depend on `isResizing`, not the callbacks.
   const onResizeRef = useRef(onResize);
@@ -145,15 +150,15 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
       stateRef.current.endTime!
     );
 
-    setState(prev => ({ ...prev, currentY: clientY }));
+    currentYRef.current = clientY; // ref, not state → no per-frame re-render
     onResizeRef.current?.(stateRef.current.eventId!, newStart, newEnd);
   });
 
   const stableEndHandler = useRef(async () => {
     if (!stateRef.current.isResizing) return;
 
-    const { currentY, startY, direction, startTime, endTime, eventId } = stateRef.current;
-    const deltaY = currentY - startY;
+    const { startY, direction, startTime, endTime, eventId } = stateRef.current;
+    const deltaY = currentYRef.current - startY;
     const { newStart, newEnd } = calculateNewTimesRef.current(
       deltaY,
       direction!,
@@ -219,6 +224,7 @@ export function useEventResize(options: UseEventResizeOptions = {}): [ResizeStat
     e.stopPropagation();
 
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    currentYRef.current = clientY;
 
     setState({
       isResizing: true,

@@ -98,4 +98,36 @@ const SelectableCalendarEvent: React.FC<SelectableCalendarEventProps> = ({
   );
 };
 
-export default SelectableCalendarEvent;
+// Memoized for the same reason as CalendarEvent — ignore callback identity, compare
+// the data + selection flags that affect output. Prevents whole-grid pill re-renders
+// on a sibling's live-resize / parent re-render.
+function selectablePropsEqual(prev: SelectableCalendarEventProps, next: SelectableCalendarEventProps): boolean {
+  const a = prev.event;
+  const b = next.event;
+  return (
+    (a === b ||
+      (a.id === b.id &&
+        a.title === b.title &&
+        a.startsAt === b.startsAt &&
+        a.endsAt === b.endsAt &&
+        a.description === b.description &&
+        a.color === b.color &&
+        a.isLocked === b.isLocked &&
+        a.isTodo === b.isTodo &&
+        a.todoId === b.todoId &&
+        a.isRecurring === b.isRecurring &&
+        a.recurrenceParentId === b.recurrenceParentId &&
+        (a.mallyActions?.length ?? 0) === (b.mallyActions?.length ?? 0))) &&
+    prev.color === next.color &&
+    prev.isLocked === next.isLocked &&
+    prev.hasAlarm === next.hasAlarm &&
+    prev.hasReminder === next.hasReminder &&
+    prev.hasTodo === next.hasTodo &&
+    prev.compact === next.compact &&
+    prev.isBulkMode === next.isBulkMode &&
+    prev.isSelected === next.isSelected &&
+    (prev.participants?.length ?? 0) === (next.participants?.length ?? 0)
+  );
+}
+
+export default React.memo(SelectableCalendarEvent, selectablePropsEqual);

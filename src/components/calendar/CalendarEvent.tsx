@@ -206,4 +206,36 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   );
 };
 
-export default CalendarEvent;
+// Memoized so a parent re-render (e.g. a live-resize setState on a sibling, or the
+// day column re-rendering) doesn't re-render every pill. The comparator intentionally
+// ignores callback identity (onClick/onLockToggle/onMouseDown are recreated each parent
+// render) and compares only the data that actually affects this pill's output.
+function eventPropsEqual(prev: CalendarEventProps, next: CalendarEventProps): boolean {
+  const a = prev.event;
+  const b = next.event;
+  return (
+    a === b ||
+    (a.id === b.id &&
+      a.title === b.title &&
+      a.startsAt === b.startsAt &&
+      a.endsAt === b.endsAt &&
+      a.description === b.description &&
+      a.color === b.color &&
+      a.isLocked === b.isLocked &&
+      a.isTodo === b.isTodo &&
+      a.todoId === b.todoId &&
+      a.isRecurring === b.isRecurring &&
+      a.recurrenceParentId === b.recurrenceParentId &&
+      (a.mallyActions?.length ?? 0) === (b.mallyActions?.length ?? 0))
+  ) &&
+    prev.color === next.color &&
+    prev.isLocked === next.isLocked &&
+    prev.hasAlarm === next.hasAlarm &&
+    prev.hasReminder === next.hasReminder &&
+    prev.hasTodo === next.hasTodo &&
+    prev.compact === next.compact &&
+    prev.isOverlapping === next.isOverlapping &&
+    (prev.participants?.length ?? 0) === (next.participants?.length ?? 0);
+}
+
+export default React.memo(CalendarEvent, eventPropsEqual);

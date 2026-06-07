@@ -26,7 +26,13 @@ import { useActionRunnerStore } from '@/lib/stores/action-runner-store';
 import { isNative, isAndroid, isIOS } from '@/lib/platform';
 const ElectronAuthPage = lazy(() => import('@/pages/ElectronAuth'));
 import { useThemeStore } from '@/lib/stores/theme-store';
-import { BottomMallyAI } from '@/components/ai/BottomMallyAI';
+// BottomMallyAI pulls in ~4.5k lines of AI logic plus speech/streaming deps.
+// Loading it eagerly delayed first paint of the calendar and made the app feel
+// slow to start. Lazy-load it so the calendar renders first and the AI bar
+// hydrates a moment later (named export → map to default for React.lazy).
+const BottomMallyAI = lazy(() =>
+  import('@/components/ai/BottomMallyAI').then((m) => ({ default: m.BottomMallyAI }))
+);
 import { CountdownPanel } from '@/components/countdown/CountdownPanel';
 import MobileNavigation from '@/components/MobileNavigation';
 import PendingMeetHandler from '@/components/booking/PendingMeetHandler';
@@ -265,7 +271,13 @@ const AppRoutes = () => {
         </ErrorBoundary>
       </Suspense>
       {!isAuthPage && <PendingMeetHandler />}
-      {!isAuthPage && <ErrorBoundary fallback={<></>}><BottomMallyAI /></ErrorBoundary>}
+      {!isAuthPage && (
+        <ErrorBoundary fallback={<></>}>
+          <Suspense fallback={null}>
+            <BottomMallyAI />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       {!isAuthPage && <CountdownPanel />}
       {!isAuthPage && <ActionRunnerModal />}
       {!isAuthPage && <ConsentBanner />}

@@ -22,6 +22,7 @@ import { useUserMemory } from "@/hooks/use-user-memory";
 import { formatAIEvent } from "@/lib/ai/format-ai-event";
 import { useEventHighlightStore } from "@/lib/stores/event-highlight-store";
 import { useEventStore } from "@/lib/stores/event-store";
+import { detectEventConflicts, findAlternativeSlots } from "@/lib/algorithms/conflict-detection";
 import dayjs from "dayjs";
 
 // ── New imports for expanded AI capabilities ─────────────────────────────────
@@ -32,7 +33,6 @@ import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useCalendarGroups } from "@/hooks/use-calendar-groups";
 import { useGoals } from "@/hooks/use-goals";
 import { useAppointmentScheduling } from "@/hooks/use-appointment-scheduling";
-import { useFindTime } from "@/hooks/use-find-time";
 import { useCalendarSnapshots } from "@/hooks/use-calendar-snapshots";
 import { useEventSearch } from "@/hooks/use-event-search";
 import { useWorkingHours } from "@/hooks/use-working-hours";
@@ -143,6 +143,8 @@ export function useMallyActions() {
   const defaultTodoListId = useSettingsStore(s => s.defaultTodoListId);
   const aiEnabledCalendarIds = useSettingsStore(s => s.aiEnabledCalendarIds);
   const mallyAutoMode = useSettingsStore(s => s.mallyAutoMode);
+  // Used by Mally's conflict-aware scheduling (working hours, buffers, search window).
+  const reschedulingPrefs = useSettingsStore(s => s.reschedulingPrefs);
 
   /** Resolve the target todo list for a new AI-created todo.
    *  Priority: AI-specified ID → AI-specified name → user default preference → activeListId → first list */
@@ -214,8 +216,9 @@ export function useMallyActions() {
     getAvailableSlots, createBooking, cancelBooking, getBookingUrl, copyBookingUrl,
   } = useAppointmentScheduling();
 
-  // Find time
-  const { findAvailableTimes, suggestNextAvailable } = useFindTime([]);
+  // Find-time / free-slot suggestions now use findAlternativeSlots against the real
+  // calendar (see find_available_time / suggest_next_slot handlers). The old
+  // useFindTime([]) instance was removed because it was fed an empty event list.
 
   // Snapshots
   const {
@@ -369,6 +372,97 @@ export function useMallyActions() {
     );
   }, []);
 
+  /**
+   * Conflict-aware scheduling helper used by create_event / update_event.
+   *
+   * Given a candidate event's times, it checks for hard overlaps against the user's
+   * real calendar (respecting locks, calendar scope, working hours and buffers via
+   * reschedulingPrefs). When a critical overlap is found AND it can be auto-resolved,
+   * it finds the nearest free slot and returns the SHIFTED times so the caller writes
+   * a non-conflicting event. When it can't auto-resolve (e.g. both events locked, or
+   * no free slot found) it returns the original times plus a human-readable note so
+   * Mally can tell the user instead of silently double-booking.
+   *
+   * Returns: { startsAt, endsAt, note, moved }.  `note` (if present) should be
+   * surfaced to the user; `moved` indicates the times were changed to avoid a clash.
+   */
+  const resolveConflictForEvent = useCallback((candidate: {
+    id?: string;
+    title?: string;
+    startsAt: string;
+    endsAt: string;
+    calendarId?: string;
+    isLocked?: boolean;
+    isAllDay?: boolean;
+  }): { startsAt: string; endsAt: string; note?: string; moved: boolean } => {
+    const startsAt = candidate.startsAt;
+    const endsAt = candidate.endsAt;
+
+    // All-day events legitimately overlap timed events — don't treat as conflicts.
+    if (candidate.isAllDay) return { startsAt, endsAt, moved: false };
+    if (!startsAt || !endsAt) return { startsAt, endsAt, moved: false };
+
+    const liveEvents = useEventStore.getState().events;
+    const probe: CalendarEventType = {
+      id: candidate.id || '__mally_probe__',
+      title: candidate.title || 'New event',
+      startsAt,
+      endsAt,
+      calendarId: candidate.calendarId,
+      isLocked: candidate.isLocked,
+    } as CalendarEventType;
+
+    const analysis = detectEventConflicts(probe, liveEvents, reschedulingPrefs);
+    const overlap = analysis.conflicts.find(c => c.type === 'overlap');
+    if (!overlap) {
+      // No hard double-booking. (Soft issues like tight buffers are left as-is —
+      // we don't move events for those, to avoid surprising the user.)
+      return { startsAt, endsAt, moved: false };
+    }
+
+    const clashTitle = overlap.conflictingEvents[0]?.title ?? 'another event';
+
+    // Locked on either side → never auto-move; just inform.
+    if (!overlap.canAutoResolve) {
+      return {
+        startsAt,
+        endsAt,
+        moved: false,
+        note: `Heads up — this overlaps with "${clashTitle}", but one of them is locked so I left the time as-is. You may want to reschedule manually.`,
+      };
+    }
+
+    // Find free slots that respect working hours + buffers. findAlternativeSlots
+    // searches from *today* forward, so for a future request we prefer a slot on the
+    // SAME day as the request (e.g. later that afternoon), then the soonest slot at or
+    // after the requested time — never silently bouncing a Friday event to today.
+    const candidates = findAlternativeSlots(probe, liveEvents, reschedulingPrefs, 20);
+    if (candidates.length === 0) {
+      return {
+        startsAt,
+        endsAt,
+        moved: false,
+        note: `Heads up — this overlaps with "${clashTitle}" and I couldn't find a free slot in your working hours. I kept the requested time; you may want to adjust it.`,
+      };
+    }
+
+    const requestedDay = dayjs(startsAt).format('YYYY-MM-DD');
+    const requestedMs = dayjs(startsAt).valueOf();
+    const sameDay = candidates.filter(s => s.date === requestedDay && dayjs(s.start).valueOf() >= requestedMs);
+    const afterRequested = candidates.filter(s => dayjs(s.start).valueOf() >= requestedMs);
+    const slot =
+      sameDay[0] ||                                   // later the same day, after the requested time
+      afterRequested.sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf())[0] || // soonest on/after
+      candidates[0];                                  // last resort: best-scored
+
+    return {
+      startsAt: slot.start,
+      endsAt: slot.end,
+      moved: true,
+      note: `That time clashed with "${clashTitle}", so I moved it to ${dayjs(slot.start).format('ddd MMM D, h:mm A')}.`,
+    };
+  }, [reschedulingPrefs]);
+
   const executeAction = useCallback(async (action: { type: string; data: any }): Promise<boolean | string> => {
     try {
       console.log('[MallyActions] Executing:', action.type, JSON.stringify(action.data || action).slice(0, 500));
@@ -433,10 +527,31 @@ export function useMallyActions() {
           }
 
           const targetCal = resolveTargetCalendar(data.calendarId);
+
+          // Conflict-aware scheduling: if the requested time double-books an existing
+          // event, shift to the nearest free slot (respecting working hours, buffers
+          // and locks). Skipped for recurring/all-day events, where per-instance
+          // shifting isn't meaningful.
+          let resolvedStart = data.start || data.startsAt;
+          let resolvedEnd = data.end || data.endsAt;
+          let conflictNote: string | undefined;
+          if (resolvedStart && resolvedEnd && !data.isRecurring && !data.isAllDay) {
+            const res = resolveConflictForEvent({
+              title: data.title,
+              startsAt: resolvedStart,
+              endsAt: resolvedEnd,
+              calendarId: targetCal.id,
+              isAllDay: data.isAllDay,
+            });
+            resolvedStart = res.startsAt;
+            resolvedEnd = res.endsAt;
+            conflictNote = res.note;
+          }
+
           const rawEventData = {
             title: data.title,
-            startsAt: data.start || data.startsAt,
-            endsAt: data.end || data.endsAt,
+            startsAt: resolvedStart,
+            endsAt: resolvedEnd,
             description: data.description || 'Created by Mally AI',
             color: data.color || '#8b5cf6',
             isRecurring: data.isRecurring || false,
@@ -476,22 +591,60 @@ export function useMallyActions() {
           if (rawEventData.startsAt) setDate(dayjs(rawEventData.startsAt));
           const createdEventId = result.data?.id || formattedEvent.id;
           useEventHighlightStore.getState().setHighlight(createdEventId, rawEventData.startsAt);
+
+          // Let the user know if we shifted the time (or couldn't) to avoid a clash.
+          if (conflictNote) toast.info(conflictNote, { duration: 6000 });
           return true;
         }
 
         case 'update_event': {
           const existing = resolveEvent(data);
           if (!existing) { toast.error(`Couldn't find event${data.title ? ` "${data.title}"` : ''}`); return false; }
+
+          let newStart = data.start ? new Date(data.start).toISOString() : existing.startsAt;
+          let newEnd = data.end ? new Date(data.end).toISOString() : existing.endsAt;
+          const timesChanged = newStart !== existing.startsAt || newEnd !== existing.endsAt;
+
+          // If this update moves the event in time, make sure it doesn't land on top
+          // of another event. Auto-shift to the nearest free slot when possible.
+          let updateNote: string | undefined;
+          if (timesChanged && !existing.isRecurring && !existing.isAllDay && !existing.isLocked) {
+            const res = resolveConflictForEvent({
+              id: existing.id,
+              title: data.title || existing.title,
+              startsAt: newStart,
+              endsAt: newEnd,
+              calendarId: data.calendarId || existing.calendarId,
+              isLocked: existing.isLocked,
+              isAllDay: existing.isAllDay,
+            });
+            newStart = res.startsAt;
+            newEnd = res.endsAt;
+            updateNote = res.note;
+          }
+
           const updated = {
             ...existing,
             title: data.title || existing.title,
-            startsAt: data.start ? new Date(data.start).toISOString() : existing.startsAt,
-            endsAt: data.end ? new Date(data.end).toISOString() : existing.endsAt,
+            startsAt: newStart,
+            endsAt: newEnd,
             description: data.description || existing.description,
             calendarId: data.calendarId || existing.calendarId,
           };
           const result = await updateEvent(updated);
-          if (result?.success) { toast.success('Event updated'); return true; }
+          if (result?.success) {
+            // Push the change to Google so a Mally-driven reschedule of a synced event
+            // doesn't desync (Google would otherwise keep the old time). Only the bridge
+            // has a true UPDATE op — pushEventToGoogle is a create and would duplicate,
+            // so we don't use it as a fallback here. Non-blocking on failure.
+            if ((updated as any).googleEventId && bridge) {
+              try { await bridge.pushUpdateToGoogle(updated as any); }
+              catch (err) { logger.warn('MallyActions', 'Google update sync failed', { error: err }); }
+            }
+            toast.success('Event updated');
+            if (updateNote) toast.info(updateNote, { duration: 6000 });
+            return true;
+          }
           return false;
         }
 
@@ -1952,25 +2105,43 @@ export function useMallyActions() {
         // ── Find Time ────────────────────────────────────────────────────────
 
         case 'find_available_time': {
-          const ftResult = await findAvailableTimes({
-            duration: data.duration || 60,
-            startDate: data.startDate ? new Date(data.startDate) : new Date(),
-            endDate: data.endDate ? new Date(data.endDate) : dayjs().add(7, 'day').toDate(),
-            startHour: data.startHour,
-            endHour: data.endHour,
-            excludeWeekends: data.excludeWeekends,
-          });
-          // The results are returned to the AI via the response — the AI can reference them in conversation
-          toast.success(`Found ${ftResult.length} available time slots`);
+          // Use the real calendar (findAlternativeSlots) instead of the legacy
+          // useFindTime([]) path, which was fed an empty attendee list and therefore
+          // reported every slot as free — blind to the user's actual events.
+          const duration = data.duration || 60;
+          const startFrom = data.startDate ? dayjs(data.startDate) : dayjs();
+          const probe: CalendarEventType = {
+            id: '__mally_findtime__',
+            title: 'Find time',
+            startsAt: startFrom.toISOString(),
+            endsAt: startFrom.add(duration, 'minute').toISOString(),
+          } as CalendarEventType;
+          const liveEvents = useEventStore.getState().events;
+          const slots = findAlternativeSlots(probe, liveEvents, reschedulingPrefs, 5);
+          if (slots.length === 0) {
+            toast.info('No open slots found in your working hours over the next week.');
+          } else {
+            const list = slots.map(s => `• ${s.label}`).join('\n');
+            toast.success(`Found ${slots.length} open slot${slots.length !== 1 ? 's' : ''}:\n${list}`, { duration: 8000 });
+          }
           return true;
         }
 
         case 'suggest_next_slot': {
-          const slot = await suggestNextAvailable(data.duration || 60, data.startFrom ? new Date(data.startFrom) : undefined);
-          if (slot) {
-            toast.success(`Next available: ${dayjs(slot.start).format('ddd MMM D, h:mm A')}`);
+          const duration = data.duration || 60;
+          const startFrom = data.startFrom ? dayjs(data.startFrom) : dayjs();
+          const probe: CalendarEventType = {
+            id: '__mally_nextslot__',
+            title: 'Next slot',
+            startsAt: startFrom.toISOString(),
+            endsAt: startFrom.add(duration, 'minute').toISOString(),
+          } as CalendarEventType;
+          const liveEvents = useEventStore.getState().events;
+          const slots = findAlternativeSlots(probe, liveEvents, reschedulingPrefs, 1);
+          if (slots.length > 0) {
+            toast.success(`Next available: ${dayjs(slots[0].start).format('ddd MMM D, h:mm A')}`);
           } else {
-            toast.info('No available slots found in the next week');
+            toast.info('No available slots found in your working hours over the next week.');
           }
           return true;
         }
@@ -2101,6 +2272,7 @@ export function useMallyActions() {
           }
 
           let successCount = 0;
+          const rescheduleNotes: string[] = [];
           for (const ev of targets) {
             const origStart = dayjs(ev.startsAt || ev.date);
             const origEnd = dayjs(ev.endsAt || ev.startsAt || ev.date);
@@ -2113,16 +2285,41 @@ export function useMallyActions() {
             } else {
               newStart = origStart.add(daysOffset!, 'day');
             }
-            const newEnd = newStart.add(duration, 'minute');
+            let newEnd = newStart.add(duration, 'minute');
+            let resolvedStart = newStart.toISOString();
+            let resolvedEnd = newEnd.toISOString();
+
+            // Conflict-aware batch reschedule: ensure each moved event doesn't land on
+            // top of an existing one — including events already moved earlier in THIS
+            // batch (updateEvent awaits + updates the store, so resolveConflictForEvent's
+            // live-events read sees prior moves). Recurring/locked/all-day are skipped.
+            if (!ev.isRecurring && !ev.isLocked && !ev.isAllDay) {
+              const res = resolveConflictForEvent({
+                id: ev.id,
+                title: ev.title,
+                startsAt: resolvedStart,
+                endsAt: resolvedEnd,
+                calendarId: ev.calendarId,
+                isLocked: ev.isLocked,
+                isAllDay: ev.isAllDay,
+              });
+              resolvedStart = res.startsAt;
+              resolvedEnd = res.endsAt;
+              if (res.note) rescheduleNotes.push(`${ev.title}: ${res.note}`);
+            }
+
             const r = await updateEvent({
               ...ev,
-              startsAt: newStart.toISOString(),
-              endsAt: newEnd.toISOString(),
+              startsAt: resolvedStart,
+              endsAt: resolvedEnd,
             });
             if (r?.success) successCount++;
           }
 
           toast.success(`Rescheduled ${successCount} event${successCount === 1 ? '' : 's'}`);
+          if (rescheduleNotes.length > 0) {
+            toast.info(rescheduleNotes.slice(0, 3).join('\n'), { duration: 7000 });
+          }
           return successCount > 0;
         }
 
@@ -2250,7 +2447,7 @@ export function useMallyActions() {
     sendInvite, respondToInvite, deleteInvite, setView, setDate,
     calendarAccounts, toggleVisibility, setAllVisible,
     resolvePageRef, resolveModuleRef, resolveModuleIndex, ensureModuleVisible,
-    resolveTargetCalendar, resolveTargetList,
+    resolveTargetCalendar, resolveTargetList, resolveConflictForEvent,
     syncEnabled, pushEventToGoogle, bridge,
     // New deps
     bulkDelete, bulkUpdateColor, bulkReschedule, bulkDuplicate,
@@ -2264,7 +2461,7 @@ export function useMallyActions() {
     scheduleGoalSessions, completeSession, skipSession, pauseGoal, resumeGoal,
     bookingPages, bookings, createBookingPage, updateBookingPage, deleteBookingPage,
     togglePageActive, getAvailableSlots, createBooking, cancelBooking, copyBookingUrl,
-    findAvailableTimes, suggestNextAvailable,
+    reschedulingPrefs,
     snapshots, createSnapshot, restoreSnapshot, deleteCalendarSnapshot,
     clearCalendar, saveAndStartFresh,
     searchEvents, searchResults,
@@ -2308,12 +2505,15 @@ export function useMallyActions() {
     todoLists: lists.map(l => ({ id: l.id, name: (l as any).name, isActive: l.id === activeListId })),
     pomodoro: (() => { const p = getPomodoroInstance(); return { isActive: p.isActive, mode: p.timerMode, timeLeft: p.timeLeft }; })(),
     eisenhowerItems,
-    // Send non-archived events; Google-sourced events bypass the calendarId filter
-    // since their calendarId system differs from aiEnabledCalendarIds
+    // Send ALL non-archived events to the AI so "check my whole schedule" works.
+    // We deliberately do NOT pre-filter by aiEnabledCalendarIds here — that filter
+    // previously hid events the user actually had, making Mally report "no events".
+    // The aiEnabledCalendarIds list is still passed below as a hint the AI can use
+    // to *narrow* on request, but it never silently removes events from context.
+    // Cap raised from 100 -> 500 to avoid truncating busy calendars.
     events: events
       .filter(e => !(e as any).isArchived)
-      .filter(e => (e as any).source === 'google' || !aiEnabledCalendarIds || !(e as any).calendarId || aiEnabledCalendarIds.includes((e as any).calendarId))
-      .slice(0, 100),
+      .slice(0, 500),
     todos: todos.slice(0, 30),
     alarms: alarms.slice(0, 20).map(a => ({ id: a.id, title: a.title, time: (a as any).time })),
     // AI calendar filter: which calendars Mally reads events from (null = all)
@@ -2363,6 +2563,16 @@ export function useMallyActions() {
       days: (workingHours as any).days,
     } : undefined,
 
+    // Scheduling window the conflict auto-resolver enforces. Sent so the model's own
+    // slot picks land inside these hours (avoids the "model says free, client shifts"
+    // mismatch). Mirrors reschedulingPrefs used by detectEventConflicts/findAlternativeSlots.
+    schedulingWindow: {
+      workdayStart: reschedulingPrefs.workdayStart,
+      workdayEnd: reschedulingPrefs.workdayEnd,
+      workDays: reschedulingPrefs.workDays,
+      minBufferMinutes: reschedulingPrefs.minBufferMinutes,
+    },
+
     // Analytics summary (lightweight)
     analytics: analyticsMetrics ? {
       thisWeek: (analyticsMetrics as any).thisWeek,
@@ -2400,7 +2610,7 @@ export function useMallyActions() {
     eisenhowerItems, events, todos, alarms, userMemory,
     // New deps
     calendarGroups, goalsWithProgress, bookingPages, snapshots,
-    workingHours, analyticsMetrics,
+    workingHours, analyticsMetrics, reschedulingPrefs,
     isBulkMode, selectedCount, canUndo, canRedo,
     calendarTemplates, resolveTargetCalendar, resolveTargetList, defaultTodoListId,
   ]);

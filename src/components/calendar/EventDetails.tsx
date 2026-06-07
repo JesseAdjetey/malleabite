@@ -111,10 +111,13 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
     if (!selectedEvent) return;
 
     try {
-      // Synced Google events (id starts with 'synced_') have no parent in the local store.
-      // Each instance is its own Firestore doc — handle them directly.
+      // Synced/external recurring events (id starts with 'synced_'). The series is a
+      // single synced doc expanded client-side; deleting the instance id alone used to
+      // remove only the one occurrence even when the user picked "all". Pass the scope
+      // through so removeEvent can delete the whole Google series for 'all'/'future'
+      // and just the occurrence for 'single'.
       if (selectedEvent.id.startsWith('synced_')) {
-        await removeEvent(selectedEvent.id);
+        await removeEvent(selectedEvent.id, scope as 'single' | 'all' | 'thisAndFuture');
         toast.success(
           scope === 'single'
             ? "This occurrence has been removed"

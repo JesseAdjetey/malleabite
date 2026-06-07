@@ -9,7 +9,6 @@ import { logCalendarPerf } from "@/lib/perf/calendar-perf";
 
 interface TimeSlotsGridProps {
   userSelectedDate: dayjs.Dayjs;
-  currentTime: dayjs.Dayjs;
   events: CalendarEventType[];
   onTimeSlotClick: (hour: dayjs.Dayjs) => void;
   addEvent: (event: CalendarEventType) => Promise<any>;
@@ -22,7 +21,6 @@ interface TimeSlotsGridProps {
 
 const TimeSlotsGrid: React.FC<TimeSlotsGridProps> = ({
   userSelectedDate,
-  currentTime,
   events,
   onTimeSlotClick,
   addEvent,

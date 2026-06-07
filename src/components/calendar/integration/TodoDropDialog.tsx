@@ -169,9 +169,16 @@ const TodoDropDialog: React.FC<TodoDropDialogProps> = ({
         </DialogHeader>
 
         <div className="px-5 pb-5 space-y-4">
-          {/* Todo info */}
-          <div className="rounded-xl bg-muted/40 px-3 py-2.5">
-            <p className="text-sm font-semibold text-foreground truncate">"{todoTitle}"</p>
+          {/* Todo info — clamp the title so a long (or space-less) todo name can't
+              overflow and break the dialog layout. min-w-0 lets truncation work
+              inside the flex/grid dialog body; break-words handles long unbroken strings. */}
+          <div className="rounded-xl bg-muted/40 px-3 py-2.5 min-w-0">
+            <p
+              className="text-sm font-semibold text-foreground break-words line-clamp-2"
+              title={todoTitle}
+            >
+              "{todoTitle}"
+            </p>
             {displayTime && (
               <p className="text-xs text-muted-foreground mt-0.5">{displayTime}</p>
             )}

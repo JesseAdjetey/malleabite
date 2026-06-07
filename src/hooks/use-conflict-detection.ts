@@ -173,29 +173,31 @@ export function useConflictDetection(
         });
       }
     } else {
-      // Check all events for conflicts
-      const checkedPairs = new Set<string>();
+      // Check all events for conflicts using a sweep line.
+      // The previous implementation compared every pair (O(n²)) — with a few hundred
+      // events that is tens of thousands of overlap checks on every render. Sorting by
+      // start time lets us stop comparing as soon as a later event starts after the
+      // current one ends, so each event only looks at the handful that could overlap.
+      const sorted = events
+        .map((e) => ({ e, start: new Date(e.startsAt).getTime(), end: new Date(e.endsAt).getTime() }))
+        .filter((x) => !Number.isNaN(x.start) && !Number.isNaN(x.end))
+        .sort((a, b) => a.start - b.start);
 
-      events.forEach((event1, index) => {
+      sorted.forEach(({ e: event1, end: end1 }, index) => {
         const eventConflicts: string[] = [];
 
-        events.forEach((event2, index2) => {
-          if (index >= index2) return; // Skip self and already checked pairs
-
-          const pairKey = `${event1.id}-${event2.id}`;
-          const reversePairKey = `${event2.id}-${event1.id}`;
-
-          if (checkedPairs.has(pairKey) || checkedPairs.has(reversePairKey)) {
-            return;
-          }
+        for (let j = index + 1; j < sorted.length; j++) {
+          const { e: event2, start: start2 } = sorted[j];
+          // Sorted by start; once the next event starts at/after event1 ends,
+          // no later event can overlap event1 either — stop scanning.
+          if (start2 >= end1) break;
 
           if (eventsOverlap(event1, event2)) {
             eventConflicts.push(event2.id);
             conflictingEventIds.add(event1.id);
             conflictingEventIds.add(event2.id);
-            checkedPairs.add(pairKey);
           }
-        });
+        }
 
         if (eventConflicts.length > 0) {
           const firstConflict = events.find((e) => e.id === eventConflicts[0]);

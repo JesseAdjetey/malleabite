@@ -42,7 +42,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigationDirection } from "@/hooks/use-navigation-direction";
 
 const WeekView = () => {
-  const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
   const { isPickingEvent, completePicking, cancelPicking } = useReminderEventPickerStore();
   const {
@@ -272,12 +271,8 @@ const WeekView = () => {
     setRecurringEventForDialog(null);
   }, [pendingRecurringDrop, events, addEvent, updateEvent, addRecurrenceException]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(dayjs());
-    }, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, []);
+  // The current-time indicator now owns its own minute ticker (see
+  // CurrentTimeIndicator), so WeekView no longer re-renders every minute.
 
   useEffect(() => {
     if (pendingTimeSelection) {
@@ -368,10 +363,15 @@ const WeekView = () => {
   const visibleWeekDays = weekDays.slice(rangeStart, rangeEnd + 1);
   const visibleDayCount = rangeEnd - rangeStart + 1;
 
-  // Expand recurring events into instances for the current week view
-  const expandedEvents = useMemo(() => {
+  // Reuse the stable `weekKey` declared above (start-of-week date string) as the
+  // expansion memo key — it only changes when the visible week changes, so toggling
+  // a calendar does not re-run the expensive recurring expansion.
+
+  // Expand recurring events for the week. Independent of calendar visibility so
+  // toggling a calendar does not re-run the expensive recurring expansion.
+  const allExpandedEvents = useMemo(() => {
     if (!weekDays.length) {
-      return events.filter(event => isCalendarVisible(event.calendarId));
+      return events;
     }
 
     // weekDays returns { currentDate, today } objects, not dayjs directly
@@ -380,10 +380,7 @@ const WeekView = () => {
 
     const allInstances: CalendarEventType[] = [];
 
-    // First filter by calendar visibility, then expand recurring events
-    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
-
-    visibleEvents.forEach(event => {
+    events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, weekStart, weekEnd);
@@ -398,7 +395,14 @@ const WeekView = () => {
     });
 
     return allInstances;
-  }, [events, userSelectedDate, isCalendarVisible, hiddenCalendarIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, weekKey]);
+
+  // Cheap visibility filter — only work that re-runs on calendar toggle.
+  const expandedEvents = useMemo(
+    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
+    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
+  );
 
   // Merge template draft events into display when in template mode
   const displayEvents = useMemo(() => {
@@ -911,7 +915,6 @@ const WeekView = () => {
                   key={`${weekKey}-${index}`}
                   currentDate={currentDate}
                   dayEvents={dayEvents}
-                  currentTime={currentTime}
                   onTimeSlotClick={handleTimeSlotClick}
                   onDragOver={handleDragOver}
                   onDrop={(e, day, hour) => handleDrop(e, day, hour)}

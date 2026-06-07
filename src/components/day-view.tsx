@@ -22,7 +22,6 @@ import { useTemplateModeStore } from "@/lib/stores/template-mode-store";
 import { DayAllDayRow, splitAllDayEvents } from "@/components/calendar/AllDaySection";
 
 const DayView = () => {
-  const [currentTime, setCurrentTime] = useState(dayjs());
   const { userSelectedDate } = useDateStore();
   const { events, isEventSummaryOpen, closeEventSummary, openEventSummary } = useEventStore();
   const { addEvent } = useEventCRUD();
@@ -63,13 +62,6 @@ const DayView = () => {
     hour: dayjs.Dayjs;
   } | null>(null);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(dayjs());
-    }, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, []);
-
   // New useEffect to handle time slot selection properly
   useEffect(() => {
     if (pendingTimeSelection) {
@@ -103,17 +95,19 @@ const DayView = () => {
   const draftEvents = useTemplateModeStore(s => s.draftEvents);
   const addDraftEvent = useTemplateModeStore(s => s.addDraftEvent);
 
-  // Expand recurring events into instances for the current day
-  const expandedEvents = useMemo(() => {
+  // Stable day key so the expensive expansion memo only re-runs when the day
+  // actually changes — not on every parent re-render (Dayjs identity is unstable).
+  const dayKey = userSelectedDate.format('YYYY-MM-DD');
+
+  // Expand recurring events for the day. Does NOT depend on calendar visibility —
+  // toggling calendars must not re-run recurring expansion (the slow part).
+  const allExpandedEvents = useMemo(() => {
     const dayStart = userSelectedDate.startOf('day').toDate();
     const dayEnd = userSelectedDate.endOf('day').toDate();
 
     const allInstances: CalendarEventType[] = [];
 
-    // First filter by calendar visibility, then expand recurring events
-    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
-
-    visibleEvents.forEach(event => {
+    events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, dayStart, dayEnd);
@@ -128,7 +122,14 @@ const DayView = () => {
     });
 
     return allInstances;
-  }, [events, userSelectedDate, isCalendarVisible, hiddenCalendarIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events, dayKey]);
+
+  // Cheap visibility filter — the only work that re-runs on calendar toggle.
+  const expandedEvents = useMemo(
+    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
+    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
+  );
 
   // Merge template draft events when in template mode
   const displayEvents = useMemo(() => {
@@ -233,7 +234,6 @@ const DayView = () => {
         <div className="h-[calc(100vh-170px)] overflow-y-auto">
           <TimeSlotsGrid
             userSelectedDate={userSelectedDate}
-            currentTime={currentTime}
             events={dayTimedEvents}
             onTimeSlotClick={handleTimeSlotClick}
             addEvent={handleAddEvent}

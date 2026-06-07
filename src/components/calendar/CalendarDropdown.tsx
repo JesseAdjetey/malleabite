@@ -43,6 +43,7 @@ import TemplateManager from './TemplateManager';
 import MergeCalendarsDialog from './MergeCalendarsDialog';
 import { useTemplateEventsLoader, templateCalendarId, TEMPLATE_CALENDAR_PREFIX } from '@/hooks/use-template-events-loader';
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
+import { useEventStore } from '@/lib/store';
 import { springs } from '@/lib/animations';
 import { toast } from 'sonner';
 import { useSyncStatusStore } from '@/lib/stores/sync-status-store';
@@ -345,14 +346,24 @@ const CalendarDropdown: React.FC = () => {
       // but setCalendarVisible in the bridge is idempotent so it's safe).
       toggleCalendar(calendarId, isActive);
 
-      // If turning ON and we already have this calendar connected, trigger a
-      // background sync so events show without requiring manual refresh.
+      // If turning ON, only trigger a background sync when this calendar has NO
+      // cached events yet. Previously every toggle-on kicked off a full network
+      // re-sync (5–10s of work) even when re-showing a calendar whose events were
+      // already loaded — that is the main cause of the laggy un-tick / re-tick.
       if (isActive) {
         const selected = calendars.find((c) => c.id === calendarId);
         if (selected) {
-          syncCalendar(selected).catch((err) => {
-            console.warn('Calendar auto-sync on toggle failed:', selected.name, err);
-          });
+          const hasCachedEvents = useEventStore
+            .getState()
+            .events.some((e) => (e as any).calendarId === calendarId);
+          if (!hasCachedEvents) {
+            // Defer off the click handler so the checkbox repaints instantly.
+            setTimeout(() => {
+              syncCalendar(selected).catch((err) => {
+                console.warn('Calendar auto-sync on toggle failed:', selected.name, err);
+              });
+            }, 0);
+          }
         }
       }
     },

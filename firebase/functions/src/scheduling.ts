@@ -8,7 +8,7 @@ const geminiApiKey = defineSecret('GEMINI_API_KEY');
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatEventsForAI = (events: any[]): string => {
-  if (!events || events.length === 0) return 'No events scheduled in the next 30 days.';
+  if (!events || events.length === 0) return 'No events found on the calendar.';
   return events.map(e => {
     let start: Date | undefined, end: Date | undefined;
     if (e.startsAt?.toDate) { start = e.startsAt.toDate(); }
@@ -19,7 +19,8 @@ const formatEventsForAI = (events: any[]): string => {
     const dateStr = start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    return `- "${e.title}" on ${dateStr} from ${startTime} to ${endTime} (ID: ${e.id})`;
+    const flags = [e.isLocked ? 'LOCKED' : '', e.isAllDay ? 'ALL-DAY' : ''].filter(Boolean).join(', ');
+    return `- "${e.title}" on ${dateStr} from ${startTime} to ${endTime} (ID: ${e.id}${flags ? `, ${flags}` : ''})`;
   }).filter(Boolean).join('\n');
 };
 
@@ -76,6 +77,10 @@ const normalizeActions = (rawActions: any[]) => rawActions.map(op => {
     };
   } else if (type === 'create_todo' || type === 'add_todo_to_list') {
     return { type: 'create_todo', data: { text: data.text || data.content, listName: data.listName } };
+  } else if (type === 'find_available_time') {
+    return { type, data: { duration: data.duration || data.durationMinutes || 60, startDate: data.startDate || data.start || data.from, endDate: data.endDate || data.end || data.to, startHour: data.startHour, endHour: data.endHour, excludeWeekends: data.excludeWeekends } };
+  } else if (type === 'suggest_next_slot') {
+    return { type, data: { duration: data.duration || data.durationMinutes || 60, startFrom: data.startFrom || data.start || data.from } };
   } else if (type === 'create_alarm') {
     return { type, data: { title: data.title, time: data.time } };
   } else if (type === 'archive_calendar') {
@@ -151,26 +156,30 @@ export const processSchedulingStream = onRequest(
     try {
       const db = admin.firestore();
       const now = new Date();
-      const startRange = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endRange = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      const aiEnabledCalendarIds: string[] | null = clientContext?.aiEnabledCalendarIds ?? null;
-      let eventsQuery: any = db.collection('calendar_events')
-        .where('userId', '==', userId)
-        .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(startRange))
-        .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(endRange))
-        .where('isArchived', '==', false)
-        .orderBy('startsAt', 'asc');
+      // Prefer the events the client already loaded (these include synced Google /
+      // Microsoft events and respect what the user actually sees). Only fall back to
+      // a direct Firestore read when the client sent nothing. We do NOT filter by
+      // aiEnabledCalendarIds — that previously hid events and made Mally report an
+      // empty schedule. The user asked for "my whole schedule"; give them all of it.
+      const clientEvents: any[] = Array.isArray(clientContext?.events) ? clientContext.events : [];
 
-      // If user restricted which calendars Mally can see, apply the filter
-      if (aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0) {
-        eventsQuery = eventsQuery.where('calendarId', 'in', aiEnabledCalendarIds.slice(0, 30));
+      let events: any[] = clientEvents;
+      if (events.length === 0) {
+        // Fallback: read a wide window directly from Firestore (past 30d → next 90d)
+        const startRange = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const endRange = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+        const snap = await db.collection('calendar_events')
+          .where('userId', '==', userId)
+          .where('startsAt', '>=', admin.firestore.Timestamp.fromDate(startRange))
+          .where('startsAt', '<=', admin.firestore.Timestamp.fromDate(endRange))
+          .where('isArchived', '==', false)
+          .orderBy('startsAt', 'asc')
+          .limit(500)
+          .get();
+        snap.forEach((doc: any) => events.push({ id: doc.id, ...doc.data() }));
       }
 
-      const snap = await eventsQuery.limit(50).get();
-
-      const events: any[] = [];
-      snap.forEach((doc: any) => events.push({ id: doc.id, ...doc.data() }));
       const eventsContext = formatEventsForAI(events);
 
       // Build calendar groups context
@@ -208,6 +217,14 @@ export const processSchedulingStream = onRequest(
 
       const autoMode: boolean = clientContext?.autoMode === true;
 
+      // Working-hours hint so the model's own slot picks land inside the same window
+      // the client's conflict auto-resolver enforces (avoids "model says free / client shifts").
+      const sw = clientContext?.schedulingWindow;
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const workingHoursLine = sw
+        ? `WORKING HOURS: ${sw.workdayStart}:00–${sw.workdayEnd}:00 on ${(sw.workDays || []).map((d: number) => dayNames[d]).join(', ') || 'weekdays'}${sw.minBufferMinutes ? `, with a ${sw.minBufferMinutes}-min buffer between events` : ''}. Prefer these hours when picking a time unless the user asks otherwise.`
+        : 'WORKING HOURS: 8:00–18:00 on weekdays. Prefer these hours unless asked otherwise.';
+
       const systemPrompt = `You are Mally, a warm and intelligent scheduling assistant.
 Current Time: ${clientContext.currentTime || new Date().toISOString()}
 User Timezone: ${clientContext.timeZone || 'UTC'}
@@ -219,6 +236,8 @@ EXECUTION RULE: If the user's intent is clear, execute immediately — don't ask
 
 EXISTING EVENTS:
 ${eventsContext || 'No events scheduled.'}
+
+${workingHoursLine}
 
 CALENDAR_GROUPS (use these names for groupName):
 ${groupsContext}
@@ -261,6 +280,8 @@ CAPABILITIES:
 - Eisenhower: {"type":"create_eisenhower","data":{"text":"...","quadrant":"urgent_important|not_urgent_important|urgent_not_important|not_urgent_not_important"}}
 - Reminders: {"type":"create_reminder","data":{"title":"...","reminderTime":"ISO8601"}}
 - View: {"type":"change_view","data":{"view":"day|week|month"}}
+- Find free time: {"type":"find_available_time","data":{"duration":60,"startDate":"ISO8601 optional","endDate":"ISO8601 optional"}}
+- Suggest the single next open slot: {"type":"suggest_next_slot","data":{"duration":60,"startFrom":"ISO8601 optional"}}
 
 dayOfWeek values: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday. MUST be an integer, never a string.
 
@@ -274,10 +295,17 @@ TEMPLATE RULES (CRITICAL — follow exactly):
 - NEVER create an empty template with no events. If the user's request implies events, include them ALL.
 - Use the EXACT template name from CALENDAR_TEMPLATES when referencing existing templates — do not paraphrase or shorten the name.
 
+CONFLICT HANDLING (IMPORTANT):
+- The EXISTING EVENTS list above is the user's real schedule with start and end times. Before scheduling, check whether the requested time overlaps any existing event.
+- When the user gives a specific time that is free, use it.
+- When the user gives a time that OVERLAPS an existing event, prefer a non-conflicting time: either pick the nearest open slot yourself (state the new time in your SPEECH) OR emit a find_available_time/suggest_next_slot action and propose a slot. Do NOT knowingly double-book.
+- When the user asks "when am I free", "find a time", "what's my next opening", or to fit something into their schedule, use find_available_time (for several options) or suggest_next_slot (for one).
+- The app also has a safety net: if you do emit a create_event/update_event that still overlaps, the client will automatically shift it to the nearest free slot and tell the user — but you should still try to avoid the clash yourself.
+- Respect the user's existing events on ALL their calendars when reasoning about availability.
+
 RULES:
 - "start pomodoro" = start timer NOW (no calendar event)
 - Resolve pronouns (it/this/that) from conversation history
-- Check for conflicts in existing events; suggest alternatives
 - Default event duration: 1 hour
 - Never claim you "don't have the ability" for page/module operations — you DO support page-specific module/list actions.
 - If user specifies a page, include pageName/targetPageName in action data.

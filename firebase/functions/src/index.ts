@@ -511,12 +511,12 @@ export const processAIRequest = onRequest(
       console.log(`[AI] Event sources: ${clientEvents.length} client events + ${uniqueSyncedEvents.length} new synced events = ${allEvents.length} total`);
 
       const buildEventsContext = (rawEvents: any[]): string => {
-        // Synced external events (source: 'google') use a different calendarId system than
-        // Malleabite's aiEnabledCalendarIds — they're already filtered by which Google Calendars
-        // are connected, so they bypass the AI calendar filter and always pass through.
-        const calFiltered = aiEnabledCalendarIds && aiEnabledCalendarIds.length > 0
-          ? rawEvents.filter(e => e.source === 'google' || !e.calendarId || aiEnabledCalendarIds.includes(e.calendarId))
-          : rawEvents;
+        // We intentionally do NOT filter by aiEnabledCalendarIds. Pre-filtering here
+        // used to silently drop events the user actually had, so when they asked Mally
+        // to "check my whole schedule" it answered "no events". The aiEnabledCalendarIds
+        // list is still available in context as a hint the AI can use to narrow on
+        // request, but it never removes events from what the AI can see.
+        const calFiltered = rawEvents;
 
         const nowMs = Date.now();
         const eightWeeksMs = 56 * 24 * 60 * 60 * 1000;

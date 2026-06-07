@@ -20,7 +20,6 @@ interface DayColumnProps {
   dayEvents: CalendarEventType[];
   /** Full event list used for alternative-slot search. Falls back to dayEvents. */
   allEvents?: CalendarEventType[];
-  currentTime: dayjs.Dayjs;
   onTimeSlotClick: (day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, day: dayjs.Dayjs, hour: dayjs.Dayjs) => void;
@@ -41,7 +40,6 @@ const DayColumn: React.FC<DayColumnProps> = ({
   currentDate,
   dayEvents,
   allEvents,
-  currentTime,
   onTimeSlotClick,
   onDragOver,
   onDrop,
@@ -299,9 +297,8 @@ const DayColumn: React.FC<DayColumnProps> = ({
         );
       })}
 
-      {/* Current Time indicator */}
+      {/* Current Time indicator — owns its own minute ticker internally */}
       <CurrentTimeIndicator
-        currentTime={currentTime}
         isCurrentDay={isCurrentDay(currentDate)}
       />
 

@@ -113,15 +113,18 @@ const MonthView = () => {
   const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
   const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
 
-  // Expand recurring events into instances for the current month view
-  const expandedEvents = useMemo(() => {
-    // Get month date range for recurring event expansion
+  // Expand recurring events into instances for the current month view.
+  // IMPORTANT: this memo deliberately does NOT depend on calendar visibility.
+  // Recurring expansion is the expensive part; re-running it every time the user
+  // toggles a calendar on/off was the main cause of the laggy calendar dropdown.
+  // Visibility filtering is applied in a separate, cheap memo below.
+  const allExpandedEvents = useMemo(() => {
     const firstDay = twoDMonthArray[0]?.[0];
     const lastWeek = twoDMonthArray[twoDMonthArray.length - 1];
     const lastDay = lastWeek?.[6] || lastWeek?.[lastWeek.length - 1];
 
     if (!firstDay || !lastDay) {
-      return events.filter(event => isCalendarVisible(event.calendarId)); // Filter and return
+      return events;
     }
 
     const monthStart = firstDay.startOf('day').toDate();
@@ -129,10 +132,7 @@ const MonthView = () => {
 
     const allInstances: CalendarEventType[] = [];
 
-    // First filter by calendar visibility, then expand recurring events
-    const visibleEvents = events.filter(event => isCalendarVisible(event.calendarId));
-
-    visibleEvents.forEach(event => {
+    events.forEach(event => {
       if (event.isRecurring && event.recurrenceRule) {
         try {
           const instances = generateRecurringInstances(event, monthStart, monthEnd);
@@ -147,7 +147,14 @@ const MonthView = () => {
     });
 
     return allInstances;
-  }, [events, twoDMonthArray, isCalendarVisible, hiddenCalendarIds]);
+  }, [events, twoDMonthArray]);
+
+  // Cheap O(n) visibility filter — the only thing that re-runs on calendar toggle.
+  const expandedEvents = useMemo(
+    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
+    // hiddenCalendarIds is the reactive trigger; isCalendarVisible reads from it.
+    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
+  );
 
   const eventsByDay = useMemo(() => {
     const startedAt = performance.now();

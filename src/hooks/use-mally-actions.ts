@@ -55,6 +55,11 @@ export function useMallyActions() {
   const navigate = useNavigate();
   // Calendar
   const { addEvent, removeEvent, updateEvent, events, archiveAllEvents, restoreFolder } = useCalendarEvents();
+  // The merged event set the CALENDAR actually shows — includes Google/Microsoft
+  // synced events (which live in `syncedEvents`, NOT `calendar_events`). useCalendarEvents
+  // only returns `calendar_events`, so building Mally's context from it hid every synced
+  // event and made Mally report "nothing on your schedule". Use the merged store instead.
+  const allEventsForAI = useEventStore(s => s.events);
   const { syncEnabled, pushEventToGoogle } = useGoogleCalendar();
   const bridge = useGoogleSyncBridgeContext();
 
@@ -2506,12 +2511,13 @@ export function useMallyActions() {
     pomodoro: (() => { const p = getPomodoroInstance(); return { isActive: p.isActive, mode: p.timerMode, timeLeft: p.timeLeft }; })(),
     eisenhowerItems,
     // Send ALL non-archived events to the AI so "check my whole schedule" works.
-    // We deliberately do NOT pre-filter by aiEnabledCalendarIds here — that filter
-    // previously hid events the user actually had, making Mally report "no events".
-    // The aiEnabledCalendarIds list is still passed below as a hint the AI can use
-    // to *narrow* on request, but it never silently removes events from context.
-    // Cap raised from 100 -> 500 to avoid truncating busy calendars.
-    events: events
+    // Source is the MERGED store (allEventsForAI) so Google/Microsoft synced events are
+    // included — using useCalendarEvents().events here previously sent only
+    // `calendar_events` and hid every synced event from Mally.
+    // We deliberately do NOT pre-filter by aiEnabledCalendarIds — that filter previously
+    // hid events too. The aiEnabledCalendarIds list is still passed below as a hint the
+    // AI can use to *narrow* on request. Cap raised to 500 to avoid truncating.
+    events: allEventsForAI
       .filter(e => !(e as any).isArchived)
       .slice(0, 500),
     todos: todos.slice(0, 30),
@@ -2610,7 +2616,7 @@ export function useMallyActions() {
     eisenhowerItems, events, todos, alarms, userMemory,
     // New deps
     calendarGroups, goalsWithProgress, bookingPages, snapshots,
-    workingHours, analyticsMetrics, reschedulingPrefs,
+    workingHours, analyticsMetrics, reschedulingPrefs, allEventsForAI,
     isBulkMode, selectedCount, canUndo, canRedo,
     calendarTemplates, resolveTargetCalendar, resolveTargetList, defaultTodoListId,
   ]);

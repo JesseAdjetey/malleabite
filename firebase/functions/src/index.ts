@@ -1279,13 +1279,40 @@ INCLUDE "memoryUpdate" whenever you learn something new about the user. Omit it 
         }
       });
 
-      const result = await chat.sendMessage(message);
-      const responseText = result.response.text();
+      let result: any = null;
+      let responseText = '';
+      let isQuotaError = false;
+
+      try {
+        result = await chat.sendMessage(message);
+        responseText = result.response.text();
+      } catch (chatError: any) {
+        console.error('Gemini chat error:', chatError);
+        const errMessage = String(chatError.message || chatError || '').toLowerCase();
+        if (
+          errMessage.includes('429') ||
+          errMessage.includes('quota') ||
+          errMessage.includes('resource_exhausted') ||
+          errMessage.includes('too many requests')
+        ) {
+          console.warn('Gemini API quota exceeded. Falling back to offline response.');
+          isQuotaError = true;
+        } else {
+          throw chatError;
+        }
+      }
+
+      if (isQuotaError) {
+        const fallbackResponse = getFallbackResponse(message);
+        fallbackResponse.response = `⚠️ **Gemini API quota exceeded.** I've temporarily switched to offline scheduling mode.\n\n${fallbackResponse.response}`;
+        res.json({ result: fallbackResponse });
+        return;
+      }
 
       // ── Extract Google Search grounding metadata (source citations) ────
       let sources: Array<{ title: string; uri: string }> = [];
       try {
-        const candidate = (result.response as any).candidates?.[0];
+        const candidate = (result?.response as any).candidates?.[0];
         const groundingMeta = candidate?.groundingMetadata;
         if (groundingMeta?.groundingChunks) {
           sources = groundingMeta.groundingChunks

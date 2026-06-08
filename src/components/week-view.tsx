@@ -880,7 +880,7 @@ const WeekView = () => {
         <ScrollArea className="h-[calc(100vh-170px)]">
           {/* Sticky day column labels — matches the grid below for clear mapping */}
           <div
-            className="sticky top-0 z-10 bg-gradient-to-b from-background via-background to-background/80 backdrop-blur-sm px-4 pt-1.5 pb-1 border-b border-purple-100/50 dark:border-white/5 overflow-hidden"
+            className="sticky top-0 z-10 bg-background px-4 pt-1.5 pb-1 border-b border-purple-100/50 dark:border-white/5 overflow-hidden"
             style={{ display: 'grid', gridTemplateColumns: `auto repeat(${visibleDayCount}, 1fr)` }}
           >
             <div className="w-16" />

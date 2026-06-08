@@ -34,7 +34,7 @@ interface PrintCalendarDialogProps {
 
 export function PrintCalendarDialog({ open, onOpenChange }: PrintCalendarDialogProps) {
   const { printCalendar, exportHTML } = usePrintCalendar();
-  const { events } = useEventStore();
+  const events = useEventStore(s => s.events);
 
   const [options, setOptions] = useState<PrintOptions>({
     layout: 'week',

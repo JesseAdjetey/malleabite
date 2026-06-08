@@ -115,7 +115,7 @@ export const goalCategoryPresets: Record<GoalCategory, { icon: string; color: st
 
 export function useGoals() {
   const { user } = useAuth();
-  const { events } = useEventStore();
+  const events = useEventStore(s => s.events);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [sessions, setSessions] = useState<GoalSession[]>([]);
   const [loading, setLoading] = useState(true);

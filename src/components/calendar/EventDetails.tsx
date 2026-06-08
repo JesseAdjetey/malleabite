@@ -84,7 +84,8 @@ interface EventDetailsProps {
 
 const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const isMobile = useIsMobile();
-  const { selectedEvent, events } = useEventStore();
+  const selectedEvent = useEventStore(s => s.selectedEvent);
+  const events = useEventStore(s => s.events);
 
   const { updateEvent, removeEvent } = useEventCRUD();
   const { trackDeleteEvent, trackUpdateEvent } = useUndoRedo();

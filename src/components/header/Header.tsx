@@ -160,7 +160,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       <div className="flex items-center gap-2 pointer-events-auto overflow-x-auto hide-scrollbar max-w-[calc(100vw-5rem)]">
         <span className="text-xs font-semibold tracking-widest uppercase px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 select-none flex-shrink-0">Beta</span>
 
-        <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-3xl border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm flex-shrink-0">
+        {/* Solid translucent bg instead of backdrop-blur-3xl: this toolbar is
+            always on screen over the scrolling calendar, and a 64px blur radius
+            forces the browser to re-sample + re-blur that whole region every
+            frame the grid moves. The opaque tint reads the same. */}
+        <div className="flex items-center gap-2 bg-black/[0.06] dark:bg-white/[0.07] border border-black/10 dark:border-white/10 rounded-xl px-2.5 py-1.5 shadow-sm flex-shrink-0">
 
         {/* Today Button */}
         <motion.button

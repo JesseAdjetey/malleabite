@@ -33,7 +33,7 @@ interface SearchBarProps {
 
 export function SearchBar({ className, onResultSelect }: SearchBarProps) {
   const { events } = useCalendarEvents();
-  const { openEventSummary } = useEventStore();
+  const openEventSummary = useEventStore(s => s.openEventSummary);
   const navigate = useNavigate();
   
   const {

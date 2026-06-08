@@ -41,7 +41,8 @@ const TodoModule: React.FC<TodoModuleProps> = ({
     message?: string;
   } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const { addEvent, events } = useEventStore();
+  const addEvent = useEventStore(s => s.addEvent);
+  const events = useEventStore(s => s.events);
   const {
     todos,
     loading,

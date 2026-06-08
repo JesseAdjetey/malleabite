@@ -38,7 +38,10 @@ const TimeSlot: React.FC<TimeSlotProps> = ({
   isSelected = () => false,
   onToggleSelection = () => { },
 }) => {
-  const { openEventSummary, toggleEventLock } = useEventStore();
+  // Field selectors (not whole-store) so TimeSlot doesn't re-render on every
+  // event mutation. Actions are stable refs in Zustand → effectively never change.
+  const openEventSummary = useEventStore(s => s.openEventSummary);
+  const toggleEventLock = useEventStore(s => s.toggleEventLock);
   const { updateEvent } = useEventCRUD();
   const { enableBulkMode, toggleSelection } = useBulkSelectionStore();
 

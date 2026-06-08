@@ -146,7 +146,7 @@ interface EventPickerProps {
 }
 
 const EventPicker: React.FC<EventPickerProps> = ({ value, onChange, activeCalendarIds }) => {
-  const { events } = useEventStore();
+  const events = useEventStore(s => s.events);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -324,7 +324,7 @@ const RemindersModule: React.FC<RemindersModuleProps> = ({
 
   const appleReminders = useAppleReminders(instanceId);
   const { alarms, loading: alarmsLoading, toggleAlarm, deleteAlarm } = useAlarms(instanceId);
-  const { events } = useEventStore();
+  const events = useEventStore(s => s.events);
   const { accounts } = useCalendarFilterStore();
 
   const {

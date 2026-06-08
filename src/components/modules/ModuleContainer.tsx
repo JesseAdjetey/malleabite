@@ -172,7 +172,10 @@ const ModuleContainer: React.FC<ModuleContainerProps> = ({
       className={cn(
         "transition-all group/module",
         effectiveSizeLevel < 2
-          ? "bg-card/80 backdrop-blur-xl rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none"
+          // Solid card bg instead of backdrop-blur-xl: every module card carried
+          // its own blur, so a sidebar with N modules stacked N blurred surfaces
+          // that re-sampled on every scroll/animation frame. Opaque card reads the same.
+          ? "bg-card rounded-2xl border border-border/50 p-4 mb-4 shadow-sm dark:shadow-none"
           : "flex flex-col h-full"
       )}
     >

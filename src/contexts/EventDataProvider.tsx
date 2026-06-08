@@ -23,7 +23,9 @@ const EventDataProvider: React.FC<EventDataProviderProps> = ({ children }) => {
   const deleteEvent = 'deleteEvent' in calendarHook ? calendarHook.deleteEvent : calendarHook.removeEvent;
   const { syncedEvents, loading: syncedLoading } = useSyncedEventsLoader();
   const { templateEvents, loading: templateLoading } = useTemplateEventsLoader();
-  const { setEvents, setIsInitialized, isInitialized } = useEventStore();
+  const setEvents = useEventStore(s => s.setEvents);
+  const setIsInitialized = useEventStore(s => s.setIsInitialized);
+  const isInitialized = useEventStore(s => s.isInitialized);
   const { user } = useAuth();
   const lastMergedKeysRef = useRef<string[]>([]);
 

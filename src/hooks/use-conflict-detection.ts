@@ -287,12 +287,35 @@ export function useConflictMap(events: CalendarEventType[]): ConflictMapResult {
     let criticalCount = 0;
     let warningCount = 0;
 
+    // Bucket events by calendar day ONCE (O(n)). detectEventConflicts only ever
+    // compares an event against same-day events, but internally it re-filtered the
+    // *entire* `events` array with a fresh dayjs().isSame(...,'day') per pair —
+    // i.e. O(n²) dayjs allocations, run for every event. With many events this was
+    // the dominant cause of the multi-hundred-ms freeze on first render/scroll.
+    // By passing each event only its same-day bucket, the inner filter is tiny.
+    const byDay = new Map<string, CalendarEventType[]>();
     for (const event of events) {
-      const analysis = detectEventConflicts(event, events, reschedulingPrefs);
-      if (analysis.hasConflicts) {
-        map.set(event.id, analysis.conflicts);
-        criticalCount += analysis.conflicts.filter((c) => c.severity === 'critical').length;
-        warningCount  += analysis.conflicts.filter((c) => c.severity === 'warning').length;
+      const t = new Date(event.startsAt).getTime();
+      if (Number.isNaN(t)) continue;
+      // Local-day key without allocating a dayjs: YYYY-MM-DD from the Date.
+      const d = new Date(t);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      let bucket = byDay.get(key);
+      if (!bucket) { bucket = []; byDay.set(key, bucket); }
+      bucket.push(event);
+    }
+
+    for (const [, bucket] of byDay) {
+      for (const event of bucket) {
+        // Pass only same-day events — detectEventConflicts still applies its own
+        // same-day + scope filter, so correctness is unchanged; the input is just
+        // already narrowed from N to the handful that share the day.
+        const analysis = detectEventConflicts(event, bucket, reschedulingPrefs);
+        if (analysis.hasConflicts) {
+          map.set(event.id, analysis.conflicts);
+          criticalCount += analysis.conflicts.filter((c) => c.severity === 'critical').length;
+          warningCount  += analysis.conflicts.filter((c) => c.severity === 'warning').length;
+        }
       }
     }
 

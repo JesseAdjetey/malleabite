@@ -1,5 +1,5 @@
 
-import React, { useCallback, useState, useRef, useEffect } from "react";
+import React, { useCallback, useState } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useEventDrag } from "@/hooks/use-event-drag";
@@ -23,6 +23,13 @@ interface CalendarEventProps {
   onMouseDown?: (e: React.MouseEvent) => void;
   compact?: boolean; // If true, render a more compact version (e.g., for month view)
   isOverlapping?: boolean;
+  /**
+   * Rendered pixel height of the pill, already computed by the parent (DayColumn)
+   * from the event's start/end. Used to derive short/tiny layout WITHOUT a
+   * per-pill ResizeObserver — with 100+ pills, 100+ ResizeObservers firing during
+   * layout was a measured source of main-thread jank on scroll.
+   */
+  heightPx?: number;
 }
 
 const CalendarEvent: React.FC<CalendarEventProps> = ({
@@ -38,6 +45,7 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   onMouseDown,
   compact = false,
   isOverlapping = false,
+  heightPx,
 }) => {
   const {
     isDragging,
@@ -53,35 +61,21 @@ const CalendarEvent: React.FC<CalendarEventProps> = ({
   const highlightedEventId = useEventHighlightStore(s => s.highlightedEventId);
   const isSpotlit = highlightedEventId === event.id;
 
-  // Track height for short event detection
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [isShort, setIsShort] = useState(false);  // < 40px
-  const [isTiny, setIsTiny] = useState(false);     // < 25px
   const [isHovered, setIsHovered] = useState(false);
 
+  // Short/tiny layout derived directly from the height the parent already computed
+  // — no ResizeObserver per pill. When heightPx is unknown (callers that don't pass
+  // it), treat as full-size (the prior observer default before first measurement).
+  const isShort = !compact && heightPx != null && heightPx < 40;
+  const isTiny  = !compact && heightPx != null && heightPx < 25;
+
   const combinedRef = useCallback((node: HTMLDivElement | null) => {
-    containerRef.current = node;
     if (node && isSpotlit) {
       requestAnimationFrame(() => {
         node.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
   }, [isSpotlit]);
-
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node || compact) return;
-
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const h = entry.contentRect.height;
-        setIsShort(h < 40);
-        setIsTiny(h < 25);
-      }
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [compact]);
 
   const handleLockToggle = (e: React.MouseEvent) => {
     e.stopPropagation();

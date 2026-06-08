@@ -326,7 +326,16 @@ const EventDetails: React.FC<EventDetailsProps> = ({ open, onClose }) => {
   const handleUpdate = async (updatedEvent: CalendarEventType) => {
     try {
       let result: { success: boolean; error?: unknown };
-      if (isRecurringEvent && editScope && editScope !== 'all') {
+      // Synced (Google/Microsoft) events live in their provider and are keyed
+      // `synced_<account>_<eventId>`. The local recurring-exception machinery below
+      // splits the id on '_' assuming the `<parentId>_<date>` format — for a synced
+      // id that mis-parses (parentId becomes "synced") and produces a bogus event id,
+      // so the edit silently no-ops. Route synced edits straight through the
+      // sync-aware update path instead (it pushes to the provider and persists).
+      const isSyncedEvent = selectedEvent.id.startsWith('synced_');
+      if (isSyncedEvent) {
+        result = await updateEvent({ ...updatedEvent, id: selectedEvent.id });
+      } else if (isRecurringEvent && editScope && editScope !== 'all') {
         const parentId = selectedEvent.recurrenceParentId ||
           (selectedEvent.id.includes('_') ? selectedEvent.id.split('_')[0] : selectedEvent.id);
         const instanceDate = selectedEvent.id.includes('_')

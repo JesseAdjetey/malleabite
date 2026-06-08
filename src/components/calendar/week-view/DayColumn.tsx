@@ -278,6 +278,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
                     hasTodo={event.isTodo}
                     participants={event.participants}
                     isOverlapping={position?.isOverlapping}
+                    heightPx={eventHeight}
                     onLockToggle={(isLocked) => toggleEventLock(event.id, isLocked)}
                   />
 

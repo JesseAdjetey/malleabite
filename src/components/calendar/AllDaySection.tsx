@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { CalendarEventType } from "@/lib/stores/types";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
@@ -59,20 +59,23 @@ export const WeekAllDayRow: React.FC<WeekAllDayRowProps> = ({
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
 
   // Group all-day events by day
-  const eventsByDay: Record<string, CalendarEventType[]> = {};
-  weekDays.forEach(({ currentDate }) => {
-    eventsByDay[currentDate.format("YYYY-MM-DD")] = [];
-  });
-  allDayEvents.forEach((event) => {
-    const dayStr = event.date
-      ? dayjs(event.date).format("YYYY-MM-DD")
-      : event.startsAt
-        ? dayjs(event.startsAt).format("YYYY-MM-DD")
-        : null;
-    if (dayStr && eventsByDay[dayStr]) {
-      eventsByDay[dayStr].push(event);
-    }
-  });
+  const eventsByDay = useMemo(() => {
+    const grouped: Record<string, CalendarEventType[]> = {};
+    weekDays.forEach(({ currentDate }) => {
+      grouped[currentDate.format("YYYY-MM-DD")] = [];
+    });
+    allDayEvents.forEach((event) => {
+      const dayStr = event.date
+        ? dayjs(event.date).format("YYYY-MM-DD")
+        : event.startsAt
+          ? dayjs(event.startsAt).format("YYYY-MM-DD")
+          : null;
+      if (dayStr && grouped[dayStr]) {
+        grouped[dayStr].push(event);
+      }
+    });
+    return grouped;
+  }, [allDayEvents, weekDays]);
 
   const maxEventsInAnyDay = Math.max(
     0,

@@ -142,15 +142,22 @@ const DayView = () => {
     return [...expandedEvents, ...draftEvents];
   }, [expandedEvents, isTemplateMode, draftEvents]);
 
-  const dayEvents = displayEvents.filter((event) => {
+  const dayEvents = useMemo(() => {
     const dayStr = userSelectedDate.format("YYYY-MM-DD");
-    if (event.date === dayStr) return true;
-    if (event.startsAt) {
-      const eventDate = dayjs(event.startsAt).format("YYYY-MM-DD");
-      return eventDate === dayStr;
-    }
-    return false;
-  });
+    return displayEvents.filter((event) => {
+      if (event.date === dayStr) return true;
+      if (event.startsAt) {
+        const t = new Date(event.startsAt).getTime();
+        if (Number.isNaN(t)) return false;
+        const d = new Date(t);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const date = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${date}` === dayStr;
+      }
+      return false;
+    });
+  }, [displayEvents, userSelectedDate]);
 
   // Split into all-day and timed events
   const { allDayEvents: dayAllDayEvents, timedEvents: dayTimedEvents } = splitAllDayEvents(dayEvents);

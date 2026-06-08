@@ -229,6 +229,7 @@ function eventPropsEqual(prev: CalendarEventProps, next: CalendarEventProps): bo
     prev.hasTodo === next.hasTodo &&
     prev.compact === next.compact &&
     prev.isOverlapping === next.isOverlapping &&
+    prev.heightPx === next.heightPx &&
     (prev.participants?.length ?? 0) === (next.participants?.length ?? 0);
 }
 

@@ -85,7 +85,6 @@ const GroupSection: React.FC<GroupSectionProps> = ({
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 6 }}
       animate={{
         opacity: isDragging ? 0.8 : 1,
@@ -244,4 +243,38 @@ const GroupSection: React.FC<GroupSectionProps> = ({
   );
 };
 
-export default GroupSection;
+// Memo: the parent (CalendarDropdown) re-renders on every preference change and
+// passes a FRESH `calendars` array + fresh inline callbacks each time. Compare by
+// the data that actually changes what this group renders — group identity/visuals,
+// expanded/drag/drop flags, and the calendars' stable fields — and ignore callback
+// identity. The group's tri-state dot still updates because GroupSection subscribes
+// to hiddenCalendarIds directly. This stops a single tick from re-rendering every
+// group's full subtree.
+function sameCalendars(a: ConnectedCalendar[], b: ConnectedCalendar[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.name !== y.name ||
+      x.color !== y.color ||
+      x.accountEmail !== y.accountEmail ||
+      x.groupId !== y.groupId
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export default React.memo(GroupSection, (prev, next) => {
+  return (
+    prev.group === next.group &&
+    prev.isExpanded === next.isExpanded &&
+    prev.isDragging === next.isDragging &&
+    prev.isDropTarget === next.isDropTarget &&
+    prev.dragHandleProps === next.dragHandleProps &&
+    sameCalendars(prev.calendars, next.calendars)
+  );
+});

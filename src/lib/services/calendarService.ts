@@ -681,6 +681,42 @@ export async function replaceSyncedEventsForCalendar(
     const existingDocs = snapshot.docs;
     const nextExternalIds = new Set(events.map((event) => event.externalId));
 
+    // Last-write-wins guard: if a synced event was edited locally in the last couple of
+    // minutes (locallyEditedAt is stamped on a successful Google write-back), Google's
+    // API may not have propagated the change yet — so re-fetching could return the OLD
+    // value and revert the user's edit. For those recently-edited docs we keep the local
+    // user-facing fields instead of Google's, until the grace window passes (by which
+    // point Google reflects the edit and the values match anyway).
+    const LOCAL_EDIT_GRACE_MS = 2 * 60 * 1000;
+    const nowMs = Date.now();
+    const recentlyEditedById = new Map<string, any>();
+    for (const docSnap of existingDocs) {
+      const data: any = docSnap.data();
+      const editedAt = data?.locallyEditedAt ? new Date(data.locallyEditedAt).getTime() : 0;
+      if (editedAt && nowMs - editedAt < LOCAL_EDIT_GRACE_MS) {
+        recentlyEditedById.set(docSnap.id, data);
+      }
+    }
+    if (recentlyEditedById.size > 0) {
+      events = events.map((event) => {
+        const docId = `${event.calendarId}_${event.externalId}`;
+        const local = recentlyEditedById.get(docId);
+        if (!local) return event;
+        // Preserve the user's recent local edit for the editable fields.
+        return {
+          ...event,
+          title: local.title ?? event.title,
+          startTime: local.startTime ?? event.startTime,
+          endTime: local.endTime ?? event.endTime,
+          description: local.description ?? event.description,
+          location: local.location ?? event.location,
+          isAllDay: local.isAllDay ?? event.isAllDay,
+          color: local.color ?? (event as any).color,
+          locallyEditedAt: local.locallyEditedAt,
+        };
+      });
+    }
+
     const deleteRefs = existingDocs.filter((docSnap) => {
       const data = docSnap.data();
       return !nextExternalIds.has(data.externalId);

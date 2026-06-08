@@ -58,7 +58,6 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
   return (
     <motion.div
       ref={setNodeRef}
-      layout
       initial={{ opacity: 0, y: 4 }}
       animate={{
         opacity: isDragging ? 0.3 : 1,
@@ -176,4 +175,22 @@ const CalendarItem: React.FC<CalendarItemProps> = ({
   );
 };
 
-export default CalendarItem;
+// Memo: this row reads its OWN visibility from the filter store via a selector,
+// so toggling a *different* calendar must not re-render it. Compare only the
+// data that actually changes the rendered output; callbacks are useCallback-stable
+// in the parent. Without this, every tick re-renders the whole list (each row is a
+// motion.div) and the dropdown feels laggy.
+export default React.memo(CalendarItem, (prev, next) => {
+  const a = prev.calendar;
+  const b = next.calendar;
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.color === b.color &&
+    a.accountEmail === b.accountEmail &&
+    a.source === b.source &&
+    prev.onToggle === next.onToggle &&
+    prev.onDelete === next.onDelete &&
+    prev.onMoveToGroup === next.onMoveToGroup
+  );
+});

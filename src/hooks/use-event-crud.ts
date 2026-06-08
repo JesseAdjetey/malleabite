@@ -61,62 +61,109 @@ export function useEventCRUD() {
     [addEvent, updateEvent, bridge]
   );
 
+  // Reflect a confirmed synced-event edit locally: update the store + persist the
+  // edited fields onto the syncedEvents doc, stamped with locallyEditedAt so a sync that
+  // races ahead of Google's propagation won't overwrite the fresh edit. Only call this
+  // AFTER the Google push has succeeded.
+  const persistSyncedEdit = useCallback(async (event: CalendarEventType) => {
+    useEventStore.getState().updateEvent(event);
+    if (user?.uid && event.id.startsWith('synced_')) {
+      const syncedDocId = event.id.replace(/^synced_/, '');
+      try {
+        const syncedPatch: Record<string, any> = {
+          title: event.title,
+          description: event.description ?? '',
+          location: event.location ?? '',
+          startTime: event.startsAt,
+          endTime: event.endsAt,
+          isAllDay: event.isAllDay ?? false,
+          locallyEditedAt: new Date().toISOString(),
+        };
+        if (event.color) syncedPatch.color = event.color;
+        if (event.meetingUrl !== undefined) syncedPatch.meetingUrl = event.meetingUrl ?? null;
+        await updateDoc(doc(db, `users/${user.uid}/syncedEvents`, syncedDocId), syncedPatch);
+      } catch (err) {
+        // Push already succeeded, so the next sync brings the correct value regardless.
+        logger.error('useEventCRUD', 'Failed to persist synced-event edit to Firestore', { error: err });
+      }
+    }
+  }, [user]);
+
   const updateEventWithSync = useCallback(
     async (event: CalendarEventType) => {
       // Google Calendar events: push via bridge + update local state.
       // Bypasses Firestore to avoid permission errors on imported/synced events.
       if (event.googleEventId) {
+        const isSynced = event.id.startsWith('synced_');
+
+        // Attempt the write-back to Google. For SYNCED events Google is the source of
+        // truth: the periodic sync (replaceSyncedEventsForCalendar) re-fetches from
+        // Google and overwrites the local syncedEvents doc. So if this push fails, any
+        // local edit WILL be reverted within ~60s. We therefore gate persistence on the
+        // push actually succeeding, instead of optimistically saving a doomed edit.
+        let pushedToGoogle = false;
         if (bridge) {
           try {
-            const synced = await bridge.pushUpdateToGoogle(event);
-            if (!synced) {
-              toast.warning('Changes saved locally but could not sync to Google Calendar.');
-            }
+            pushedToGoogle = !!(await bridge.pushUpdateToGoogle(event));
           } catch (err) {
             logger.error('useEventCRUD', 'Google write-back failed for update', { error: err });
-            toast.warning('Changes saved locally but could not sync to Google Calendar.');
           }
         }
-        // Update Zustand store directly so the UI reflects the change immediately
-        useEventStore.getState().updateEvent(event);
 
-        if (event.id.startsWith('synced_')) {
-          // Synced events live in users/{uid}/syncedEvents and are NOT in calendar_events.
-          // Previously we skipped persistence entirely here, so the edit only lived in
-          // memory and the synced-events listener reverted it on the next reload/sync.
-          // Persist the edited fields onto the synced doc so the change survives reload.
-          // (The push to Google above means the next full sync brings back the same value.)
-          if (user?.uid) {
-            const syncedDocId = event.id.replace(/^synced_/, '');
-            try {
-              const syncedPatch: Record<string, any> = {
-                title: event.title,
-                description: event.description ?? '',
-                location: event.location ?? '',
-                startTime: event.startsAt,
-                endTime: event.endsAt,
-                isAllDay: event.isAllDay ?? false,
-              };
-              if (event.color) syncedPatch.color = event.color;
-              if (event.meetingUrl !== undefined) syncedPatch.meetingUrl = event.meetingUrl ?? null;
-              await updateDoc(doc(db, `users/${user.uid}/syncedEvents`, syncedDocId), syncedPatch);
-            } catch (err) {
-              logger.error('useEventCRUD', 'Failed to persist synced-event edit to Firestore', { error: err });
-              toast.warning('Changes saved locally but may not persist after reload.');
-              return { success: false, error: err };
-            }
+        if (isSynced) {
+          if (pushedToGoogle) {
+            await persistSyncedEdit(event);
+            return { success: true };
           }
-        } else {
-          // Locally-created event that has been linked to Google — persist to
-          // calendar_events so the edit survives refresh. Await so we can surface failures.
-          const result = await updateEvent(event).catch((err) => {
-            logger.error('useEventCRUD', 'Failed to persist event edit to Firestore', { error: err });
-            return { success: false, error: err };
-          });
-          if (!result?.success) {
-            toast.warning('Changes saved locally but may not persist after reload.');
-            return result ?? { success: false };
+
+          // Push failed (almost always an expired Google token). Don't persist — Google
+          // would clobber it on the next sync ("edits, then reverts"). Offer a one-click
+          // reconnect that retries the save once the account is re-authorized.
+          const accountEmail = bridge?.getGoogleCalendar(event.calendarId)?.accountEmail;
+          if (accountEmail && bridge) {
+            toast.error("Couldn't save to Google Calendar — your connection expired.", {
+              description: `Reconnect ${accountEmail} to save this change.`,
+              duration: 10000,
+              action: {
+                label: 'Reconnect',
+                onClick: async () => {
+                  const reconnected = await bridge.reconnectAccount(accountEmail);
+                  if (!reconnected) return;
+                  let retried = false;
+                  try {
+                    retried = !!(await bridge.pushUpdateToGoogle(event));
+                  } catch (err) {
+                    logger.error('useEventCRUD', 'Retry push after reconnect failed', { error: err });
+                  }
+                  if (retried) {
+                    await persistSyncedEdit(event);
+                    toast.success('Saved to Google Calendar');
+                  } else {
+                    toast.error("Still couldn't save — please try again.");
+                  }
+                },
+              },
+            });
+          } else {
+            toast.error("Couldn't save to Google Calendar — check your connection and try again.");
           }
+          return { success: false };
+        }
+
+        // Locally-created event linked to Google: it lives in calendar_events, which the
+        // Google poll does NOT overwrite for content — so persist locally even if the
+        // best-effort push didn't land (just warn).
+        useEventStore.getState().updateEvent(event);
+        if (!pushedToGoogle) {
+          toast.warning('Changes saved, but could not sync to Google Calendar.');
+        }
+        const result = await updateEvent(event).catch((err) => {
+          logger.error('useEventCRUD', 'Failed to persist event edit to Firestore', { error: err });
+          return { success: false, error: err };
+        });
+        if (!result?.success) {
+          toast.warning('Changes saved locally but may not persist after reload.');
+          return result ?? { success: false };
         }
         return { success: true };
       }
@@ -141,7 +188,7 @@ export function useEventCRUD() {
 
       return response;
     },
-    [updateEvent, bridge]
+    [updateEvent, bridge, persistSyncedEdit]
   );
 
   const deleteEventWithSync = useCallback(

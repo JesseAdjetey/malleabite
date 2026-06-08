@@ -5,6 +5,7 @@
 import React, { createContext, useContext } from 'react';
 import { useGoogleSyncBridge } from '@/hooks/use-google-sync-bridge';
 import { CalendarEventType } from '@/lib/stores/types';
+import { ConnectedCalendar } from '@/types/calendar';
 
 export interface GoogleSyncBridgeContextValue {
   /** Push a newly created event to Google Calendar. Returns the Google event ID. */
@@ -15,6 +16,8 @@ export interface GoogleSyncBridgeContextValue {
   pushDeleteToGoogle: (event: CalendarEventType) => Promise<boolean>;
   /** Reconnect a Google account whose token expired. Opens sign-in popup. */
   reconnectAccount: (accountEmail: string) => Promise<boolean>;
+  /** Resolve the connected Google calendar for an event's calendarId (null if not Google). */
+  getGoogleCalendar: (calendarId: string | undefined) => ConnectedCalendar | null;
 }
 
 const GoogleSyncBridgeContext = createContext<GoogleSyncBridgeContextValue | null>(null);

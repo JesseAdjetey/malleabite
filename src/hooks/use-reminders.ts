@@ -61,7 +61,7 @@ export function useReminders(instanceId?: string) {
   const { user } = useAuth();
 
   // Fetch all reminders from Firebase
-  const fetchReminders = useCallback(async () => {
+  const fetchReminders = useCallback(() => {
     if (!user) {
       setReminders([]);
       setLoading(false);
@@ -351,18 +351,14 @@ export function useReminders(instanceId?: string) {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
-    const setupSubscription = async () => {
-      if (user) {
-        console.log('User is authenticated, setting up reminders subscription');
-        unsubscribe = await fetchReminders();
-      } else {
-        console.log('No user, clearing reminders');
-        setReminders([]);
-        setLoading(false);
-      }
-    };
-
-    setupSubscription();
+    if (user) {
+      console.log('User is authenticated, setting up reminders subscription');
+      unsubscribe = fetchReminders();
+    } else {
+      console.log('No user, clearing reminders');
+      setReminders([]);
+      setLoading(false);
+    }
 
     return () => {
       if (unsubscribe) {
@@ -370,7 +366,7 @@ export function useReminders(instanceId?: string) {
         unsubscribe();
       }
     };
-  }, [user, instanceId]);
+  }, [user, instanceId, fetchReminders]);
 
   return {
     reminders,

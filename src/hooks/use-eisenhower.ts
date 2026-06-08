@@ -42,7 +42,7 @@ export function useEisenhower(instanceId?: string) {
   const { user } = useAuth();
 
   // Fetch Eisenhower items from Firebase
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(() => {
     try {
       setLoading(true);
       setError(null);
@@ -185,23 +185,19 @@ export function useEisenhower(instanceId?: string) {
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
-    const setupSubscription = async () => {
-      if (user) {
-        unsubscribe = await fetchItems();
-      } else {
-        setItems([]);
-        setLoading(false);
-      }
-    };
-
-    setupSubscription();
+    if (user) {
+      unsubscribe = fetchItems();
+    } else {
+      setItems([]);
+      setLoading(false);
+    }
 
     return () => {
       if (unsubscribe) {
         unsubscribe();
       }
     };
-  }, [user, instanceId]);
+  }, [user, instanceId, fetchItems]);
 
   return {
     items,

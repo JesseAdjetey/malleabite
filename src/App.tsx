@@ -10,6 +10,7 @@ import ThemeProvider from '@/components/ThemeProvider';
 import { AuthProvider } from '@/contexts/AuthContext.unified';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import EventDataProvider from '@/contexts/EventDataProvider';
+import AppDataProvider from '@/contexts/AppDataProvider';
 import { db } from '@/integrations/firebase/config';
 import { enableNetwork, disableNetwork } from 'firebase/firestore';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -400,7 +401,9 @@ function App() {
             <ToastProvider>
               <Router>
                 <EventDataProvider>
-                  <AppRoutes />
+                  <AppDataProvider>
+                    <AppRoutes />
+                  </AppDataProvider>
                 </EventDataProvider>
               </Router>
             </ToastProvider>

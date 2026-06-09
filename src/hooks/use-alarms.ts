@@ -17,66 +17,19 @@ import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 import { scheduleAlarmNotification, cancelAlarmNotification } from '@/lib/native-notification-scheduler';
 
-export interface Alarm {
-  id?: string;
-  userId: string;
-  title: string;
-  time: string | Date; // ISO datetime or HH:MM format
-  enabled: boolean;
-  linkedEventId?: string;
-  linkedTodoId?: string;
-  soundId?: string;
-  snoozeEnabled?: boolean;
-  snoozeDuration?: number; // minutes
-  repeatDays?: number[]; // 0-6 for Sunday-Saturday, empty for one-time
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
-}
+import { useAlarmsStore } from '@/lib/stores/alarms-store';
+import type { Alarm } from '@/lib/stores/alarms-store';
+export type { Alarm };
 
 export function useAlarms(instanceId?: string) {
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const allAlarms = useAlarmsStore((s) => s.alarms);
+  const loading = useAlarmsStore((s) => s.loading);
+  const error = useAlarmsStore((s) => s.error);
   const { user } = useAuth();
 
-  // Fetch alarms
-  useEffect(() => {
-    if (!user?.uid) {
-      setAlarms([]);
-      setLoading(false);
-      return;
-    }
-
-    const constraints: any[] = [
-      where('userId', '==', user.uid)
-    ];
-    if (instanceId) {
-      constraints.push(where('moduleInstanceId', '==', instanceId));
-    }
-
-    const alarmsQuery = query(
-      collection(db, 'alarms'),
-      ...constraints
-    );
-
-    const unsubscribe = onSnapshot(alarmsQuery, (snapshot) => {
-      const alarmsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt,
-        updatedAt: doc.data().updatedAt
-      })) as Alarm[];
-
-      setAlarms(alarmsData);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching alarms:', error);
-      setError('Failed to fetch alarms');
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user?.uid, instanceId]);
+  const alarms = instanceId 
+    ? allAlarms.filter((alarm) => alarm.moduleInstanceId === instanceId)
+    : allAlarms;
 
   // Add alarm
   const addAlarm = async (
@@ -147,7 +100,7 @@ export function useAlarms(instanceId?: string) {
         updatedAt: serverTimestamp()
       });
       // Re-schedule native notification: cancel old, schedule new if still enabled
-      const existingAlarm = alarms.find(a => a.id === alarmId);
+      const existingAlarm = allAlarms.find(a => a.id === alarmId);
       if (existingAlarm) {
         cancelAlarmNotification(alarmId).catch(() => {});
         const merged = { ...existingAlarm, ...updates, id: alarmId };
@@ -183,7 +136,7 @@ export function useAlarms(instanceId?: string) {
 
   // Toggle alarm enabled/disabled
   const toggleAlarm = async (alarmId: string, enabled?: boolean) => {
-    const alarm = alarms.find(a => a.id === alarmId);
+    const alarm = allAlarms.find(a => a.id === alarmId);
     if (!alarm) return { success: false };
 
     const newEnabled = enabled !== undefined ? enabled : !alarm.enabled;

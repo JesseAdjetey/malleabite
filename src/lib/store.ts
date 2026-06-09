@@ -5,4 +5,8 @@ export { useDateStore } from './stores/date-store';
 export { useSidebarStore } from './stores/sidebar-store';
 export { useEventStore } from './stores/event-store';
 export { useWeekRangeStore } from './stores/week-range-store';
+export { useRemindersStore } from './stores/reminders-store';
+export { useEisenhowerStore } from './stores/eisenhower-store';
+export { useAlarmsStore } from './stores/alarms-store';
 export type { ModuleType, ModuleInstance, SidebarPage, CalendarEventType, SizeLevel } from './stores/types';
+

@@ -19,27 +19,10 @@ import { toast } from 'sonner';
 import { CalendarEventType } from '@/lib/stores/types';
 import { REMINDER_SOUNDS } from './use-notification-manager';
 import { scheduleReminderNotification, cancelReminderNotification } from '@/lib/native-notification-scheduler';
+import { useRemindersStore } from '@/lib/stores/reminders-store';
+import type { Reminder, ReminderStatus, ReminderRecurrence } from '@/lib/stores/reminders-store';
 
-export type ReminderStatus = 'pending' | 'completed';
-export type ReminderRecurrence = 'none' | 'daily' | 'weekly' | 'weekdays' | 'custom';
-
-export interface Reminder {
-  id: string;
-  title: string;
-  description: string | null;
-  reminderTime: string | Timestamp;
-  eventId: string | null;
-  timeBeforeMinutes: number | null;
-  timeAfterMinutes: number | null;
-  soundId: string | null;
-  isActive: boolean;
-  status?: ReminderStatus;
-  recurrence?: ReminderRecurrence;
-  customDays?: number[]; // 0=Sun, 1=Mon ... 6=Sat
-  createdAt: string | Timestamp;
-  userId?: string;
-  event?: CalendarEventType;
-}
+export type { Reminder, ReminderStatus, ReminderRecurrence };
 
 export interface ReminderFormData {
   title: string;
@@ -56,76 +39,18 @@ export interface ReminderFormData {
 
 
 export function useReminders(instanceId?: string) {
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const allReminders = useRemindersStore((s) => s.reminders);
+  const loading = useRemindersStore((s) => s.loading);
   const { user } = useAuth();
 
-  // Fetch all reminders from Firebase
+  const reminders = instanceId 
+    ? allReminders.filter((r) => r.moduleInstanceId === instanceId)
+    : allReminders;
+
+  // fetchReminders is kept for backwards compatibility with the same signature
   const fetchReminders = useCallback(() => {
-    if (!user) {
-      setReminders([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log('Setting up Firebase subscription for reminders for user:', user.uid);
-
-      const constraints: any[] = [
-        where('userId', '==', user.uid),
-        orderBy('reminderTime', 'asc')
-      ];
-      if (instanceId) {
-        constraints.splice(1, 0, where('moduleInstanceId', '==', instanceId));
-      }
-
-      const remindersQuery = query(
-        collection(db, 'reminders'),
-        ...constraints
-      );
-
-      const unsubscribe = onSnapshot(
-        remindersQuery,
-        (snapshot) => {
-          const remindersData: Reminder[] = [];
-          snapshot.forEach((doc) => {
-            const data = doc.data();
-            remindersData.push({
-              id: doc.id,
-              title: data.title,
-              description: data.description,
-              reminderTime: data.reminderTime,
-              eventId: data.eventId,
-              timeBeforeMinutes: data.timeBeforeMinutes,
-              timeAfterMinutes: data.timeAfterMinutes,
-              soundId: data.soundId,
-              isActive: data.isActive,
-              status: data.status || 'pending',
-              recurrence: data.recurrence || 'none',
-              customDays: data.customDays || [],
-              createdAt: data.createdAt,
-              userId: data.userId,
-            });
-          });
-
-          console.log('Received reminders from Firebase:', remindersData);
-          setReminders(remindersData);
-          setLoading(false);
-        },
-        (err) => {
-          console.error('Error fetching reminders:', err);
-          toast.error('Failed to fetch reminders');
-          setLoading(false);
-        }
-      );
-
-      return unsubscribe;
-    } catch (err: any) {
-      console.error('Error setting up reminders subscription:', err);
-      toast.error('Failed to fetch reminders');
-      setLoading(false);
-    }
-  }, [user, instanceId]);
+    return () => {};
+  }, []);
 
   // Add a new reminder
   const addReminder = async (data: ReminderFormData): Promise<{ success: boolean, error?: any, reminderId?: string }> => {
@@ -200,7 +125,7 @@ export function useReminders(instanceId?: string) {
 
       await updateDoc(doc(db, 'reminders', id), updateData);
       // Re-schedule native notification
-      const existingReminder = reminders.find(r => r.id === id);
+      const existingReminder = allReminders.find(r => r.id === id);
       if (existingReminder) {
         cancelReminderNotification(id).catch(() => {});
         const merged = { ...existingReminder, ...updateData, id };
@@ -231,7 +156,7 @@ export function useReminders(instanceId?: string) {
       await updateDoc(doc(db, 'reminders', id), { isActive: isActive });
       // Schedule or cancel native notification based on active state
       if (isActive) {
-        const reminder = reminders.find(r => r.id === id);
+        const reminder = allReminders.find(r => r.id === id);
         if (reminder) {
           scheduleReminderNotification({ ...reminder, isActive: true }).catch(() => {});
         }
@@ -283,7 +208,7 @@ export function useReminders(instanceId?: string) {
       });
       cancelReminderNotification(id).catch(() => {});
 
-      const reminder = reminders.find(r => r.id === id);
+      const reminder = allReminders.find(r => r.id === id);
       if (reminder && reminder.recurrence && reminder.recurrence !== 'none') {
         const resolvedTime = reminder.reminderTime instanceof Timestamp
           ? reminder.reminderTime.toDate()
@@ -347,26 +272,7 @@ export function useReminders(instanceId?: string) {
   // Get list of available sounds
   const getSounds = () => REMINDER_SOUNDS;
 
-  // Load reminders when component mounts or user changes
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    if (user) {
-      console.log('User is authenticated, setting up reminders subscription');
-      unsubscribe = fetchReminders();
-    } else {
-      console.log('No user, clearing reminders');
-      setReminders([]);
-      setLoading(false);
-    }
-
-    return () => {
-      if (unsubscribe) {
-        console.log('Cleaning up reminders subscription');
-        unsubscribe();
-      }
-    };
-  }, [user, instanceId, fetchReminders]);
+  // Centralized subscription handled by AppDataProvider
 
   return {
     reminders,

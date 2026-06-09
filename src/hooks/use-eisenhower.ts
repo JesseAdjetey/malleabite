@@ -17,15 +17,9 @@ import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.firebase';
 import { toast } from 'sonner';
 
-export interface EisenhowerItem {
-  id: string;
-  text: string;
-  quadrant: 'urgent_important' | 'not_urgent_important' | 'urgent_not_important' | 'not_urgent_not_important';
-  userId?: string;
-  created_at?: string | Timestamp;
-  updated_at?: string | Timestamp;
-  event_id?: string;
-}
+import { useEisenhowerStore } from '@/lib/stores/eisenhower-store';
+import type { EisenhowerItem } from '@/lib/stores/eisenhower-store';
+export type { EisenhowerItem };
 
 interface EisenhowerResponse {
   success: boolean;
@@ -35,71 +29,19 @@ interface EisenhowerResponse {
 }
 
 export function useEisenhower(instanceId?: string) {
-  const [items, setItems] = useState<EisenhowerItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const allItems = useEisenhowerStore((s) => s.items);
+  const loading = useEisenhowerStore((s) => s.loading);
+  const error = useEisenhowerStore((s) => s.error);
   const [lastResponse, setLastResponse] = useState<EisenhowerResponse | null>(null);
   const { user } = useAuth();
 
-  // Fetch Eisenhower items from Firebase
+  const items = instanceId 
+    ? allItems.filter((item) => item.moduleInstanceId === instanceId)
+    : allItems;
+
   const fetchItems = useCallback(() => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      if (!user) {
-        setItems([]);
-        setLoading(false);
-        return;
-      }
-
-      const constraints: any[] = [
-        where('userId', '==', user.uid),
-        orderBy('created_at', 'desc')
-      ];
-      if (instanceId) {
-        constraints.splice(1, 0, where('moduleInstanceId', '==', instanceId));
-      }
-
-      const itemsQuery = query(
-        collection(db, 'eisenhower_items'),
-        ...constraints
-      );
-
-      const unsubscribe = onSnapshot(
-        itemsQuery,
-        (snapshot) => {
-          const itemsData: EisenhowerItem[] = [];
-          snapshot.forEach((doc) => {
-            const data = doc.data();
-            itemsData.push({
-              id: doc.id,
-              text: data.text,
-              quadrant: data.quadrant,
-              userId: data.userId,
-              created_at: data.created_at,
-              updated_at: data.updated_at,
-              event_id: data.event_id
-            });
-          });
-
-          setItems(itemsData);
-          setLoading(false);
-        },
-        (err) => {
-          console.error('Error fetching Eisenhower items:', err);
-          setError(err.message);
-          setLoading(false);
-        }
-      );
-
-      return unsubscribe;
-    } catch (err: any) {
-      console.error('Error setting up Eisenhower items subscription:', err);
-      setError(err.message);
-      setLoading(false);
-    }
-  }, [user]);
+    return () => {};
+  }, []);
 
   // Add a new Eisenhower item to Firebase
   const addItem = async (text: string, quadrant: EisenhowerItem['quadrant']) => {
@@ -181,23 +123,7 @@ export function useEisenhower(instanceId?: string) {
     }
   };
 
-  // Load items when component mounts or user changes
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-
-    if (user) {
-      unsubscribe = fetchItems();
-    } else {
-      setItems([]);
-      setLoading(false);
-    }
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [user, instanceId, fetchItems]);
+  // Centralized subscription handled by AppDataProvider
 
   return {
     items,

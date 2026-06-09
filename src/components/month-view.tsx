@@ -1,6 +1,6 @@
 // src/components/month-view.tsx
 
-import React, { Fragment, useState, useEffect, useMemo } from "react";
+import React, { Fragment, useState, useEffect, useMemo, useDeferredValue } from "react";
 import { sounds } from "@/lib/sounds";
 import MonthViewBox from "@/components/month-view-box";
 import { useDateStore, useEventStore, useViewStore } from "@/lib/store";
@@ -115,7 +115,7 @@ const MonthView = () => {
 
   // Get calendar visibility filter — subscribe to hiddenCalendarIds for reactivity
   const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
-  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+  const deferredHiddenCalendarIds = useDeferredValue(hiddenCalendarIds);
 
   // Expand recurring events into instances for the current month view.
   // IMPORTANT: this memo deliberately does NOT depend on calendar visibility.
@@ -154,11 +154,14 @@ const MonthView = () => {
   }, [events, twoDMonthArray]);
 
   // Cheap O(n) visibility filter — the only thing that re-runs on calendar toggle.
-  const expandedEvents = useMemo(
-    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
-    // hiddenCalendarIds is the reactive trigger; isCalendarVisible reads from it.
-    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
-  );
+  // Uses deferred values to avoid blocking high-priority checkbox toggling UI states.
+  const expandedEvents = useMemo(() => {
+    return allExpandedEvents.filter(event => {
+      let id = event.calendarId || 'personal';
+      if (id === 'default') id = 'personal';
+      return !deferredHiddenCalendarIds.has(id);
+    });
+  }, [allExpandedEvents, deferredHiddenCalendarIds]);
 
   const eventsByDay = useMemo(() => {
     const startedAt = performance.now();

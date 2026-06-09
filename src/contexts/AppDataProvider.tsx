@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/integrations/firebase/config';
 import { useAuth } from '@/contexts/AuthContext.unified';
-import { useRemindersStore, useEisenhowerStore, useAlarmsStore } from '@/lib/store';
+import { useRemindersStore, useEisenhowerStore, useAlarmsStore, useCalendarPreferencesStore } from '@/lib/store';
 import { Reminder } from '@/lib/stores/reminders-store';
 import { EisenhowerItem } from '@/lib/stores/eisenhower-store';
 import { Alarm } from '@/lib/stores/alarms-store';
+import { CalendarPreferences } from '@/types/calendar';
+
 
 interface AppDataProviderProps {
   children: React.ReactNode;
@@ -29,11 +31,17 @@ export const AppDataProvider: React.FC<AppDataProviderProps> = ({ children }) =>
   const setAlarmsError = useAlarmsStore((s) => s.setError);
   const clearAlarms = useAlarmsStore((s) => s.clear);
 
+  const setCalendarPreferences = useCalendarPreferencesStore((s) => s.setPreferences);
+  const setCalendarPreferencesLoading = useCalendarPreferencesStore((s) => s.setLoading);
+  const setCalendarPreferencesError = useCalendarPreferencesStore((s) => s.setError);
+  const clearCalendarPreferences = useCalendarPreferencesStore((s) => s.clear);
+
   useEffect(() => {
     if (!user?.uid) {
       clearReminders();
       clearEisenhower();
       clearAlarms();
+      clearCalendarPreferences();
       return;
     }
 
@@ -142,15 +150,46 @@ export const AppDataProvider: React.FC<AppDataProviderProps> = ({ children }) =>
       }
     );
 
+    // 4. Calendar Preferences Subscription
+    const prefsRef = doc(db, `users/${user.uid}/calendarPreferences`, 'settings');
+    const unsubscribePrefs = onSnapshot(
+      prefsRef,
+      (snapshot) => {
+        const pending = useCalendarPreferencesStore.getState().pendingUpdates;
+        if (snapshot.exists()) {
+          setCalendarPreferences({
+            userId: user.uid,
+            ...snapshot.data(),
+            ...pending,
+          } as CalendarPreferences);
+        } else {
+          if (Object.keys(pending).length > 0) {
+            setCalendarPreferences({ userId: user.uid, ...pending } as CalendarPreferences);
+          } else {
+            setCalendarPreferences(null);
+          }
+        }
+        setCalendarPreferencesLoading(false);
+        setCalendarPreferencesError(null);
+      },
+      (err) => {
+        console.error('[AppDataProvider] Error fetching calendar preferences:', err);
+        setCalendarPreferencesError(err.message);
+        setCalendarPreferencesLoading(false);
+      }
+    );
+
     return () => {
       console.log('[AppDataProvider] Cleaning up collection subscriptions');
       unsubscribeReminders();
       unsubscribeEisenhower();
       unsubscribeAlarms();
+      unsubscribePrefs();
     };
   }, [user?.uid, setReminders, setRemindersLoading, setRemindersError, clearReminders,
       setEisenhowerItems, setEisenhowerLoading, setEisenhowerError, clearEisenhower,
-      setAlarms, setAlarmsLoading, setAlarmsError, clearAlarms]);
+      setAlarms, setAlarmsLoading, setAlarmsError, clearAlarms,
+      setCalendarPreferences, setCalendarPreferencesLoading, setCalendarPreferencesError, clearCalendarPreferences]);
 
   return <>{children}</>;
 };

@@ -1,6 +1,6 @@
 // src/components/day-view.tsx
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useDeferredValue } from "react";
 import dayjs from "dayjs";
 import { useDateStore, useEventStore } from "@/lib/store";
 import AddEventButton from "@/components/calendar/AddEventButton";
@@ -93,7 +93,7 @@ const DayView = () => {
 
   // Get calendar visibility filter — subscribe to hiddenCalendarIds for reactivity
   const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
-  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+  const deferredCalendarIds = useDeferredValue(hiddenCalendarIds);
 
   // Template mode
   const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
@@ -131,10 +131,14 @@ const DayView = () => {
   }, [events, dayKey]);
 
   // Cheap visibility filter — the only work that re-runs on calendar toggle.
-  const expandedEvents = useMemo(
-    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
-    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
-  );
+  // Uses deferred values to avoid blocking high-priority checkbox toggling UI states.
+  const expandedEvents = useMemo(() => {
+    return allExpandedEvents.filter(event => {
+      let id = event.calendarId || 'personal';
+      if (id === 'default') id = 'personal';
+      return !deferredCalendarIds.has(id);
+    });
+  }, [allExpandedEvents, deferredCalendarIds]);
 
   // Merge template draft events when in template mode
   const displayEvents = useMemo(() => {

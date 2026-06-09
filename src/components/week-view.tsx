@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react';
 import { getWeekDays } from "@/lib/getTime";
 import { useDateStore, useEventStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -74,7 +74,7 @@ const WeekView = () => {
   // Calendar filtering — subscribe to both the function AND the data so React
   // knows to re-render when hiddenCalendarIds changes (function ref is stable).
   const hiddenCalendarIds = useCalendarFilterStore(state => state.hiddenCalendarIds);
-  const isCalendarVisible = useCalendarFilterStore(state => state.isCalendarVisible);
+  const deferredHiddenCalendarIds = useDeferredValue(hiddenCalendarIds);
 
   // Template mode
   const isTemplateMode = useTemplateModeStore(s => s.isTemplateMode);
@@ -400,10 +400,14 @@ const WeekView = () => {
   }, [events, weekKey]);
 
   // Cheap visibility filter — only work that re-runs on calendar toggle.
-  const expandedEvents = useMemo(
-    () => allExpandedEvents.filter(event => isCalendarVisible(event.calendarId)),
-    [allExpandedEvents, isCalendarVisible, hiddenCalendarIds]
-  );
+  // Uses deferred values to avoid blocking high-priority checkbox toggling UI states.
+  const expandedEvents = useMemo(() => {
+    return allExpandedEvents.filter(event => {
+      let id = event.calendarId || 'personal';
+      if (id === 'default') id = 'personal';
+      return !deferredHiddenCalendarIds.has(id);
+    });
+  }, [allExpandedEvents, deferredHiddenCalendarIds]);
 
   // Merge template draft events into display when in template mode
   const displayEvents = useMemo(() => {

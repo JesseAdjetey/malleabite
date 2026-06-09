@@ -2,17 +2,13 @@
 // Manages user preferences for calendar display: visibility, expanded groups, primary calendar.
 // Persists to Firestore with optimistic local updates for snappy UI.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  doc,
-  onSnapshot,
-} from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
+import { useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext.unified';
 import { logger } from '@/lib/logger';
 import { CalendarPreferences } from '@/types/calendar';
 import * as calendarService from '@/lib/services/calendarService';
 import { useCalendarFilterStore } from '@/lib/stores/calendar-filter-store';
+import { useCalendarPreferencesStore } from '@/lib/stores/calendar-preferences-store';
 
 interface UseCalendarPreferencesReturn {
   preferences: CalendarPreferences | null;
@@ -43,62 +39,23 @@ interface UseCalendarPreferencesReturn {
 
 export function useCalendarPreferences(): UseCalendarPreferencesReturn {
   const { user } = useAuth();
-  const [preferences, setPreferences] = useState<CalendarPreferences | null>(null);
-  const [loading, setLoading] = useState(true);
-  const unsubRef = useRef<(() => void) | null>(null);
+  
+  const preferences = useCalendarPreferencesStore((s) => s.preferences);
+  const loading = useCalendarPreferencesStore((s) => s.loading);
+  const setPreferences = useCalendarPreferencesStore((s) => s.setPreferences);
+  const setPendingUpdates = useCalendarPreferencesStore((s) => s.setPendingUpdates);
+  const clearPendingUpdates = useCalendarPreferencesStore((s) => s.clearPendingUpdates);
 
   // Debounce timer for batching rapid preference changes
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingUpdatesRef = useRef<Partial<CalendarPreferences>>({});
-
-  // ─── Real-time Listener ─────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setPreferences(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const prefsRef = doc(db, `users/${user.uid}/calendarPreferences`, 'settings');
-
-    const unsub = onSnapshot(prefsRef, (snapshot) => {
-      const pending = pendingUpdatesRef.current;
-      if (snapshot.exists()) {
-        setPreferences({
-          userId: user.uid,
-          ...snapshot.data(),
-          ...pending,
-        } as CalendarPreferences);
-      } else {
-        // No preferences yet - will be created on first interaction
-        if (Object.keys(pending).length > 0) {
-          setPreferences({ userId: user.uid, ...pending } as CalendarPreferences);
-        } else {
-          setPreferences(null);
-        }
-      }
-      setLoading(false);
-    }, (err) => {
-      logger.error('useCalendarPreferences', 'Listener error', { error: err });
-      setLoading(false);
-    });
-
-    unsubRef.current = unsub;
-    return () => {
-      unsub();
-      unsubRef.current = null;
-    };
-  }, [user?.uid]);
 
   // ─── Debounced Save ─────────────────────────────────────────────────────
 
   const debouncedSave = useCallback((updates: Partial<CalendarPreferences>) => {
     if (!user?.uid) return;
 
-    // Merge with pending updates
-    pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...updates };
+    // Merge with pending updates in store
+    setPendingUpdates(updates);
 
     // Clear existing timer
     if (saveTimeoutRef.current) {
@@ -107,15 +64,15 @@ export function useCalendarPreferences(): UseCalendarPreferencesReturn {
 
     // Save after 300ms of no changes (batches rapid toggles)
     saveTimeoutRef.current = setTimeout(async () => {
-      const pending = pendingUpdatesRef.current;
-      pendingUpdatesRef.current = {};
+      const pending = useCalendarPreferencesStore.getState().pendingUpdates;
+      clearPendingUpdates();
       try {
         await calendarService.updateCalendarPreferences(user.uid, pending);
       } catch (err) {
         logger.error('useCalendarPreferences', 'Failed to save preferences', { error: err });
       }
     }, 300);
-  }, [user?.uid]);
+  }, [user?.uid, setPendingUpdates, clearPendingUpdates]);
 
   // Cleanup debounce on unmount
   useEffect(() => {
@@ -132,14 +89,14 @@ export function useCalendarPreferences(): UseCalendarPreferencesReturn {
     // Apply locally immediately for snappy UI.
     // If preferences haven't been loaded from Firestore yet (null), create a
     // minimal local object so the optimistic state isn't silently dropped.
-    setPreferences(prev =>
-      prev
-        ? { ...prev, ...updates }
+    setPreferences(
+      preferences
+        ? { ...preferences, ...updates }
         : { userId: user?.uid || '', ...updates } as CalendarPreferences
     );
     // Then persist
     debouncedSave(updates);
-  }, [debouncedSave, user?.uid]);
+  }, [debouncedSave, user?.uid, preferences, setPreferences]);
 
   // ─── Visibility ─────────────────────────────────────────────────────────
 
@@ -167,15 +124,15 @@ export function useCalendarPreferences(): UseCalendarPreferencesReturn {
 
     const updates = { visibleCalendars: calendarIds };
     // Apply immediately for responsive UI.
-    setPreferences(prev =>
-      prev
-        ? { ...prev, ...updates }
+    setPreferences(
+      preferences
+        ? { ...preferences, ...updates }
         : { userId: user.uid, ...updates } as CalendarPreferences
     );
 
     // Persist via debounced path to avoid out-of-order writes during rapid toggles.
     debouncedSave(updates);
-  }, [user?.uid, debouncedSave]);
+  }, [user?.uid, debouncedSave, preferences, setPreferences]);
 
   // ─── Expanded Groups ───────────────────────────────────────────────────
 
